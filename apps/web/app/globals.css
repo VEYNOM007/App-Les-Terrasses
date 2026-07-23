@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #152238;
+  --ink-2: #1d3050;
+  --paper: #F4EFE4;
+  --paper-dim: #E7DFCE;
+  --laterite: #B5502E;
+  --laterite-light: #D3714D;
+  --lagoon: #2E7D6B;
+  --lagoon-light: #4FA893;
+  --sand: #D8C9A3;
+  --slate: #5A6E8C;
+  --line: rgba(244, 239, 228, 0.16);
+  --line-strong: rgba(244, 239, 228, 0.32);
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--ink);
+  color: var(--paper);
+}
+
+body {
+  background-color: var(--ink);
+  color: var(--paper);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.font-serif {
+  font-family: 'Fraunces', serif;
+}
+
+.plot-outline {
+  fill: rgba(213, 113, 77, 0.06);
+  stroke: var(--laterite-light);
+  stroke-width: 2;
+  stroke-dasharray: 900;
+  stroke-dashoffset: 900;
+  animation: draw 2.4s ease forwards 0.3s;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.plot-grid line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.plot-pt {
+  fill: var(--paper);
+  opacity: 0;
+  animation: fadeIn 0.4s ease forwards;
+}
+
+.plot-pt-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  fill: var(--sand);
+  opacity: 0;
+  animation: fadeIn 0.4s ease forwards;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}

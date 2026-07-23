@@ -1,0 +1,551 @@
+// ==========================================================
+// Résidence Catalog — Schéma Prisma
+// Stack: PostgreSQL + Prisma + Redis (lock réservation) + BullMQ
+// ==========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------
+// ENUMS
+// ---------------------------------------------------
+
+enum UserRole {
+  ACHETEUR
+  COMMERCIAL
+  ADMIN
+  ARTISAN
+}
+
+enum KycStatus {
+  NON_SOUMIS
+  EN_ATTENTE
+  VALIDE
+  REJETE
+}
+
+enum ProjectStatus {
+  BROUILLON
+  PUBLIE
+  COMPLET
+}
+
+enum UnitType {
+  STUDIO
+  T2
+  T3
+  T4
+  T5
+  COMMERCE
+}
+
+enum Frontage {
+  FACADE_PRINCIPALE   // rue la plus passante / vitrine (ex: façade nord ici)
+  FACADE_SECONDAIRE   // autre rue, moins passante
+  INTERIEUR_ILOT       // cœur de résidence, pas de vue rue
+  MITOYEN               // côté aveugle, mitoyenneté (technique/moins valorisé)
+}
+
+enum UnitStatus {
+  DISPONIBLE
+  RESERVE   // verrou actif, en attente d'acompte
+  VENDU     // acompte payé, échéancier en cours
+  LIVRE
+}
+
+enum ReservationStatus {
+  EN_ATTENTE   // verrou actif, acompte pas encore reçu
+  CONFIRMEE    // acompte payé
+  ANNULEE      // expirée ou annulée manuellement
+  LIVREE
+}
+
+enum InstallmentStatus {
+  EN_ATTENTE
+  PAYE
+  EN_RETARD
+  ECHEC
+}
+
+enum PaymentProvider {
+  CINETPAY
+  STRIPE
+  MOBILE_MONEY
+}
+
+enum ConstructionPhase {
+  FONDATIONS
+  GROS_OEUVRE
+  SECOND_OEUVRE
+  FINITIONS
+  LIVRE
+}
+
+enum DocumentType {
+  CONTRAT
+  ATTESTATION
+  QUITTANCE
+  PIECE_IDENTITE
+  DEVIS
+}
+
+enum NotificationChannel {
+  PUSH
+  EMAIL
+  SMS
+}
+
+enum ArtisanTrade {
+  MACONNERIE
+  ELECTRICITE
+  PLOMBERIE
+  MENUISERIE
+  PEINTURE
+  CARRELAGE
+  TOITURE
+  AUTRE
+}
+
+enum ArtisanStatus {
+  ACTIF
+  SUSPENDU
+  ARCHIVE
+}
+
+enum AssignmentStatus {
+  PROPOSEE     // proposée à l'artisan, pas encore acceptée
+  ACCEPTEE
+  EN_COURS
+  TERMINEE
+  ANNULEE
+}
+
+enum QuoteStatus {
+  BROUILLON
+  ENVOYE
+  ACCEPTE
+  REFUSE
+}
+
+enum LaunchStatus {
+  EN_COMMERCIALISATION  // ventes ouvertes, construction pas encore actée
+  SEUIL_ATTEINT         // % minimum de ventes atteint, dossier financement généré
+  FINANCEMENT_EN_COURS  // dossier présenté à la banque, en attente de décision
+  EN_CONSTRUCTION       // financement obtenu, chantier démarré
+  LIVRE
+}
+
+enum ParkingType {
+  SOUS_PILOTIS      // RDC des blocs résidentiels (R+3), réservé résidents
+  AUVENT_SOLAIRE    // périphérie, visiteurs/clients commerces, panneaux solaires
+  AUVENT_CLASSIQUE  // parking d'appoint, toile tendue
+}
+
+enum ParkingSpotStatus {
+  LIBRE
+  ATTRIBUE
+  MAINTENANCE
+}
+
+// ---------------------------------------------------
+// USER
+// ---------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  phone         String    @unique
+  passwordHash  String
+  fullName      String
+  country       String    @default("TG")
+  role          UserRole  @default(ACHETEUR)
+  kycStatus     KycStatus @default(NON_SOUMIS)
+  kycDocuments  Document[] @relation("KycDocuments")
+
+  reservations       Reservation[]
+  notifications       Notification[]
+  notificationPrefs   NotificationPreference?
+  constructionUpdatesPublished ConstructionUpdate[] @relation("PublishedBy")
+  artisanProfile     Artisan?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@map("users")
+}
+
+// ---------------------------------------------------
+// PROJECT / BLOCK / UNIT
+// ---------------------------------------------------
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  location    String
+  amenities   String[]      // ["gardiennage", "aire_de_jeux", "parking"]
+  coverImage  String?
+  status      ProjectStatus @default(BROUILLON)
+
+  // Image de fond du plan de masse (photo/scan du plan de bornage ou
+  // rendu 3D vue de dessus) sur laquelle les polygones de Block sont
+  // positionnés en overlay pour le plan interactif.
+  siteMapImageUrl String?
+
+  blocks Block[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("projects")
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name   String   // "Bloc A"
+  floors Int
+
+  // Position dans la résidence — sert à la fois à la différenciation prix
+  // (façade principale = plus cher) et au plan de masse interactif.
+  frontage                Frontage @default(INTERIEUR_ILOT)
+  distanceFromEntranceM   Int?     // distance approximative à l'entrée principale, en mètres
+
+  // Polygone du bloc sur le plan de masse, en coordonnées relatives à
+  // Project.siteMapImageUrl (ex: [{"x":120,"y":80},{"x":180,"y":80},...]
+  // en pourcentage 0-100 de la largeur/hauteur de l'image, indépendant
+  // de la résolution réelle du fichier image).
+  sitePlanPolygon Json?
+
+  // Avancement chantier consolidé (dénormalisé, mis à jour à chaque ConstructionUpdate)
+  constructionPhase   ConstructionPhase @default(FONDATIONS)
+  progressPercent     Int               @default(0)
+
+  // Cycle de pré-commercialisation -> financement -> construction.
+  // Tant que launchStatus != EN_CONSTRUCTION, ConstructionModule refuse
+  // toute mise à jour chantier sur ce bloc : rien n'est encore construit.
+  launchStatus            LaunchStatus @default(EN_COMMERCIALISATION)
+  fundingThresholdPercent Int          @default(60) // % d'unités vendues requis pour acter le lot
+  thresholdReachedAt      DateTime?
+  financingSecuredAt      DateTime?
+  constructionStartedAt   DateTime?
+
+  units              Unit[]
+  constructionUpdates ConstructionUpdate[]
+  artisanAssignments ArtisanAssignment[]
+  quotes             Quote[]
+  parkingSpots       ParkingSpot[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@map("blocks")
+}
+
+model Unit {
+  id      String   @id @default(cuid())
+  blockId String
+  block   Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  type       UnitType
+  surface    Float
+  floor      Int
+  price      Decimal    @db.Decimal(14, 2)
+  currency   String     @default("XOF")
+  planImage  String?
+  photos     String[]
+  status     UnitStatus @default(DISPONIBLE)
+
+  // Pertinent uniquement pour type = COMMERCE — vitrine sur rue et accès
+  // direct depuis la voie publique (par opposition à un local en cœur
+  // d'îlot, moins valorisé commercialement).
+  hasStorefront Boolean @default(false)
+  streetFacing  Boolean @default(false)
+
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Une seule réservation active (EN_ATTENTE/CONFIRMEE) à la fois par unité,
+  // appliqué au niveau applicatif via le lock Redis + vérification transactionnelle
+  // à la création (voir note ci-dessous).
+  @@index([blockId, status])
+  @@index([type, status])
+  @@map("units")
+}
+
+// ---------------------------------------------------
+// RESERVATION
+// ---------------------------------------------------
+//
+// Mécanisme anti-double-vente :
+// 1. Le service tente d'abord un lock Redis `lock:unit:{unitId}` (NX, EX 120s)
+//    pour éviter les race conditions au moment du clic "Réserver".
+// 2. Si le lock est acquis, on ouvre une transaction Prisma qui :
+//    a. relit l'unité avec un verrou (`SELECT ... FOR UPDATE` via $queryRaw
+//       ou en s'appuyant sur le statut UnitStatus dans le WHERE du update)
+//    b. vérifie unit.status === DISPONIBLE
+//    c. crée la Reservation (EN_ATTENTE, lockExpiresAt = now + 48h)
+//    d. passe unit.status = RESERVE dans le même $transaction
+// 3. Un job BullMQ différé (delay = 48h) vérifie si la réservation est
+//    toujours EN_ATTENTE : si oui, il l'annule et repasse l'unité à DISPONIBLE.
+// 4. Le lock Redis (120s) protège uniquement la fenêtre de la requête HTTP ;
+//    lockExpiresAt (48h) est la source de vérité métier, persistée en base.
+
+model Reservation {
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  status        ReservationStatus @default(EN_ATTENTE)
+  lockExpiresAt DateTime          // 48h après création, tant que status = EN_ATTENTE
+
+  paymentSchedule PaymentSchedule?
+  documents       Document[]
+  parkingSpot     ParkingSpot?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status, lockExpiresAt]) // utilisé par le job BullMQ d'expiration
+  @@map("reservations")
+}
+
+// ---------------------------------------------------
+// PAYMENTS (state machine)
+// ---------------------------------------------------
+
+model PaymentSchedule {
+  id            String @id @default(cuid())
+  reservationId String @unique
+  reservation   Reservation @relation(fields: [reservationId], references: [id])
+
+  totalAmount Decimal @db.Decimal(14, 2)
+  currency    String  @default("XOF")
+
+  installments PaymentInstallment[]
+
+  createdAt DateTime @default(now())
+
+  @@map("payment_schedules")
+}
+
+model PaymentInstallment {
+  id               String          @id @default(cuid())
+  scheduleId       String
+  schedule         PaymentSchedule @relation(fields: [scheduleId], references: [id])
+
+  label    String  // "Acompte réservation", "Tranche gros œuvre", "Solde livraison"
+  amount   Decimal @db.Decimal(14, 2)
+  dueDate  DateTime
+  status   InstallmentStatus @default(EN_ATTENTE)
+
+  provider      PaymentProvider?
+  providerRef   String?  // ID transaction CinetPay/Stripe pour rapprochement
+  paidAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scheduleId])
+  @@index([status, dueDate]) // pour /admin/dashboard/payments-overdue
+  @@map("payment_installments")
+}
+
+// ---------------------------------------------------
+// CONSTRUCTION TRACKING
+// ---------------------------------------------------
+
+model ConstructionUpdate {
+  id      String @id @default(cuid())
+  blockId String
+  block   Block  @relation(fields: [blockId], references: [id])
+
+  phase           ConstructionPhase
+  progressPercent Int
+  description     String?
+  photos          String[]
+
+  publishedById String
+  publishedBy   User   @relation("PublishedBy", fields: [publishedById], references: [id])
+
+  publishedAt DateTime @default(now())
+
+  @@index([blockId, publishedAt])
+  @@map("construction_updates")
+}
+
+// ---------------------------------------------------
+// DOCUMENTS
+// ---------------------------------------------------
+
+model Document {
+  id     String       @id @default(cuid())
+  type   DocumentType
+  name   String
+  fileUrl String
+
+  // Un document peut être lié à une réservation (contrat, quittance)
+  // ou à un utilisateur seul (pièce d'identité KYC)
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+
+  kycOwnerId String?
+  kycOwner   User?  @relation("KycDocuments", fields: [kycOwnerId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([reservationId])
+  @@map("documents")
+}
+
+// ---------------------------------------------------
+// NOTIFICATIONS
+// ---------------------------------------------------
+
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  title String
+  body  String
+  read  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  push  Boolean @default(true)
+  email Boolean @default(true)
+  sms   Boolean @default(false)
+
+  @@map("notification_preferences")
+}
+
+// ---------------------------------------------------
+// ARTISANS (≈ Logisbox Artisans)
+// ---------------------------------------------------
+//
+// Un artisan est un User avec role = ARTISAN, complété par un profil
+// Artisan (métier, entreprise, statut). L'accès aux infos d'un chantier
+// (planning, coordonnées client, devis, contrat) passe systématiquement
+// par une ArtisanAssignment — un artisan ne voit que les blocs sur
+// lesquels il est explicitement affecté, jamais l'ensemble du programme.
+
+model Artisan {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  companyName     String
+  trade           ArtisanTrade
+  status          ArtisanStatus @default(ACTIF)
+  tradeLicenseUrl String?       // registre de commerce / attestation métier
+
+  assignments ArtisanAssignment[]
+  quotes      Quote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([trade, status])
+  @@map("artisans")
+}
+
+model ArtisanAssignment {
+  id        String  @id @default(cuid())
+  artisanId String
+  artisan   Artisan @relation(fields: [artisanId], references: [id])
+  blockId   String
+  block     Block   @relation(fields: [blockId], references: [id])
+
+  status     AssignmentStatus @default(PROPOSEE)
+  scope      String?          // ex: "Second œuvre — plomberie, niveaux 1 à 3"
+  startDate  DateTime?
+  endDate    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Un artisan n'a normalement qu'une affectation active par bloc/métier,
+  // appliqué au niveau service plutôt qu'en contrainte DB stricte (permet
+  // les réaffectations historiques sans supprimer l'historique).
+  @@index([blockId, status])
+  @@index([artisanId, status])
+  @@map("artisan_assignments")
+}
+
+model Quote {
+  id        String  @id @default(cuid())
+  artisanId String
+  artisan   Artisan @relation(fields: [artisanId], references: [id])
+  blockId   String
+  block     Block   @relation(fields: [blockId], references: [id])
+
+  amount      Decimal     @db.Decimal(14, 2)
+  currency    String      @default("XOF")
+  description String
+  status      QuoteStatus @default(BROUILLON)
+  documentUrl String?     // PDF du devis une fois généré/uploadé
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([blockId, status])
+  @@index([artisanId])
+  @@map("quotes")
+}
+
+// ---------------------------------------------------
+// PARKING
+// ---------------------------------------------------
+//
+// Même logique que Unit : une place a un statut (LIBRE/ATTRIBUE/MAINTENANCE)
+// et peut être liée à une Reservation au moment de l'achat — l'acheteur
+// choisit sa place lors de la configuration de son logement, comme une
+// option, plutôt que d'avoir une place générique non identifiée.
+
+model ParkingSpot {
+  id      String @id @default(cuid())
+  blockId String?
+  block   Block? @relation(fields: [blockId], references: [id])
+  // blockId nul pour les auvents solaires/classiques en zone commune,
+  // non rattachés à un bloc précis (contrairement au pilotis).
+
+  numero String      @unique // ex: "PK-A-01", "PK-SOL-12"
+  type   ParkingType
+  status ParkingSpotStatus @default(LIBRE)
+
+  reservationId String?      @unique
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, type])
+  @@map("parking_spots")
+}

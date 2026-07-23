@@ -1,0 +1,1254 @@
+openapi: 3.0.3
+info:
+  title: Résidence Catalog API
+  description: >
+    API pour plateforme de promotion immobilière — vente de logements
+    (studios, T2, T3) en résidence fermée sur catalogue digital, avec
+    paiements échelonnés et suivi de chantier en temps réel.
+  version: 1.0.0
+servers:
+  - url: https://api.residence-catalog.tg/v1
+    description: Production
+  - url: https://staging-api.residence-catalog.tg/v1
+    description: Staging
+
+tags:
+  - name: Auth
+  - name: Catalog
+  - name: Reservations
+  - name: Payments
+  - name: Construction
+  - name: Portal
+  - name: Notifications
+  - name: Artisans
+  - name: Launch
+  - name: Admin
+
+paths:
+
+  # ============ AUTH ============
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Créer un compte acheteur
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, phone, password, fullName]
+              properties:
+                email: { type: string, format: email }
+                phone: { type: string, example: "+22890000000" }
+                password: { type: string, format: password }
+                fullName: { type: string }
+                country: { type: string, example: "TG" }
+      responses:
+        "201":
+          description: Compte créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        "409": { description: Email ou téléphone déjà utilisé }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Connexion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Connexion réussie
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        "401": { description: Identifiants invalides }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rafraîchir le token d'accès
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: Nouveau token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Profil de l'utilisateur connecté
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Profil utilisateur
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+
+  /auth/kyc:
+    post:
+      tags: [Auth]
+      summary: Upload pièce d'identité (KYC léger)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                documentType: { type: string, enum: [cni, passeport, carte_sejour] }
+                file: { type: string, format: binary }
+      responses:
+        "200": { description: Document reçu, statut KYC mis à jour }
+
+  # ============ CATALOG (public) ============
+  /catalog/projects:
+    get:
+      tags: [Catalog]
+      summary: Liste des programmes immobiliers publiés
+      responses:
+        "200":
+          description: Liste des projets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProjectSummary' }
+
+  /catalog/projects/{projectId}:
+    get:
+      tags: [Catalog]
+      summary: Détail d'un programme (blocs, équipements communs)
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        "200":
+          description: Détail projet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        "404": { description: Projet introuvable }
+
+  /catalog/projects/{projectId}/blocks:
+    get:
+      tags: [Catalog]
+      summary: Liste des blocs d'un projet
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        "200":
+          description: Liste des blocs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Block' }
+
+  /catalog/units:
+    get:
+      tags: [Catalog]
+      summary: Recherche d'unités avec filtres (typologie, prix, disponibilité)
+      parameters:
+        - name: projectId
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string, enum: [studio, t2, t3, t4, t5, commerce] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [disponible, reserve, vendu, livre] }
+        - name: priceMin
+          in: query
+          schema: { type: number }
+        - name: priceMax
+          in: query
+          schema: { type: number }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Résultats paginés
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/UnitSummary' }
+                  total: { type: integer }
+                  page: { type: integer }
+
+  /catalog/units/{unitId}:
+    get:
+      tags: [Catalog]
+      summary: Détail d'une unité (plan, prix, statut, photos)
+      parameters:
+        - $ref: '#/components/parameters/UnitId'
+      responses:
+        "200":
+          description: Détail unité
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Unit' }
+        "404": { description: Unité introuvable }
+
+  /catalog/projects/{projectId}/site-plan:
+    get:
+      tags: [Catalog]
+      summary: Plan de masse interactif — image de fond + position/statut de chaque bloc
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        "200":
+          description: Plan de masse
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SitePlan' }
+
+  # ============ RESERVATIONS ============
+  /reservations:
+    post:
+      tags: [Reservations]
+      summary: Réserver une unité (pose un verrou temporaire 48h)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [unitId]
+              properties:
+                unitId: { type: string }
+      responses:
+        "201":
+          description: Réservation créée, en attente de l'acompte
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        "409": { description: Unité déjà réservée ou verrouillée par un autre acheteur }
+
+    get:
+      tags: [Reservations]
+      summary: Lister ses propres réservations
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste des réservations de l'utilisateur
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Reservation' }
+
+  /reservations/{reservationId}:
+    get:
+      tags: [Reservations]
+      summary: Détail d'une réservation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        "200":
+          description: Détail réservation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+
+    delete:
+      tags: [Reservations]
+      summary: Annuler une réservation (libère l'unité)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        "204": { description: Réservation annulée }
+
+  # ============ PAYMENTS ============
+  /payments/schedule/{reservationId}:
+    get:
+      tags: [Payments]
+      summary: Échéancier de paiement d'une réservation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        "200":
+          description: Échéancier
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentSchedule' }
+
+  /payments/installments/{installmentId}/pay:
+    post:
+      tags: [Payments]
+      summary: Initier le paiement d'une échéance
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: installmentId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider: { type: string, enum: [cinetpay, stripe, mobile_money] }
+      responses:
+        "200":
+          description: Lien/session de paiement généré
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paymentUrl: { type: string }
+                  sessionId: { type: string }
+
+  /payments/webhooks/cinetpay:
+    post:
+      tags: [Payments]
+      summary: Callback CinetPay (confirmation paiement local)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Notification traitée }
+
+  /payments/webhooks/stripe:
+    post:
+      tags: [Payments]
+      summary: Callback Stripe (confirmation paiement diaspora EUR)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Notification traitée }
+
+  /payments/history:
+    get:
+      tags: [Payments]
+      summary: Historique des paiements de l'utilisateur
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Historique
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PaymentInstallment' }
+
+  # ============ CONSTRUCTION TRACKING ============
+  /construction/blocks/{blockId}/updates:
+    get:
+      tags: [Construction]
+      summary: Historique d'avancement chantier d'un bloc
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      responses:
+        "200":
+          description: Liste des mises à jour chantier
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ConstructionUpdate' }
+
+    post:
+      tags: [Construction]
+      summary: Publier une mise à jour chantier (admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                phase: { type: string, enum: [fondations, gros_oeuvre, second_oeuvre, finitions, livre] }
+                progressPercent: { type: integer, minimum: 0, maximum: 100 }
+                description: { type: string }
+                photos:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        "201": { description: Mise à jour publiée, notifications déclenchées }
+
+  /construction/units/{unitId}/progress:
+    get:
+      tags: [Construction]
+      summary: Avancement chantier consolidé pour une unité (hérite du bloc)
+      parameters:
+        - $ref: '#/components/parameters/UnitId'
+      responses:
+        "200":
+          description: Avancement
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phase: { type: string }
+                  progressPercent: { type: integer }
+                  lastUpdate: { type: string, format: date-time }
+
+  # ============ CLIENT PORTAL ============
+  /portal/dashboard:
+    get:
+      tags: [Portal]
+      summary: Tableau de bord acheteur (unité, échéancier, avancement)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Données du dashboard }
+
+  /portal/documents:
+    get:
+      tags: [Portal]
+      summary: Liste des documents de l'acheteur (contrat, attestations, quittances)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste des documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Document' }
+
+  /portal/documents/{documentId}/download:
+    get:
+      tags: [Portal]
+      summary: Télécharger un document
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Fichier PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  # ============ NOTIFICATIONS ============
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Liste des notifications de l'utilisateur
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  /notifications/{notificationId}/read:
+    patch:
+      tags: [Notifications]
+      summary: Marquer une notification comme lue
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Notification mise à jour }
+
+  /notifications/preferences:
+    post:
+      tags: [Notifications]
+      summary: Définir les préférences de notification (push, email, SMS)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                push: { type: boolean }
+                email: { type: boolean }
+                sms: { type: boolean }
+      responses:
+        "200": { description: Préférences enregistrées }
+
+  # ============ ARTISANS ============
+  /artisans/me/assignments:
+    get:
+      tags: [Artisans]
+      summary: Mes affectations chantier (tous statuts)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste des affectations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ArtisanAssignment' }
+
+  /artisans/assignments/{assignmentId}/respond:
+    post:
+      tags: [Artisans]
+      summary: Accepter ou refuser une affectation proposée
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accept]
+              properties:
+                accept: { type: boolean }
+      responses:
+        "200": { description: Affectation mise à jour }
+        "403": { description: Affectation déjà traitée }
+
+  /artisans/blocks/{blockId}/planning:
+    get:
+      tags: [Artisans]
+      summary: Planning/avancement du chantier (accès réservé aux artisans affectés)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      responses:
+        "200":
+          description: Historique d'avancement
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ConstructionUpdate' }
+        "403": { description: Pas d'affectation active sur ce bloc }
+
+  /artisans/blocks/{blockId}/client-contacts:
+    get:
+      tags: [Artisans]
+      summary: Coordonnées des acheteurs du bloc (accès réservé aux artisans affectés)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      responses:
+        "200":
+          description: Liste de contacts (nom, téléphone, unité)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ClientContact' }
+        "403": { description: Pas d'affectation active sur ce bloc }
+
+  /artisans/blocks/{blockId}/quotes:
+    post:
+      tags: [Artisans]
+      summary: Soumettre un devis pour ce chantier
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, description]
+              properties:
+                amount: { type: number }
+                description: { type: string }
+                documentUrl: { type: string }
+      responses:
+        "201":
+          description: Devis créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+
+  /artisans/me/quotes:
+    get:
+      tags: [Artisans]
+      summary: Mes devis soumis (tous chantiers)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste des devis
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Quote' }
+
+  /admin/artisans:
+    get:
+      tags: [Admin]
+      summary: Lister tous les artisans enregistrés
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Artisan' }
+    post:
+      tags: [Admin]
+      summary: Enregistrer un nouvel artisan (compte + profil métier)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArtisanInput' }
+      responses:
+        "201": { description: Artisan créé }
+
+  /admin/artisans/assignments:
+    post:
+      tags: [Admin]
+      summary: Proposer une affectation chantier à un artisan
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [artisanId, blockId]
+              properties:
+                artisanId: { type: string }
+                blockId: { type: string }
+                scope: { type: string }
+                startDate: { type: string, format: date }
+                endDate: { type: string, format: date }
+      responses:
+        "201": { description: Affectation proposée, notification envoyée à l'artisan }
+
+  /admin/artisans/quotes/{quoteId}/review:
+    patch:
+      tags: [Admin]
+      summary: Accepter ou refuser un devis soumis
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: quoteId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decision: { type: string, enum: [ACCEPTE, REFUSE] }
+      responses:
+        "200": { description: Devis mis à jour }
+
+  # ============ LAUNCH / FINANCEMENT PAR LOT ============
+  /admin/blocks/{blockId}/launch/status:
+    get:
+      tags: [Launch]
+      summary: Statut de commercialisation/financement du lot, taux de remplissage actuel
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      responses:
+        "200":
+          description: Statut
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LaunchStatusInfo' }
+
+  /admin/blocks/{blockId}/launch/funding-dossier:
+    get:
+      tags: [Launch]
+      summary: Génère le dossier de financement (ventes engagées, montants, échéanciers) à présenter à la banque
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      responses:
+        "200":
+          description: Dossier de financement
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FundingDossier' }
+
+  /admin/blocks/{blockId}/launch/threshold:
+    patch:
+      tags: [Launch]
+      summary: Configurer le seuil de ventes (%) requis pour acter le lot
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [percent]
+              properties:
+                percent: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200": { description: Seuil mis à jour }
+
+  /admin/blocks/{blockId}/launch/submit-financing:
+    post:
+      tags: [Launch]
+      summary: Marquer le dossier comme déposé auprès de la banque (SEUIL_ATTEINT -> FINANCEMENT_EN_COURS)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      responses:
+        "200": { description: Statut mis à jour }
+        "400": { description: Le lot n'est pas au statut SEUIL_ATTEINT }
+
+  /admin/blocks/{blockId}/launch/confirm-financing:
+    post:
+      tags: [Launch]
+      summary: Acter le financement obtenu de la banque (FINANCEMENT_EN_COURS -> EN_CONSTRUCTION). Débloque le suivi chantier pour ce lot.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BlockId'
+      responses:
+        "200": { description: Financement confirmé, chantier démarré }
+        "400": { description: Le lot n'est pas au statut FINANCEMENT_EN_COURS }
+
+  # ============ ADMIN ============
+  /admin/projects:
+    get:
+      tags: [Admin]
+      summary: Lister tous les projets (y compris brouillons)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Project' }
+
+    post:
+      tags: [Admin]
+      summary: Créer un nouveau projet
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectInput' }
+      responses:
+        "201":
+          description: Projet créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+
+  /admin/projects/{projectId}:
+    patch:
+      tags: [Admin]
+      summary: Mettre à jour un projet
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectInput' }
+      responses:
+        "200": { description: Projet mis à jour }
+
+  /admin/blocks:
+    post:
+      tags: [Admin]
+      summary: Créer un bloc dans un projet
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlockInput' }
+      responses:
+        "201": { description: Bloc créé }
+
+  /admin/units:
+    post:
+      tags: [Admin]
+      summary: Créer une unité dans un bloc
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnitInput' }
+      responses:
+        "201": { description: Unité créée }
+
+  /admin/units/{unitId}:
+    patch:
+      tags: [Admin]
+      summary: Modifier une unité (prix, statut, description)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UnitId'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnitInput' }
+      responses:
+        "200": { description: Unité mise à jour }
+
+  /admin/reservations:
+    get:
+      tags: [Admin]
+      summary: Lister toutes les réservations (filtrable par statut)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Reservation' }
+
+  /admin/reservations/{reservationId}/status:
+    patch:
+      tags: [Admin]
+      summary: Changer manuellement le statut d'une réservation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [en_attente, confirmee, annulee, livree] }
+      responses:
+        "200": { description: Statut mis à jour }
+
+  /admin/dashboard/occupancy:
+    get:
+      tags: [Admin]
+      summary: Vue d'occupation de la résidence (grille bloc/étage/unité)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Données d'occupation }
+
+  /admin/dashboard/payments-overdue:
+    get:
+      tags: [Admin]
+      summary: Liste des échéances impayées / en retard
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PaymentInstallment' }
+
+  /admin/clients/{userId}/relance:
+    post:
+      tags: [Admin]
+      summary: Déclencher une relance manuelle (email/SMS/push) pour impayé
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Relance envoyée }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string }
+    BlockId:
+      name: blockId
+      in: path
+      required: true
+      schema: { type: string }
+    UnitId:
+      name: unitId
+      in: path
+      required: true
+      schema: { type: string }
+    ReservationId:
+      name: reservationId
+      in: path
+      required: true
+      schema: { type: string }
+
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        fullName: { type: string }
+        country: { type: string }
+        kycStatus: { type: string, enum: [non_soumis, en_attente, valide, rejete] }
+        role: { type: string, enum: [acheteur, admin, commercial] }
+
+    ProjectSummary:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        location: { type: string }
+        coverImage: { type: string }
+        unitsAvailable: { type: integer }
+        priceFrom: { type: number }
+
+    ProjectInput:
+      type: object
+      required: [name, location]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        location: { type: string }
+        amenities:
+          type: array
+          items: { type: string, example: "gardiennage" }
+        status: { type: string, enum: [brouillon, publie, complet] }
+        siteMapImageUrl: { type: string, description: "Image de fond (scan plan de bornage ou rendu) pour le plan de masse interactif" }
+
+    Project:
+      allOf:
+        - $ref: '#/components/schemas/ProjectInput'
+        - type: object
+          properties:
+            id: { type: string }
+            blocks:
+              type: array
+              items: { $ref: '#/components/schemas/Block' }
+            createdAt: { type: string, format: date-time }
+
+    BlockInput:
+      type: object
+      required: [projectId, name, floors]
+      properties:
+        projectId: { type: string }
+        name: { type: string, example: "Bloc A" }
+        floors: { type: integer }
+        frontage:
+          type: string
+          enum: [facade_principale, facade_secondaire, interieur_ilot, mitoyen]
+          description: "Position dans la résidence — influence la valorisation prix"
+        distanceFromEntranceM: { type: integer }
+        sitePlanPolygon:
+          type: array
+          description: "Points du polygone du bloc sur le plan de masse, en % (0-100) de la largeur/hauteur de l'image de fond"
+          items:
+            type: object
+            properties:
+              x: { type: number }
+              y: { type: number }
+
+    Block:
+      allOf:
+        - $ref: '#/components/schemas/BlockInput'
+        - type: object
+          properties:
+            id: { type: string }
+            constructionPhase: { type: string }
+            progressPercent: { type: integer }
+
+    UnitInput:
+      type: object
+      required: [blockId, type, surface, floor, price]
+      properties:
+        blockId: { type: string }
+        type: { type: string, enum: [studio, t2, t3, t4, t5, commerce] }
+        surface: { type: number, example: 45.5 }
+        floor: { type: integer }
+        price: { type: number }
+        planImage: { type: string }
+        status: { type: string, enum: [disponible, reserve, vendu, livre] }
+        hasStorefront: { type: boolean, description: "Pertinent uniquement pour type=commerce : vitrine sur rue" }
+        streetFacing: { type: boolean, description: "Accès direct depuis la voie publique" }
+
+    UnitSummary:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        blockName: { type: string }
+        type: { type: string }
+        surface: { type: number }
+        floor: { type: integer }
+        price: { type: number }
+        status: { type: string }
+        coverImage: { type: string }
+
+    Unit:
+      allOf:
+        - $ref: '#/components/schemas/UnitInput'
+        - type: object
+          properties:
+            id: { type: string }
+            photos:
+              type: array
+              items: { type: string }
+            constructionProgress: { type: integer }
+
+    Reservation:
+      type: object
+      properties:
+        id: { type: string }
+        unitId: { type: string }
+        userId: { type: string }
+        status: { type: string, enum: [en_attente, confirmee, annulee, livree] }
+        lockExpiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    PaymentSchedule:
+      type: object
+      properties:
+        reservationId: { type: string }
+        totalAmount: { type: number }
+        currency: { type: string, example: "XOF" }
+        installments:
+          type: array
+          items: { $ref: '#/components/schemas/PaymentInstallment' }
+
+    PaymentInstallment:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string, example: "Acompte réservation" }
+        amount: { type: number }
+        dueDate: { type: string, format: date }
+        status: { type: string, enum: [en_attente, paye, en_retard] }
+        paidAt: { type: string, format: date-time, nullable: true }
+        provider: { type: string, enum: [cinetpay, stripe, mobile_money, null] }
+
+    ConstructionUpdate:
+      type: object
+      properties:
+        id: { type: string }
+        blockId: { type: string }
+        phase: { type: string }
+        progressPercent: { type: integer }
+        description: { type: string }
+        photos:
+          type: array
+          items: { type: string }
+        publishedAt: { type: string, format: date-time }
+
+    Document:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [contrat, attestation, quittance] }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        body: { type: string }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    ArtisanInput:
+      type: object
+      required: [email, phone, fullName, companyName, trade]
+      properties:
+        email: { type: string, format: email }
+        phone: { type: string }
+        fullName: { type: string }
+        companyName: { type: string }
+        trade:
+          type: string
+          enum: [maconnerie, electricite, plomberie, menuiserie, peinture, carrelage, toiture, autre]
+        tradeLicenseUrl: { type: string }
+
+    Artisan:
+      allOf:
+        - $ref: '#/components/schemas/ArtisanInput'
+        - type: object
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [actif, suspendu, archive] }
+            createdAt: { type: string, format: date-time }
+
+    ArtisanAssignment:
+      type: object
+      properties:
+        id: { type: string }
+        artisanId: { type: string }
+        blockId: { type: string }
+        status: { type: string, enum: [proposee, acceptee, en_cours, terminee, annulee] }
+        scope: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+
+    Quote:
+      type: object
+      properties:
+        id: { type: string }
+        artisanId: { type: string }
+        blockId: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [brouillon, envoye, accepte, refuse] }
+        documentUrl: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    ClientContact:
+      type: object
+      properties:
+        unitType: { type: string }
+        floor: { type: integer }
+        clientName: { type: string }
+        clientPhone: { type: string }
+
+    SitePlan:
+      type: object
+      properties:
+        projectId: { type: string }
+        projectName: { type: string }
+        siteMapImageUrl: { type: string, nullable: true }
+        blocks:
+          type: array
+          items:
+            type: object
+            properties:
+              blockId: { type: string }
+              blockName: { type: string }
+              frontage: { type: string, enum: [facade_principale, facade_secondaire, interieur_ilot, mitoyen] }
+              distanceFromEntranceM: { type: integer, nullable: true }
+              sitePlanPolygon:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    x: { type: number }
+                    y: { type: number }
+              launchStatus:
+                type: string
+                enum: [en_commercialisation, seuil_atteint, financement_en_cours, en_construction, livre]
+              constructionPhase: { type: string }
+              totalUnits: { type: integer }
+              soldUnits: { type: integer }
+              fillRatePercent: { type: integer }
+
+    LaunchStatusInfo:
+      type: object
+      properties:
+        launchStatus:
+          type: string
+          enum: [en_commercialisation, seuil_atteint, financement_en_cours, en_construction, livre]
+        fundingThresholdPercent: { type: integer }
+        currentFillRatePercent: { type: integer }
+        soldUnits: { type: integer }
+        totalUnits: { type: integer }
+        thresholdReachedAt: { type: string, format: date-time, nullable: true }
+        financingSecuredAt: { type: string, format: date-time, nullable: true }
+
+    FundingDossier:
+      type: object
+      properties:
+        projectName: { type: string }
+        blockName: { type: string }
+        generatedAt: { type: string, format: date-time }
+        totalUnits: { type: integer }
+        soldUnits: { type: integer }
+        fillRatePercent: { type: integer }
+        totalPreVenduAmount: { type: number }
+        totalDejaEncaisseAmount: { type: number }
+        currency: { type: string }
+        buyers:
+          type: array
+          items:
+            type: object
+            properties:
+              unitType: { type: string }
+              floor: { type: integer }
+              price: { type: number }
+              buyerName: { type: string }
+              buyerPhone: { type: string }
+              reservationStatus: { type: string }

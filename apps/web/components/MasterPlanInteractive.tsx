@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Building2, Info, Layers, CheckCircle2, ParkingSquare, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Building2, Info, Layers, CheckCircle2, ParkingSquare, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
+import { fetchSitePlan, SitePlanBlock } from '../lib/api';
 
 interface BlockInfo {
   id: string;
   name: string;
   floors: string;
   typologies: string;
-  status: 'EN_COMMERCIALISATION' | 'SEUIL_ATTEINT' | 'EN_CONSTRUCTION';
+  status: 'EN_COMMERCIALISATION' | 'SEUIL_ATTEINT' | 'FINANCEMENT_EN_COURS' | 'EN_CONSTRUCTION' | 'LIVRE';
   progress: number;
   totalUnits: number;
   reservedUnits: number;
@@ -16,7 +17,8 @@ interface BlockInfo {
   highlight: string;
 }
 
-const BLOCKS_DATA: Record<string, BlockInfo> = {
+/** Données statiques de fallback si l'API est indisponible */
+const BLOCKS_DATA_FALLBACK: Record<string, BlockInfo> = {
   'bloc-a': {
     id: 'bloc-a',
     name: 'Bloc A (Rangée Sud-Ouest)',
@@ -79,9 +81,77 @@ const BLOCKS_DATA: Record<string, BlockInfo> = {
   },
 };
 
-export default function MasterPlanInteractive({ onSelectBlock }: { onSelectBlock?: (blockId: string) => void }) {
+/** Mapping blockName API → clé locale pour la correspondance SVG */
+const BLOCK_NAME_MAP: Record<string, string> = {
+  'Bloc A': 'bloc-a',
+  'Bloc B': 'bloc-b',
+  'Bloc C': 'bloc-c',
+  'Bloc D': 'bloc-d',
+  'Façade Commerciale': 'commerces',
+  'Commerces': 'commerces',
+};
+
+function mapApiBlockToLocal(apiBlock: SitePlanBlock): Partial<BlockInfo> {
+  return {
+    status: apiBlock.launchStatus as BlockInfo['status'],
+    progress: apiBlock.fillRatePercent,
+    totalUnits: apiBlock.totalUnits,
+    reservedUnits: apiBlock.soldUnits,
+  };
+}
+
+interface MasterPlanProps {
+  projectId?: string;
+  onSelectBlock?: (blockId: string) => void;
+}
+
+export default function MasterPlanInteractive({ projectId, onSelectBlock }: MasterPlanProps) {
   const [selectedBlockId, setSelectedBlockId] = useState<string>('bloc-a');
-  const activeBlock = BLOCKS_DATA[selectedBlockId] || BLOCKS_DATA['bloc-a'];
+  const [blocksData, setBlocksData] = useState<Record<string, BlockInfo>>(BLOCKS_DATA_FALLBACK);
+  const [isLive, setIsLive] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch dynamique depuis l'API si projectId est fourni
+  useEffect(() => {
+    if (!projectId) return;
+
+    let cancelled = false;
+    setIsLoading(true);
+
+    fetchSitePlan(projectId)
+      .then((data) => {
+        if (cancelled) return;
+
+        const merged = { ...BLOCKS_DATA_FALLBACK };
+        for (const apiBlock of data.blocks) {
+          // Trouver la clé locale correspondante
+          const localKey = Object.entries(BLOCK_NAME_MAP).find(
+            ([pattern]) => apiBlock.blockName.includes(pattern),
+          )?.[1];
+
+          if (localKey && merged[localKey]) {
+            merged[localKey] = {
+              ...merged[localKey],
+              ...mapApiBlockToLocal(apiBlock),
+            };
+          }
+        }
+        setBlocksData(merged);
+        setIsLive(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('Plan de masse : fallback sur données statiques.', err.message);
+        setIsLive(false);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  const activeBlock = blocksData[selectedBlockId] || blocksData['bloc-a'];
 
   return (
     <section id="masterplan" className="py-20 bg-ink-dark border-b border-paper/10">
@@ -96,8 +166,16 @@ export default function MasterPlanInteractive({ onSelectBlock }: { onSelectBlock
               Plan de masse & Sélection des Blocs
             </h2>
           </div>
-          <span className="font-mono text-xs text-paper/50 bg-ink-card px-3 py-1.5 border border-paper/15 rounded">
+          <span className="font-mono text-xs text-paper/50 bg-ink-card px-3 py-1.5 border border-paper/15 rounded flex items-center gap-2">
             ÉCH. approx. 1/1000 — NORD EN HAUT
+            {projectId && (
+              <span className={`inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                isLive ? 'bg-lagoon/20 text-lagoon-light' : 'bg-paper/10 text-paper/40'
+              }`}>
+                {isLive ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+                {isLoading ? 'Chargement…' : isLive ? 'Live' : 'Hors ligne'}
+              </span>
+            )}
           </span>
         </div>
 
@@ -230,11 +308,19 @@ export default function MasterPlanInteractive({ onSelectBlock }: { onSelectBlock
               <div className="flex justify-between items-start">
                 <span className="font-mono text-xs text-sand uppercase tracking-wider">Détails du Lot sélectionné</span>
                 <span className={`text-[11px] font-mono px-2.5 py-1 rounded border ${
-                  activeBlock.status === 'SEUIL_ATTEINT'
+                  activeBlock.status === 'SEUIL_ATTEINT' || activeBlock.status === 'FINANCEMENT_EN_COURS'
                     ? 'bg-lagoon/20 text-lagoon-light border-lagoon/50'
+                    : activeBlock.status === 'EN_CONSTRUCTION'
+                    ? 'bg-sand/20 text-sand border-sand/50'
+                    : activeBlock.status === 'LIVRE'
+                    ? 'bg-paper/20 text-paper border-paper/50'
                     : 'bg-laterite/20 text-laterite-light border-laterite/50'
                 }`}>
-                  {activeBlock.status === 'SEUIL_ATTEINT' ? 'Seuil Rejoint !' : 'Ventes En Cours'}
+                  {activeBlock.status === 'SEUIL_ATTEINT' ? 'Seuil Rejoint !'
+                    : activeBlock.status === 'FINANCEMENT_EN_COURS' ? 'Financement en cours'
+                    : activeBlock.status === 'EN_CONSTRUCTION' ? '🏗 En construction'
+                    : activeBlock.status === 'LIVRE' ? '✅ Livré'
+                    : 'Ventes En Cours'}
                 </span>
               </div>
 

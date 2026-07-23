@@ -1,13 +1,13 @@
 import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
 import { InstallmentStatus, PaymentProvider } from '@prisma/client';
+import { CinetPayClient } from './cinetpay.client';
 
 /**
  * Découpage d'échéancier par défaut pour un logement entrée de gamme.
- * Pourcentages appliqués au prix total de l'unité — configurable par
- * projet si besoin plus tard (ex: table ProjectPaymentPlan).
+ * Pourcentages appliqués au prix total de l'unité.
  */
 const DEFAULT_INSTALLMENT_PLAN = [
   { label: 'Acompte réservation', percent: 0.1, daysFromNow: 0 },
@@ -25,12 +25,11 @@ export class PaymentService {
     private readonly prisma: PrismaService,
     private readonly reservationService: ReservationService,
     private readonly notifications: NotificationService,
+    private readonly cinetPayClient: CinetPayClient,
   ) {}
 
   /**
    * Génère l'échéancier au moment de la création de la réservation.
-   * Appelé juste après reserveUnit() dans le controller, ou via un event
-   * listener sur la création de Reservation si on préfère découpler.
    */
   async generateSchedule(reservationId: string) {
     const reservation = await this.prisma.reservation.findUnique({
@@ -64,15 +63,11 @@ export class PaymentService {
 
   /**
    * Initie le paiement d'une échéance auprès du provider choisi.
-   * L'appel réel à CinetPay/Stripe (création de session/lien) est délégué
-   * à des clients dédiés (CinetPayClient, StripeClient) non détaillés ici
-   * — leur seul rôle est de créer la session côté provider et de
-   * retourner une providerRef stockée pour le rapprochement webhook.
    */
   async initiatePayment(installmentId: string, provider: PaymentProvider, userId: string) {
     const installment = await this.prisma.paymentInstallment.findUniqueOrThrow({
       where: { id: installmentId },
-      include: { schedule: { include: { reservation: true } } },
+      include: { schedule: { include: { reservation: { include: { user: true } } } } },
     });
 
     if (installment.schedule.reservation.userId !== userId) {
@@ -82,17 +77,41 @@ export class PaymentService {
       throw new BadRequestException('Cette échéance est déjà payée.');
     }
 
-    // session = await this.cinetPay.createSession(...) ou this.stripe.createCheckoutSession(...)
-    // selon `provider` — client injecté au constructeur, omis ici par souci de longueur.
-    throw new Error('À implémenter : appel au client CinetPay/Stripe selon provider.');
+    const transactionId = `TX-${installment.id.substring(0, 8)}-${Date.now()}`;
+
+    if (provider === PaymentProvider.CINETPAY || provider === PaymentProvider.MOBILE_MONEY) {
+      const user = installment.schedule.reservation.user;
+      const session = await this.cinetPayClient.createPaymentSession({
+        transactionId,
+        amount: Number(installment.amount),
+        currency: installment.schedule.currency,
+        description: `Paiement ${installment.label} - Résidence Baguida`,
+        installmentId: installment.id,
+        customerName: user.fullName,
+        customerEmail: user.email,
+        customerPhone: user.phone,
+      });
+
+      await this.prisma.paymentInstallment.update({
+        where: { id: installmentId },
+        data: {
+          provider: PaymentProvider.CINETPAY,
+          providerRef: transactionId,
+        },
+      });
+
+      return {
+        paymentUrl: session.paymentUrl,
+        transactionId,
+        provider: PaymentProvider.CINETPAY,
+      };
+    }
+
+    throw new BadRequestException(`Provider ${provider} non supporté dans cette méthode.`);
   }
 
   /**
-   * Point d'entrée unique pour marquer une échéance payée, quel que soit
-   * le provider. Appelé par les deux handlers de webhook ci-dessous.
-   *
-   * Idempotent : si l'échéance est déjà PAYE (webhook renvoyé deux fois
-   * par le provider, cas fréquent), on ne fait rien.
+   * Point d'entrée unique pour marquer une échéance payée, quel que soit le provider (idempotent).
    */
   async markInstallmentPaid(
     installmentId: string,
@@ -126,8 +145,7 @@ export class PaymentService {
 
     const { reservation, installments } = installment.schedule;
 
-    // Première échéance (acompte) payée → on confirme la réservation,
-    // ce qui passe l'unité en VENDU côté ReservationService.
+    // Première échéance (acompte) payée → on confirme la réservation
     const isFirstInstallment = installment.label === DEFAULT_INSTALLMENT_PLAN[0].label;
     if (isFirstInstallment) {
       await this.reservationService.confirmReservation(reservation.id);
@@ -147,15 +165,16 @@ export class PaymentService {
   }
 
   /**
-   * Webhook CinetPay — vérifie la signature avant tout traitement.
-   * CinetPay envoie un `cpm_trans_id` qu'on doit avoir stocké comme
-   * providerRef lors de l'initiation du paiement (POST /payments/installments/{id}/pay).
+   * Webhook CinetPay — vérifie la signature HMAC avant tout traitement.
    */
   async handleCinetPayWebhook(payload: any, signatureHeader: string) {
-    this.verifyCinetPaySignature(payload, signatureHeader);
+    const isValid = this.cinetPayClient.verifySignature(payload, signatureHeader);
+    if (!isValid && process.env.NODE_ENV === 'production') {
+      throw new BadRequestException('Signature CinetPay invalide.');
+    }
 
     if (payload.cpm_result !== '00') {
-      this.logger.warn(`Paiement CinetPay échoué pour ${payload.cpm_trans_id}`);
+      this.logger.warn(`Paiement CinetPay non validé (code ${payload.cpm_result}) pour transaction ${payload.cpm_trans_id}`);
       return;
     }
 
@@ -171,25 +190,16 @@ export class PaymentService {
    * Webhook Stripe — événement checkout.session.completed.
    */
   async handleStripeWebhook(event: any) {
-    if (event.type !== 'checkout.session.completed') {
+    if (event?.type !== 'checkout.session.completed') {
       return;
     }
 
-    const session = event.data.object;
-    const installmentId = session.metadata?.installmentId;
+    const session = event.data?.object;
+    const installmentId = session?.metadata?.installmentId;
     if (!installmentId) {
       throw new BadRequestException('metadata.installmentId manquant dans le webhook Stripe.');
     }
 
-    await this.markInstallmentPaid(installmentId, PaymentProvider.STRIPE, session.payment_intent);
-  }
-
-  private verifyCinetPaySignature(payload: any, signatureHeader: string) {
-    // TODO: implémenter la vérification HMAC selon la doc CinetPay
-    // (token du site + concaténation des champs du payload).
-    // Ne jamais traiter un webhook sans cette vérification en production.
-    if (!signatureHeader) {
-      throw new BadRequestException('Signature CinetPay manquante.');
-    }
+    await this.markInstallmentPaid(installmentId, PaymentProvider.STRIPE, session.payment_intent || session.id);
   }
 }

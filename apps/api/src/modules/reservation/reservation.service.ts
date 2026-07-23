@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { PrismaService } from '../prisma/prisma.service';
-import { RedisLockService } from '../redis/redis-lock.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { RedisLockService } from '../../common/redis/redis-lock.service';
 import { LaunchService } from '../launch/launch.service';
 import { UnitStatus, ReservationStatus } from '@prisma/client';
 

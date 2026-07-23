@@ -1,24 +1,51 @@
 {
-  "name": "Terrasses de Baguida — Résidence Catalog",
+  "id": "/?source=pwa",
+  "name": "Les Terrasses de Baguda — Residences Catalog",
   "short_name": "Terrasses Baguida",
-  "description": "Plateforme de réservation et suivi de logement en résidence fermée à Lomé, Togo.",
-  "start_url": "/",
+  "description": "Plateforme de reservation et suivi de logements en residence fermee a Lome, Togo. Reservez en ligne avec garantie de pre-financement.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "background_color": "#152238",
   "theme_color": "#152238",
   "orientation": "portrait-primary",
+  "categories": ["business", "finance", "lifestyle", "shopping"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Voir le catalogue",
+      "short_name": "Catalogue",
+      "description": "Studios, T2, T3, T5 et locaux commerciaux",
+      "url": "/?source=shortcut#catalogue"
+    },
+    {
+      "name": "Suivi de mon logement",
+      "short_name": "Suivi",
+      "description": "Echéancier et avancement chantier",
+      "url": "/suivi?source=shortcut"
+    },
+    {
+      "name": "Reservation 48h",
+      "short_name": "Reserver",
+      "description": "Bloquer une unite pendant 48h",
+      "url": "/?source=shortcut#reserver"
     }
   ]
 }

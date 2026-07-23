@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Icone maskable : safe zone = 80% centre (O-blanc)
+       Tout le contenu doit tenir dans [51,461]x[51,461].
+       Le fond remplit toute la vue (couleur unie). -->
+  <rect width="512" height="512" fill="#152238"/>
+
+  <!-- Cadre terrasse - safe zone -->
+  <polygon points="96,200 416,200 416,360 96,360" fill="none" stroke="#D3714D" stroke-width="12"/>
+  <polygon points="120,220 392,220 392,340 120,340" fill="#1d3050" stroke="#D8C9A3" stroke-width="3"/>
+
+  <!-- Monogramme TB - centre strict -->
+  <text x="256" y="290" font-family="Fraunces, Georgia, serif" font-size="100" font-weight="700"
+        fill="#D3714D" text-anchor="middle" dominant-baseline="middle">TB</text>
+</svg>

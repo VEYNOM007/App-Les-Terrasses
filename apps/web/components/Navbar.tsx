@@ -30,7 +30,7 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-6 text-sm font-mono text-paper/80">
           <a href="#mecanisme" className="hover:text-sand transition-colors">Le mécanisme</a>
           <a href="#masterplan" className="hover:text-sand transition-colors">Plan de masse</a>
-          <a href="#typologies" className="hover:text-sand transition-colors">Catalogue</a>
+          <a href="#catalogue" className="hover:text-sand transition-colors">Catalogue</a>
           <a href="#reserver" className="hover:text-sand transition-colors">Pré-inscription</a>
         </div>
 

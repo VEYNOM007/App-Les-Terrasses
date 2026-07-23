@@ -55,3 +55,83 @@ export async function fetchBlockUnits(blockId: string) {
 
   return res.json();
 }
+
+// ────────────────────────────────────────────────────────────
+// Réservation
+// ────────────────────────────────────────────────────────────
+
+export interface ReservationRequest {
+  unitId: string;
+}
+
+export interface ReservationResponse {
+  id: string;
+  unitId: string;
+  userId: string;
+  status: 'EN_ATTENTE' | 'CONFIRMEE' | 'ANNULEE' | 'LIVREE';
+  lockExpiresAt: string;
+  createdAt: string;
+}
+
+/**
+ * Crée une réservation (verrou 48h) sur une unité.
+ * Nécessite un token JWT (authentification utilisateur).
+ */
+export async function createReservation(
+  unitId: string,
+  token: string,
+): Promise<ReservationResponse> {
+  const res = await fetch(`${API_BASE_URL}/reservations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ unitId }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: `Erreur ${res.status}` }));
+    throw new Error(error.message || `Erreur réservation: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// ────────────────────────────────────────────────────────────
+// Paiement (initiation)
+// ────────────────────────────────────────────────────────────
+
+export interface PaymentInitResponse {
+  paymentUrl: string;
+  transactionId: string;
+  sessionId?: string;
+  provider: 'CINETPAY' | 'STRIPE';
+}
+
+/**
+ * Initie le paiement d'un acompte (première échéance).
+ * Retourne une URL de redirection vers CinetPay ou Stripe Checkout.
+ */
+export async function initiatePayment(
+  installmentId: string,
+  provider: 'CINETPAY' | 'STRIPE',
+  token: string,
+): Promise<PaymentInitResponse> {
+  const res = await fetch(`${API_BASE_URL}/payments/installments/${installmentId}/pay`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ provider }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: `Erreur ${res.status}` }));
+    throw new Error(error.message || `Erreur paiement: ${res.status}`);
+  }
+
+  return res.json();
+}
+

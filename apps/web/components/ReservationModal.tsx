@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, Clock, CreditCard, Smartphone, CheckCircle, Car } from 'lucide-react';
+import { X, ShieldCheck, Clock, CreditCard, Smartphone, CheckCircle, Car, Loader2, AlertTriangle } from 'lucide-react';
 import { UnitTypology } from './CatalogGrid';
+import { createReservation, ReservationResponse } from '../lib/api';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -18,8 +19,10 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [paymentProvider, setPaymentProvider] = useState<'CINETPAY' | 'STRIPE'>('CINETPAY');
-  const [step, setStep] = useState<'FORM' | 'CONFIRMED'>('FORM');
+  const [step, setStep] = useState<'FORM' | 'LOADING' | 'CONFIRMED' | 'ERROR'>('FORM');
   const [timerSeconds, setTimerSeconds] = useState(172800); // 48h in seconds
+  const [reservation, setReservation] = useState<ReservationResponse | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     if (selectedTypology) {
@@ -27,12 +30,36 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
     }
   }, [selectedTypology]);
 
+  // Timer basé sur lockExpiresAt réel ou fallback 48h
   useEffect(() => {
     if (!isOpen) return;
+
+    if (reservation?.lockExpiresAt) {
+      const updateTimer = () => {
+        const remaining = Math.max(0, Math.floor(
+          (new Date(reservation.lockExpiresAt).getTime() - Date.now()) / 1000
+        ));
+        setTimerSeconds(remaining);
+      };
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
+      return () => clearInterval(interval);
+    }
+
     const interval = setInterval(() => {
       setTimerSeconds((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
+  }, [isOpen, reservation]);
+
+  // Reset à la fermeture
+  useEffect(() => {
+    if (!isOpen) {
+      setStep('FORM');
+      setReservation(null);
+      setErrorMessage('');
+      setTimerSeconds(172800);
+    }
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -44,9 +71,38 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStep('CONFIRMED');
+    setStep('LOADING');
+    setErrorMessage('');
+
+    try {
+      // Récupérer le token JWT depuis le localStorage (défini lors du login)
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+
+      if (token) {
+        // Mode connecté : appel API réel
+        const unitId = `unit-${selectedBlock.replace(/\s/g, '-').toLowerCase()}-${selectedType.toLowerCase()}`;
+        const result = await createReservation(unitId, token);
+        setReservation(result);
+      } else {
+        // Mode démo : simulation de réservation (pas de backend)
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        setReservation({
+          id: `demo-res-${Date.now()}`,
+          unitId: 'demo-unit',
+          userId: 'demo-user',
+          status: 'EN_ATTENTE',
+          lockExpiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      setStep('CONFIRMED');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Une erreur est survenue lors de la réservation.');
+      setStep('ERROR');
+    }
   };
 
   return (
@@ -202,6 +258,37 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
               </button>
             </form>
           </div>
+        ) : step === 'LOADING' ? (
+          <div className="text-center py-12 space-y-4">
+            <div className="w-12 h-12 bg-laterite/20 text-laterite-light rounded-full flex items-center justify-center mx-auto border border-laterite/40 animate-pulse">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <h3 className="font-serif text-xl font-semibold text-paper">
+              Verrouillage en cours…
+            </h3>
+            <p className="text-xs text-paper/60 font-mono">
+              Acquisition du verrou Redis sur l'unité sélectionnée.<br />
+              Transaction atomique en cours de traitement.
+            </p>
+          </div>
+        ) : step === 'ERROR' ? (
+          <div className="text-center py-8 space-y-4">
+            <div className="w-12 h-12 bg-laterite/20 text-laterite-light rounded-full flex items-center justify-center mx-auto border border-laterite/40">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="font-serif text-xl font-semibold text-paper">
+              Réservation impossible
+            </h3>
+            <p className="text-sm text-paper/80 font-mono">
+              {errorMessage}
+            </p>
+            <button
+              onClick={() => setStep('FORM')}
+              className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-6 py-2.5 rounded transition-all"
+            >
+              ← Réessayer
+            </button>
+          </div>
         ) : (
           <div className="text-center py-6 space-y-4">
             <div className="w-12 h-12 bg-lagoon/20 text-lagoon-light rounded-full flex items-center justify-center mx-auto border border-lagoon/40">
@@ -217,6 +304,12 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
             </p>
 
             <div className="bg-paper/5 border border-paper/20 p-4 rounded text-left font-mono text-xs space-y-2">
+              {reservation?.id && (
+                <div className="flex justify-between">
+                  <span className="text-paper/60">Réf. réservation :</span>
+                  <span className="text-lagoon-light font-bold">{reservation.id.substring(0, 12)}…</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-paper/60">Réservant :</span>
                 <span className="text-paper font-bold">{fullName}</span>
@@ -231,7 +324,15 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
               </div>
               <div className="flex justify-between">
                 <span className="text-paper/60">Expiration du verrou :</span>
-                <span className="text-laterite-light font-bold">Dans 48 heures</span>
+                <span className="text-laterite-light font-bold">
+                  {reservation?.lockExpiresAt
+                    ? new Date(reservation.lockExpiresAt).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
+                    : 'Dans 48 heures'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-paper/60">Statut :</span>
+                <span className="text-lagoon-light font-bold">{reservation?.status || 'EN_ATTENTE'}</span>
               </div>
             </div>
 

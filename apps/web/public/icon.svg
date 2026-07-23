@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Icone reguliere : padding minimal -->
+  <rect width="512" height="512" fill="#152238"/>
+
+  <!-- Cadre terrasse stylise -->
+  <polygon points="64,160 448,160 448,384 64,384" fill="none" stroke="#D3714D" stroke-width="14"/>
+  <polygon points="96,192 416,192 416,352 96,352" fill="#1d3050" stroke="#D8C9A3" stroke-width="4"/>
+
+  <!-- Grille des lots -->
+  <g stroke="#D8C9A3" stroke-width="2" opacity="0.55">
+    <line x1="170" y1="192" x2="170" y2="352"/>
+    <line x1="245" y1="192" x2="245" y2="352"/>
+    <line x1="320" y1="192" x2="320" y2="352"/>
+    <line x1="96" y1="240" x2="416" y2="240"/>
+    <line x1="96" y1="304" x2="416" y2="304"/>
+  </g>
+
+  <!-- Monogramme TB -->
+  <text x="256" y="290" font-family="Fraunces, Georgia, serif" font-size="120" font-weight="700"
+        fill="#D3714D" text-anchor="middle" dominant-baseline="middle">TB</text>
+
+  <!-- Accent lagon -->
+  <circle cx="256" cy="430" r="14" fill="#4FA893"/>
+</svg>

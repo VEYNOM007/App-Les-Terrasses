@@ -55,8 +55,8 @@ export class PaymentController {
     @Req() req: RawBodyRequest<Request>,
     @Headers('stripe-signature') signature: string,
   ) {
-    // event déjà vérifié/construit en amont dans le service à partir de req.rawBody + signature
-    await this.paymentService.handleStripeWebhook(req.body);
+    const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
+    await this.paymentService.handleStripeWebhook(rawBody, signature);
     return { received: true };
   }
 }

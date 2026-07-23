@@ -4,6 +4,7 @@ import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
 import { InstallmentStatus, PaymentProvider } from '@prisma/client';
 import { CinetPayClient } from './cinetpay.client';
+import { StripeClient } from './stripe.client';
 
 /**
  * Découpage d'échéancier par défaut pour un logement entrée de gamme.
@@ -26,6 +27,7 @@ export class PaymentService {
     private readonly reservationService: ReservationService,
     private readonly notifications: NotificationService,
     private readonly cinetPayClient: CinetPayClient,
+    private readonly stripeClient: StripeClient,
   ) {}
 
   /**
@@ -104,6 +106,33 @@ export class PaymentService {
         paymentUrl: session.paymentUrl,
         transactionId,
         provider: PaymentProvider.CINETPAY,
+      };
+    }
+
+    if (provider === PaymentProvider.STRIPE) {
+      const user = installment.schedule.reservation.user;
+      const session = await this.stripeClient.createCheckoutSession({
+        transactionId,
+        amount: Number(installment.amount),
+        currency: installment.schedule.currency,
+        description: `Paiement ${installment.label} - Résidence Baguida`,
+        installmentId: installment.id,
+        customerEmail: user.email,
+      });
+
+      await this.prisma.paymentInstallment.update({
+        where: { id: installmentId },
+        data: {
+          provider: PaymentProvider.STRIPE,
+          providerRef: transactionId,
+        },
+      });
+
+      return {
+        paymentUrl: session.checkoutUrl,
+        sessionId: session.sessionId,
+        transactionId,
+        provider: PaymentProvider.STRIPE,
       };
     }
 
@@ -187,14 +216,23 @@ export class PaymentService {
   }
 
   /**
-   * Webhook Stripe — événement checkout.session.completed.
+   * Webhook Stripe — vérifie la signature via constructEvent() puis traite checkout.session.completed.
    */
-  async handleStripeWebhook(event: any) {
-    if (event?.type !== 'checkout.session.completed') {
+  async handleStripeWebhook(rawBody: Buffer | string, signatureHeader: string) {
+    const event = this.stripeClient.constructEvent(rawBody, signatureHeader);
+
+    if (!event && process.env.NODE_ENV === 'production') {
+      throw new BadRequestException('Signature Stripe invalide.');
+    }
+
+    // En développement, accepter le body JSON brut si la signature n'est pas vérifiable
+    const payload = event || (typeof rawBody === 'string' ? JSON.parse(rawBody) : JSON.parse(rawBody.toString()));
+
+    if (payload?.type !== 'checkout.session.completed') {
       return;
     }
 
-    const session = event.data?.object;
+    const session = payload.data?.object;
     const installmentId = session?.metadata?.installmentId;
     if (!installmentId) {
       throw new BadRequestException('metadata.installmentId manquant dans le webhook Stripe.');

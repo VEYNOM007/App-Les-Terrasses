@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, UnitStatus, UnitType, LaunchStatus, ConstructionPhase, Frontage } from '@prisma/client';
+import { PrismaClient, UserRole, UnitStatus, UnitType, LaunchStatus, ConstructionPhase, Frontage, ReservationStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -151,3 +151,87 @@ export async function createProjectWithBlockAndUnits(
 
   return { project, block, units };
 }
+
+// ────────────────────────────────────────────────────────────
+// Fixtures Paiement
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Crée une réservation CONFIRMEE sur une unité + un PaymentSchedule
+ * avec 5 échéances (acompte 10% déjà PAYE + 4 EN_ATTENTE).
+ *
+ * Reflète l'état post-acompte, prêt pour les tests sur les échéances
+ * suivantes (initiatePayment, markInstallmentPaid, webhooks).
+ *
+ * Retourne les IDs pour que le test puisse cibler une échéance précise.
+ */
+export async function createReservationWithSchedule(opts: {
+  userId: string;
+  unitId: string;
+  amount?: number; // prix total; défaut 24 000 000 XOF
+}) {
+  const prisma = getTestPrisma();
+  const totalAmount = opts.amount ?? 24_000_000;
+
+  const reservation = await prisma.reservation.create({
+    data: {
+      unitId: opts.unitId,
+      userId: opts.userId,
+      status: ReservationStatus.CONFIRMEE,
+      lockExpiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+    },
+  });
+
+  // Unit doit refléter une vente actée
+  await prisma.unit.update({
+    where: { id: opts.unitId },
+    data: { status: UnitStatus.VENDU },
+  });
+
+  const schedule = await prisma.paymentSchedule.create({
+    data: {
+      reservationId: reservation.id,
+      totalAmount: totalAmount,
+      currency: 'XOF',
+      installments: {
+        create: [
+          {
+            label: 'Acompte réservation',
+            amount: totalAmount * 0.1,
+            dueDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            status: 'PAYE',
+            paidAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
+          },
+          {
+            label: 'Tranche fondations',
+            amount: totalAmount * 0.2,
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            status: 'EN_ATTENTE',
+          },
+          {
+            label: 'Tranche gros œuvre',
+            amount: totalAmount * 0.3,
+            dueDate: new Date(Date.now() + 120 * 24 * 60 * 60 * 1000),
+            status: 'EN_ATTENTE',
+          },
+          {
+            label: 'Tranche finitions',
+            amount: totalAmount * 0.25,
+            dueDate: new Date(Date.now() + 240 * 24 * 60 * 60 * 1000),
+            status: 'EN_ATTENTE',
+          },
+          {
+            label: 'Solde livraison',
+            amount: totalAmount * 0.15,
+            dueDate: new Date(Date.now() + 350 * 24 * 60 * 60 * 1000),
+            status: 'EN_ATTENTE',
+          },
+        ],
+      },
+    },
+    include: { installments: true },
+  });
+
+  return { reservation, schedule };
+}
+

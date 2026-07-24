@@ -173,12 +173,44 @@ model User {
   notificationPrefs   NotificationPreference?
   constructionUpdatesPublished ConstructionUpdate[] @relation("PublishedBy")
   artisanProfile     Artisan?
+  refreshTokens      RefreshToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([role])
   @@map("users")
+}
+
+// ---------------------------------------------------
+// REFRESH TOKENS (rotation + révocation)
+// ---------------------------------------------------
+// Stocké uniquement sous forme hachée (SHA-256). Un refresh token en
+// clair n'est jamais persisté. La paire (tokenHash, userId) permet de
+// révoquer un token ou toute une chaîne en cas de réutilisation
+// suspectée (compromission).
+// ---------------------------------------------------
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?  // null = actif ; non-null = révoqué (manuel, expiration, ou rotation)
+
+  // Reference au token que celui-ci remplace (rotation). Pas une
+  // relation Prisma formelle pour eviter la complexite de self-relation
+  // — la traversée de chaine se fait en application code via une
+  // recherche par tokenHash sur cette meme colonne.
+  previousTokenHash String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([previousTokenHash])
+  @@map("refresh_tokens")
 }
 
 // ---------------------------------------------------

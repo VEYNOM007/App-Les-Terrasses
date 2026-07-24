@@ -23,6 +23,17 @@ export class AuthController {
     return this.authService.refresh(body.refreshToken);
   }
 
+  @Post('logout')
+  logout(@Body() body: { refreshToken: string }) {
+    return this.authService.logout(body.refreshToken);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout-all')
+  logoutAll(@CurrentUser() user: AuthUser) {
+    return this.authService.logoutAll(user.id);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@CurrentUser() user: AuthUser) {

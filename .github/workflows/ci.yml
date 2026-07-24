@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel previous runs on the same PR / branch when a new commit lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests + typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          # Le service GitHub ne crée qu'une seule DB initiale. On
+          # utilise residence_catalog_test pour tous les tests car
+          # DATABASE_URL_TEST est ce que jest.setup.ts branche.
+          POSTGRES_DB: residence_catalog_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d residence_catalog_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Meme valeur dans les deux : en CI on n'utilise que la DB de test
+      # (jest.setup.ts surcharge DATABASE_URL = DATABASE_URL_TEST).
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/residence_catalog_test
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/residence_catalog_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-jwt-secret
+      JWT_REFRESH_SECRET: ci-jwt-refresh-secret-different
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        # Pas de "version" ici : pnpm/action-setup lit automatiquement
+        # packageManager (pnpm@9.0.0) depuis package.json.
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # node-version: 20 -> warning deprecation, on monte sur 22 LTS.
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @residence-catalog/database exec prisma generate
+
+      - name: Apply migrations to test DB
+        run: pnpm --filter @residence-catalog/database exec prisma migrate deploy
+
+      - name: TypeScript check (api)
+        run: pnpm --filter @residence-catalog/api exec tsc --noEmit
+
+      - name: TypeScript check (web)
+        run: pnpm --filter web exec tsc --noEmit
+
+      - name: Run Jest suite (serial — DB partagée)
+        run: pnpm --filter @residence-catalog/api exec jest --forceExit --runInBand

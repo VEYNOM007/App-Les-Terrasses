@@ -2,29 +2,38 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 /**
- * Tests unitaires — AuthService
+ * Tests unitaires — AuthService (refresh tokens durcis)
  *
- * Scenarios critiques couverts (Regle R6 CLAUDE.md) :
- *  1. register — email deja utilise -> ConflictException
- *  2. register — phone deja utilise -> ConflictException
- *  3. register — succes : bcrypt.hash appele avec salt 10, user cree, tokens emis
- *  4. register — country par defaut 'TG' si non fourni
- *  5. login — user introuvable -> UnauthorizedException
- *  6. login — password invalide -> UnauthorizedException
- *  7. login — succes : bcrypt.compare appele, tokens emis
- *  8. refresh — token invalide -> UnauthorizedException (verify throw)
- *  9. refresh — token valide : nouveaux tokens emis avec sub + role
- * 10. issueTokens — access token signe avec expiresIn '15m' et secret JWT_SECRET
- * 11. issueTokens — refresh token signe avec expiresIn '30d' et secret JWT_REFRESH_SECRET
+ * Couvre les scenarios critiques (R6 CLAUDE.md) :
+ *   Auth de base :
+ *    1. register email deja utilise -> ConflictException
+ *    2. register phone deja utilise -> ConflictException
+ *    3. register succes : bcrypt.hash(salt 10), user cree, refresh token persiste en DB
+ *    4. register : country par defaut 'TG'
+ *    5. login user introuvable -> UnauthorizedException
+ *    6. login password invalide -> UnauthorizedException
+ *    7. login succes : bcrypt.compare appele, refresh token persiste
+ *
+ *   Rotation + révocation (cœur du hardening) :
+ *    8. refresh token invalide (JWT) -> UnauthorizedException
+ *    9. refresh token valide mais inconnu en DB -> UnauthorizedException
+ *   10. refresh token expiré en DB -> UnauthorizedException
+ *   11. refresh token déjà révoqué -> UnauthorizedException + revokeAllUserTokens appelé
+ *   12. refresh token valide -> ancien révoqué + nouvelle paire émise + chaînage previousTokenHash
+ *
+ *   Logout :
+ *   13. logout révoque uniquement le token présenté (updateMany revokedAt)
+ *   14. logoutAll révoque tous les tokens actifs du user
+ *
+ *   Token storage :
+ *   15. le tokenHash persisté est SHA-256 du token en clair (jamais le clair)
+ *   16. access token signé expiresIn 15m, refresh token expiresIn 30d
  */
-
-// ────────────────────────────────────────────────────────────
-// Mocks
-// ────────────────────────────────────────────────────────────
 
 const USER_FIXTURE = {
   id: 'user-001',
@@ -42,6 +51,12 @@ const createMockPrisma = () => ({
     findUnique: jest.fn(),
     create: jest.fn(),
   },
+  refreshToken: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
+  },
 });
 
 const createMockJwtService = () => ({
@@ -49,9 +64,8 @@ const createMockJwtService = () => ({
   verify: jest.fn(),
 });
 
-// ────────────────────────────────────────────────────────────
-// Suite de tests
-// ────────────────────────────────────────────────────────────
+const REFRESH_TOKEN_VALUE = 'real-refresh-jwt-value';
+const REFRESH_TOKEN_HASH = crypto.createHash('sha256').update(REFRESH_TOKEN_VALUE).digest('hex');
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -103,6 +117,7 @@ describe('AuthService', () => {
       ).rejects.toThrow(ConflictException);
 
       expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
     it('devrait lever ConflictException si phone deja utilise', async () => {
@@ -118,10 +133,10 @@ describe('AuthService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('devrait hasher le mot de passe avec bcrypt (salt 10), creer le user et emettre les tokens', async () => {
+    it('devrait hasher le password (bcrypt salt 10), creer user et persister un refresh token', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
       prisma.user.create.mockResolvedValue(USER_FIXTURE);
-      jwt.sign.mockReturnValueOnce('access-mock').mockReturnValueOnce('refresh-mock');
+      jwt.sign.mockReturnValueOnce('access-mock').mockReturnValueOnce(REFRESH_TOKEN_VALUE);
 
       const result = await service.register({
         email: 'new@test.tg',
@@ -130,10 +145,7 @@ describe('AuthService', () => {
         fullName: 'New User',
       });
 
-      // bcrypt.hash appele avec salt rounds = 10
       expect(bcrypt.hash).toHaveBeenCalledWith('Secret123!', 10);
-
-      // user.create appele avec le hash et country par defaut 'TG'
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: {
           email: 'new@test.tg',
@@ -143,12 +155,15 @@ describe('AuthService', () => {
           country: 'TG',
         },
       });
-
-      // tokens emis
-      expect(result).toEqual({
-        accessToken: 'access-mock',
-        refreshToken: 'refresh-mock',
+      // Refresh token persiste en DB avec tokenHash SHA-256 (pas le clair)
+      expect(prisma.refreshToken.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'user-001',
+          tokenHash: REFRESH_TOKEN_HASH,
+          previousTokenHash: null,
+        }),
       });
+      expect(result).toEqual({ accessToken: 'access-mock', refreshToken: REFRESH_TOKEN_VALUE });
     });
 
     it('devrait utiliser le country fourni plutot que TG par defaut', async () => {
@@ -198,74 +213,158 @@ describe('AuthService', () => {
       expect(bcrypt.compare).toHaveBeenCalledWith('wrong-password', USER_FIXTURE.passwordHash);
     });
 
-    it('devrait emettre les tokens si credentials valides', async () => {
+    it('devrait emettre et persister les tokens si credentials valides', async () => {
       prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
-      jwt.sign.mockReturnValueOnce('access-mock').mockReturnValueOnce('refresh-mock');
+      jwt.sign.mockReturnValueOnce('access-mock').mockReturnValueOnce(REFRESH_TOKEN_VALUE);
 
       const result = await service.login('kofi@test.tg', 'Secret123!');
 
       expect(bcrypt.compare).toHaveBeenCalledWith('Secret123!', USER_FIXTURE.passwordHash);
-      expect(result).toEqual({
-        accessToken: 'access-mock',
-        refreshToken: 'refresh-mock',
+      expect(prisma.refreshToken.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'user-001',
+          tokenHash: REFRESH_TOKEN_HASH,
+        }),
       });
+      expect(result).toEqual({ accessToken: 'access-mock', refreshToken: REFRESH_TOKEN_VALUE });
     });
   });
 
   // ──────────────────────────────────────────────────
-  // refresh
+  // refresh (rotation + révocation)
   // ──────────────────────────────────────────────────
 
   describe('refresh', () => {
-    it('devrait lever une erreur si le refresh token est invalide', async () => {
+    const validPayload = { sub: 'user-001', role: 'ACHETEUR' };
+    const activeStoredToken = {
+      id: 'rt-001',
+      userId: 'user-001',
+      tokenHash: REFRESH_TOKEN_HASH,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // demain
+      revokedAt: null,
+      previousTokenHash: null,
+    };
+
+    it('devrait lever UnauthorizedException si le refresh token JWT est invalide', async () => {
       jwt.verify.mockImplementation(() => {
         throw new Error('jwt malformed');
       });
 
-      await expect(service.refresh('invalid-token')).rejects.toThrow('jwt malformed');
+      await expect(service.refresh('invalid')).rejects.toThrow(UnauthorizedException);
+      expect(prisma.refreshToken.findUnique).not.toHaveBeenCalled();
     });
 
-    it('devrait emettre de nouveaux tokens si le refresh token est valide', async () => {
-      jwt.verify.mockReturnValue({ sub: 'user-001', role: 'ACHETEUR' });
+    it('devrait lever UnauthorizedException si le token est inconnu en DB', async () => {
+      jwt.verify.mockReturnValue(validPayload);
+      prisma.refreshToken.findUnique.mockResolvedValue(null);
+
+      await expect(service.refresh(REFRESH_TOKEN_VALUE)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('devrait lever UnauthorizedException si le token est expire', async () => {
+      jwt.verify.mockReturnValue(validPayload);
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...activeStoredToken,
+        expiresAt: new Date(Date.now() - 1000), // deja passe
+      });
+
+      await expect(service.refresh(REFRESH_TOKEN_VALUE)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('devrait lever UnauthorizedException ET revoke toute la chaine si token deja revoque (reuse detection)', async () => {
+      jwt.verify.mockReturnValue(validPayload);
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...activeStoredToken,
+        revokedAt: new Date(), // deja revoque
+      });
+
+      await expect(service.refresh(REFRESH_TOKEN_VALUE)).rejects.toThrow(UnauthorizedException);
+
+      // revokeAllUserTokens appelé via updateMany
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-001', revokedAt: null },
+        data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+      });
+    });
+
+    it('devrait rotater un token valide : revoquer ancien, creer nouveau chaine, retourner nouvelle paire', async () => {
+      jwt.verify.mockReturnValue(validPayload);
+      prisma.refreshToken.findUnique.mockResolvedValue(activeStoredToken);
       jwt.sign.mockReturnValueOnce('access-new').mockReturnValueOnce('refresh-new');
 
-      const result = await service.refresh('valid-refresh-token');
+      const newRefreshHash = crypto.createHash('sha256').update('refresh-new').digest('hex');
 
-      expect(jwt.verify).toHaveBeenCalledWith('valid-refresh-token', {
-        secret: 'test-jwt-refresh-secret-different',
+      const result = await service.refresh(REFRESH_TOKEN_VALUE);
+
+      // 1. ancien token révoqué
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: 'rt-001' },
+        data: expect.objectContaining({ revokedAt: expect.any(Date) }),
       });
-      expect(result).toEqual({
-        accessToken: 'access-new',
-        refreshToken: 'refresh-new',
+
+      // 2. nouveau token créé, chaîné au précédent via previousTokenHash
+      expect(prisma.refreshToken.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'user-001',
+          tokenHash: newRefreshHash,
+          previousTokenHash: REFRESH_TOKEN_HASH,
+        }),
+      });
+
+      expect(result).toEqual({ accessToken: 'access-new', refreshToken: 'refresh-new' });
+    });
+  });
+
+  // ──────────────────────────────────────────────────
+  // logout
+  // ──────────────────────────────────────────────────
+
+  describe('logout', () => {
+    it('devrait revoquer uniquement le token presente (updateMany where tokenHash)', async () => {
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.logout(REFRESH_TOKEN_VALUE);
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { tokenHash: REFRESH_TOKEN_HASH, revokedAt: null },
+        data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+      });
+    });
+  });
+
+  describe('logoutAll', () => {
+    it('devrait revoquer tous les tokens actifs du user', async () => {
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 3 });
+
+      await service.logoutAll('user-001');
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-001', revokedAt: null },
+        data: expect.objectContaining({ revokedAt: expect.any(Date) }),
       });
     });
   });
 
   // ──────────────────────────────────────────────────
-  // issueTokens (verifie via register/login/refresh)
+  // issueTokens (options de signature)
   // ──────────────────────────────────────────────────
 
   describe('issueTokens (options de signature)', () => {
-    it('devrait signer l\'access token avec expiresIn 15m et le refresh avec 30d + JWT_REFRESH_SECRET', async () => {
+    it('devrait signer access 15m et refresh 30d + JWT_REFRESH_SECRET', async () => {
       prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
       jwt.sign.mockReturnValue('tok');
 
       await service.login('kofi@test.tg', 'Secret123!');
 
-      // 1er appel sign() = access token
       expect(jwt.sign).toHaveBeenNthCalledWith(
         1,
         { sub: 'user-001', role: 'ACHETEUR' },
         { expiresIn: '15m' },
       );
-      // 2e appel sign() = refresh token
       expect(jwt.sign).toHaveBeenNthCalledWith(
         2,
         { sub: 'user-001', role: 'ACHETEUR' },
-        {
-          secret: process.env.JWT_REFRESH_SECRET,
-          expiresIn: '30d',
-        },
+        { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '30d' },
       );
     });
   });

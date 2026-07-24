@@ -3,6 +3,13 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { ConstructionPhase, LaunchStatus } from '@prisma/client';
 
+export interface PublishConstructionUpdateDto {
+  phase: ConstructionPhase;
+  progressPercent: number;
+  description?: string;
+  photos: string[];
+}
+
 @Injectable()
 export class ConstructionService {
   constructor(
@@ -13,7 +20,7 @@ export class ConstructionService {
   async publishUpdate(
     blockId: string,
     publishedById: string,
-    data: { phase: ConstructionPhase; progressPercent: number; description?: string; photos: string[] },
+    data: PublishConstructionUpdateDto,
   ) {
     const block = await this.prisma.block.findUniqueOrThrow({ where: { id: blockId } });
     if (block.launchStatus !== LaunchStatus.EN_CONSTRUCTION) {

@@ -18,6 +18,31 @@ const DEFAULT_INSTALLMENT_PLAN = [
   { label: 'Solde livraison', percent: 0.15, daysFromNow: 365 },
 ];
 
+/**
+ * Contract minimal d'un webhook CinetPay — seuls les champs lus par le
+ * service sont déclarés. Les champs supplémentaires envoyés par CinetPay
+ * sont ignores sans casser le typage.
+ */
+export interface CinetPayWebhookPayload {
+  cpm_trans_id: string;
+  cpm_result: string;
+  metadata?: { installmentId?: string };
+}
+
+/**
+ * Contract minimal d'un webhook Stripe checkout.session.completed.
+ */
+export interface StripeWebhookEvent {
+  type: string;
+  data: {
+    object: {
+      payment_intent?: string;
+      id: string;
+      metadata?: { installmentId?: string };
+    };
+  };
+}
+
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
@@ -196,7 +221,7 @@ export class PaymentService {
   /**
    * Webhook CinetPay — vérifie la signature HMAC avant tout traitement.
    */
-  async handleCinetPayWebhook(payload: any, signatureHeader: string) {
+  async handleCinetPayWebhook(payload: CinetPayWebhookPayload, signatureHeader: string) {
     const isValid = this.cinetPayClient.verifySignature(payload, signatureHeader);
     if (!isValid && process.env.NODE_ENV === 'production') {
       throw new BadRequestException('Signature CinetPay invalide.');
@@ -226,7 +251,7 @@ export class PaymentService {
     }
 
     // En développement, accepter le body JSON brut si la signature n'est pas vérifiable
-    const payload = event || (typeof rawBody === 'string' ? JSON.parse(rawBody) : JSON.parse(rawBody.toString()));
+    const payload: StripeWebhookEvent = event || (typeof rawBody === 'string' ? JSON.parse(rawBody) : JSON.parse(rawBody.toString()));
 
     if (payload?.type !== 'checkout.session.completed') {
       return;

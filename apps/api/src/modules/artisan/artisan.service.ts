@@ -3,6 +3,12 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { AssignmentStatus, QuoteStatus } from '@prisma/client';
 
+export interface SubmitQuoteDto {
+  amount: number;
+  description: string;
+  documentUrl?: string;
+}
+
 @Injectable()
 export class ArtisanService {
   constructor(
@@ -114,7 +120,7 @@ export class ArtisanService {
   async submitQuote(
     artisanId: string,
     blockId: string,
-    data: { amount: number; description: string; documentUrl?: string },
+    data: SubmitQuoteDto,
   ) {
     const hasAnyAssignment = await this.prisma.artisanAssignment.findFirst({
       where: { artisanId, blockId },

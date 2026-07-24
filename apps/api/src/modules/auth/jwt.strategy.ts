@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuthUser } from './auth-user.interface';
 
 /**
  * Résout le profil complet à chaque requête authentifiée : on ne se
@@ -20,7 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; role: string }) {
+  async validate(payload: { sub: string; role: string }): Promise<AuthUser> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: payload.sub },
       include: { artisanProfile: true },

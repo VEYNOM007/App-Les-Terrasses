@@ -1,7 +1,8 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { NotificationService } from './notification.service';
+import { NotificationService, NotificationPreferencesDto } from './notification.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { AuthUser } from '../auth/auth-user.interface';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
@@ -9,7 +10,7 @@ export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
   @Get()
-  list(@CurrentUser() user: any) {
+  list(@CurrentUser() user: AuthUser) {
     return this.notificationService.listForUser(user.id);
   }
 
@@ -19,7 +20,7 @@ export class NotificationController {
   }
 
   @Post('preferences')
-  setPreferences(@CurrentUser() user: any, @Body() body: any) {
+  setPreferences(@CurrentUser() user: AuthUser, @Body() body: NotificationPreferencesDto) {
     return this.notificationService.setPreferences(user.id, body);
   }
 }

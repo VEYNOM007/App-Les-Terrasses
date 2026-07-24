@@ -3,6 +3,12 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
+export interface NotificationPreferencesDto {
+  push?: boolean;
+  email?: boolean;
+  sms?: boolean;
+}
+
 @Injectable()
 export class NotificationService {
   constructor(
@@ -40,7 +46,7 @@ export class NotificationService {
     });
   }
 
-  async setPreferences(userId: string, prefs: { push?: boolean; email?: boolean; sms?: boolean }) {
+  async setPreferences(userId: string, prefs: NotificationPreferencesDto) {
     return this.prisma.notificationPreference.upsert({
       where: { userId },
       update: prefs,

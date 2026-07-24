@@ -9,9 +9,10 @@ import {
   RawBodyRequest,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { PaymentService } from './payment.service';
+import { PaymentService, CinetPayWebhookPayload } from './payment.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { AuthUser } from '../auth/auth-user.interface';
 import { PaymentProvider } from '@prisma/client';
 
 @Controller('payments')
@@ -27,7 +28,7 @@ export class PaymentController {
   async payInstallment(
     @Param('installmentId') installmentId: string,
     @Body('provider') provider: PaymentProvider,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: AuthUser,
   ) {
     return this.paymentService.initiatePayment(installmentId, provider, user.id);
   }
@@ -38,7 +39,7 @@ export class PaymentController {
    */
   @Post('webhooks/cinetpay')
   async cinetpayWebhook(
-    @Body() payload: any,
+    @Body() payload: CinetPayWebhookPayload,
     @Headers('x-cinetpay-signature') signature: string,
   ) {
     await this.paymentService.handleCinetPayWebhook(payload, signature);

@@ -73,8 +73,10 @@ describe('AuthService', () => {
   let jwt: ReturnType<typeof createMockJwtService>;
 
   beforeAll(() => {
-    process.env.JWT_SECRET = 'test-jwt-secret';
-    process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-different';
+    // jest.setup.ts définit déjà ces valeurs. On les réaffirme ici pour
+    // lisibilité (les tests ci-dessous y font référence directe).
+    process.env.JWT_SECRET = 'e2e-test-jwt-secret';
+    process.env.JWT_REFRESH_SECRET = 'e2e-test-jwt-refresh-secret';
   });
 
   beforeEach(async () => {

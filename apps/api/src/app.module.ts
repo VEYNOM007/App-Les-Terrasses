@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { PrismaService } from './common/prisma/prisma.service';
+import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
 
 import { AuthModule } from './modules/auth/auth.module';
@@ -19,6 +19,7 @@ import { AdminModule } from './modules/admin/admin.module';
 @Module({
   imports: [
     BullModule.forRoot({ connection: { url: process.env.REDIS_URL } }),
+    PrismaModule,
     RedisModule,
     NotificationModule, // global, doit être importé tôt
     AuthModule,
@@ -33,7 +34,5 @@ import { AdminModule } from './modules/admin/admin.module';
     LaunchModule,
     AdminModule,
   ],
-  providers: [PrismaService],
-  exports: [PrismaService],
 })
 export class AppModule {}

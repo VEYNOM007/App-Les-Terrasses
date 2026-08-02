@@ -21,6 +21,17 @@ export class CatalogService {
     });
   }
 
+  /**
+   * Liste des blocs d'un projet publié — sert à la navigation catalogue
+   * sans charger les unités (contrairement à getProject qui les inclut).
+   */
+  async getProjectBlocks(projectId: string) {
+    return this.prisma.block.findMany({
+      where: { project: { id: projectId, status: ProjectStatus.PUBLIE } },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async searchUnits(filters: {
     projectId?: string;
     type?: UnitType;

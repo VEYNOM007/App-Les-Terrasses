@@ -309,4 +309,112 @@ describe('ReservationService', () => {
       expect(result).toEqual(mockData);
     });
   });
+
+  // ──────────────────────────────────────────────────
+  // adminList / adminSetStatus — back-office commercial (R6)
+  // ──────────────────────────────────────────────────
+
+  describe('adminList', () => {
+    it('devrait lister toutes les réservations sans filtre si aucun statut', async () => {
+      prisma.reservation.findMany.mockResolvedValue([]);
+
+      await service.adminList(undefined);
+
+      expect(prisma.reservation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: undefined }),
+      );
+    });
+
+    it('devrait filtrer par statut mappé (en_attente -> EN_ATTENTE)', async () => {
+      prisma.reservation.findMany.mockResolvedValue([]);
+
+      await service.adminList('en_attente');
+
+      expect(prisma.reservation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { status: 'EN_ATTENTE' } }),
+      );
+    });
+  });
+
+  describe('adminSetStatus', () => {
+    const baseReservation = {
+      id: 'res-001',
+      unitId: 'unit-001',
+      userId: 'user-001',
+      status: 'EN_ATTENTE',
+    };
+
+    it('devrait acter la vente manuelle (CONFIRMEE) : unité VENDU + checkFundingThreshold', async () => {
+      prisma.reservation.findUnique.mockResolvedValue(baseReservation);
+      prisma.reservation.update.mockResolvedValue({ ...baseReservation, status: 'CONFIRMEE' });
+      prisma.unit.update.mockResolvedValue({ id: 'unit-001', status: 'VENDU' });
+      prisma.$transaction.mockImplementation((ops: unknown[]) =>
+        Promise.all(ops as Promise<unknown>[]),
+      );
+      prisma.unit.findUniqueOrThrow.mockResolvedValue({ id: 'unit-001', blockId: 'block-A' });
+
+      const result = await service.adminSetStatus('res-001', 'confirmee');
+
+      // Même invariant que confirmReservation() : l'unité passe VENDU
+      expect(prisma.reservation.update).toHaveBeenCalledWith({
+        where: { id: 'res-001' },
+        data: { status: 'CONFIRMEE' },
+      });
+      expect(prisma.unit.update).toHaveBeenCalledWith({
+        where: { id: 'unit-001' },
+        data: { status: 'VENDU' },
+      });
+      // Recalcul du seuil de financement du lot
+      expect(launchService.checkFundingThreshold).toHaveBeenCalledWith('block-A');
+
+      expect(result.status).toBe('CONFIRMEE');
+    });
+
+    it('devrait libérer l\'unité (ANNULEE) sans toucher au seuil de financement', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({
+        ...baseReservation,
+        status: 'CONFIRMEE',
+      });
+      prisma.reservation.update.mockResolvedValue({ ...baseReservation, status: 'ANNULEE' });
+      prisma.unit.update.mockResolvedValue({ id: 'unit-001', status: 'DISPONIBLE' });
+      prisma.$transaction.mockImplementation((ops: unknown[]) =>
+        Promise.all(ops as Promise<unknown>[]),
+      );
+
+      const result = await service.adminSetStatus('res-001', 'annulee');
+
+      expect(prisma.reservation.update).toHaveBeenCalledWith({
+        where: { id: 'res-001' },
+        data: { status: 'ANNULEE' },
+      });
+      expect(prisma.unit.update).toHaveBeenCalledWith({
+        where: { id: 'unit-001' },
+        data: { status: 'DISPONIBLE' },
+      });
+      expect(launchService.checkFundingThreshold).not.toHaveBeenCalled();
+      expect(result.status).toBe('ANNULEE');
+    });
+
+    it('devrait être un no-op si le statut est identique au statut actuel', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({
+        ...baseReservation,
+        status: 'LIVREE',
+      });
+
+      const result = await service.adminSetStatus('res-001', 'livree');
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(result.status).toBe('LIVREE');
+    });
+
+    it('devrait lever NotFoundException si la réservation n\'existe pas', async () => {
+      prisma.reservation.findUnique.mockResolvedValue(null);
+
+      await expect(service.adminSetStatus('res-inexistant', 'confirmee')).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
 });

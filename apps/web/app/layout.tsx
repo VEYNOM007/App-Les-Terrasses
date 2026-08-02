@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import React from 'react';
 import PWARegister from '../components/PWARegister';
+import { AuthProvider } from '../components/AuthProvider';
 
 export const metadata: Metadata = {
   title: 'Les Terrasses de Baguda — Réservez avant le lancement',
@@ -60,7 +61,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
       </head>
       <body className="bg-ink text-paper font-sans antialiased selection:bg-laterite selection:text-paper">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <PWARegister />
       </body>
     </html>

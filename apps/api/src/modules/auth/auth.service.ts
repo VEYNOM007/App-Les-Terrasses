@@ -41,7 +41,7 @@ export class AuthService {
       },
     });
 
-    return this.issueTokens(user.id, user.role);
+    return this.issueTokens(user);
   }
 
   async login(email: string, password: string) {
@@ -49,7 +49,7 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new UnauthorizedException('Identifiants invalides.');
     }
-    return this.issueTokens(user.id, user.role);
+    return this.issueTokens(user);
   }
 
   /**
@@ -64,7 +64,9 @@ export class AuthService {
    *   5. sinon : on révoque ce token + on crée un nouveau refresh
    *      chaîné via previousTokenHash + nouvelle paire de tokens
    */
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string | undefined) {
+    if (!refreshToken) throw new UnauthorizedException('Refresh token manquant.');
+
     let payload: { sub: string; role: string };
     try {
       payload = this.jwt.verify(refreshToken, { secret: process.env.JWT_REFRESH_SECRET });
@@ -97,15 +99,19 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
+    // Recharge le user complet (le payload JWT ne contient que sub/role)
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
+
     // Émission + persistance du nouveau refresh (chaîné à l'ancien)
-    return this.issueTokens(payload.sub, payload.role, stored.tokenHash);
+    return this.issueTokens(user, stored.tokenHash);
   }
 
   /**
    * Déconnexion ciblée : révoque uniquement le refresh token présenté.
    * L'access token reste valide jusqu'à expiration (15min max).
    */
-  async logout(refreshToken: string): Promise<void> {
+  async logout(refreshToken: string | undefined): Promise<void> {
+    if (!refreshToken) return;
     const tokenHash = hashRefreshToken(refreshToken);
     await this.prisma.refreshToken.updateMany({
       where: { tokenHash, revokedAt: null },
@@ -131,27 +137,48 @@ export class AuthService {
    * Émet une paire access + refresh ET persiste le refresh token haché.
    * `previousTokenHash` non-null indique une rotation (le précédent
    * token doit déjà être marqué révoqué par l'appelant).
+   * Retourne aussi le user (profils inclus) pour que le controller
+   * puisse répondre `{ user }` sans requête supplémentaire.
    */
-  private async issueTokens(
-    userId: string,
-    role: string,
-    previousTokenHash: string | null = null,
-  ) {
-    const accessToken = this.jwt.sign({ sub: userId, role }, { expiresIn: ACCESS_TOKEN_TTL });
+  private async issueTokens(user: {
+    id: string;
+    role: string;
+    email: string;
+    fullName: string;
+    phone: string;
+    country: string;
+  }, previousTokenHash: string | null = null) {
+    const accessToken = this.jwt.sign({ sub: user.id, role: user.role }, { expiresIn: ACCESS_TOKEN_TTL });
+    // `jti` (UUID) : rend chaque refresh token unique même émis dans la
+    // même seconde (le payload { sub, role } seul produirait un JWT
+    // identique -> même tokenHash -> violation d'unicité en DB lors de
+    // la rotation). C'est aussi un identifiant de session exploitable
+    // pour du logging forensique.
     const refreshToken = this.jwt.sign(
-      { sub: userId, role },
+      { sub: user.id, role: user.role, jti: crypto.randomUUID() },
       { secret: process.env.JWT_REFRESH_SECRET, expiresIn: `${REFRESH_TOKEN_TTL_DAYS}d` },
     );
 
     await this.prisma.refreshToken.create({
       data: {
-        userId,
+        userId: user.id,
         tokenHash: hashRefreshToken(refreshToken),
         expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
         previousTokenHash,
       },
     });
 
-    return { accessToken, refreshToken };
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        role: user.role,
+        email: user.email,
+        fullName: user.fullName,
+        phone: user.phone,
+        country: user.country,
+      },
+    };
   }
 }

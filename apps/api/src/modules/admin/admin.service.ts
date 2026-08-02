@@ -28,16 +28,4 @@ export class AdminService {
       include: { schedule: { include: { reservation: { include: { user: true } } } } },
     });
   }
-
-  async listReservations(status?: string) {
-    return this.prisma.reservation.findMany({
-      where: status ? { status: status as any } : undefined,
-      include: { unit: true, user: true },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async updateReservationStatus(reservationId: string, status: any) {
-    return this.prisma.reservation.update({ where: { id: reservationId }, data: { status } });
-  }
 }

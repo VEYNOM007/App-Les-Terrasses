@@ -60,6 +60,10 @@ const createMockPrisma = () => ({
     findUnique: jest.fn(),
     findUniqueOrThrow: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
+  },
+  document: {
+    create: jest.fn(),
   },
   refreshToken: {
     create: jest.fn(),
@@ -409,6 +413,41 @@ describe('AuthService', () => {
         expect.objectContaining({ sub: 'user-001', role: 'ACHETEUR', jti: expect.any(String) }),
         { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '30d' },
       );
+    });
+  });
+
+  // ──────────────────────────────────────────────────
+  // uploadKyc — pièce d'identité (AuthModule, R6)
+  // ──────────────────────────────────────────────────
+
+  describe('uploadKyc', () => {
+    it('devrait créer un Document PIECE_IDENTITE lié au user et passer kycStatus EN_ATTENTE', async () => {
+      prisma.document.create.mockResolvedValue({ id: 'doc-001' });
+      prisma.user.update.mockResolvedValue({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
+
+      const result = await service.uploadKyc('user-001', {
+        filename: 'uuid-1234.jpg',
+        originalname: 'passeport.jpg',
+      });
+
+      // Le fichier est écrit par multer côté controller ; ici on vérifie
+      // que la base référence le chemin serveur (jamais le nom client brut)
+      expect(prisma.document.create).toHaveBeenCalledWith({
+        data: {
+          type: 'PIECE_IDENTITE',
+          name: 'passeport.jpg',
+          fileUrl: '/uploads/kyc/uuid-1234.jpg',
+          kycOwnerId: 'user-001',
+        },
+      });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-001' },
+        data: { kycStatus: 'EN_ATTENTE' },
+        select: { id: true, kycStatus: true },
+      });
+
+      expect(result).toEqual({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
     });
   });
 });

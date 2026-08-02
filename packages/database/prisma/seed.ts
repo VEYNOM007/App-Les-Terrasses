@@ -5,6 +5,13 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Démarrage du seed de la base de données Résidence Catalog...');
 
+  // 0. Nettoyage des données existantes (pour garantir l'idempotence du seed)
+  await prisma.parkingSpot.deleteMany({});
+  await prisma.unit.deleteMany({});
+  await prisma.artisanAssignment.deleteMany({});
+  await prisma.block.deleteMany({});
+  await prisma.project.deleteMany({});
+
   // 1. Création des utilisateurs démo
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@terrasses-baguida.tg' },

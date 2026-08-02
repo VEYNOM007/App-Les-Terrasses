@@ -16,6 +16,11 @@ export class CatalogController {
     return this.catalogService.getProject(id);
   }
 
+  @Get('projects/:id/blocks')
+  getProjectBlocks(@Param('id') id: string) {
+    return this.catalogService.getProjectBlocks(id);
+  }
+
   @Get('units')
   searchUnits(@Query() query: SearchUnitsQueryDto) {
     return this.catalogService.searchUnits(query);

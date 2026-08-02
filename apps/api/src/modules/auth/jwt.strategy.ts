@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Request } from 'express';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuthUser } from './auth-user.interface';
+
+const ACCESS_TOKEN_COOKIE = 'access_token';
 
 /**
  * Résout le profil complet à chaque requête authentifiée : on ne se
@@ -16,7 +19,13 @@ import { AuthUser } from './auth-user.interface';
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private readonly prisma: PrismaService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request) => {
+          const token = req.cookies?.[ACCESS_TOKEN_COOKIE];
+          return typeof token === 'string' ? token : null;
+        },
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       secretOrKey: process.env.JWT_SECRET,
     });
   }

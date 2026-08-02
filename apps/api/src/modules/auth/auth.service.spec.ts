@@ -67,10 +67,23 @@ const createMockJwtService = () => ({
 const REFRESH_TOKEN_VALUE = 'real-refresh-jwt-value';
 const REFRESH_TOKEN_HASH = crypto.createHash('sha256').update(REFRESH_TOKEN_VALUE).digest('hex');
 
+/**
+ * @types/bcrypt déclare des overloads (variante callback en dernier) :
+ * jest.spyOn infère la signature callback (retour void) et mockResolvedValue
+ * attend `never`. On réaffirme la variante Promise via `as unknown as`
+ * (double assertion sans `any` — le spy reste entièrement typé ensuite).
+ */
+type BcryptHashFn = (data: string | Buffer, saltOrRounds: string | number) => Promise<string>;
+type BcryptCompareFn = (data: string | Buffer, encrypted: string) => Promise<boolean>;
+type HashSpy = jest.SpyInstance<ReturnType<BcryptHashFn>, Parameters<BcryptHashFn>>;
+type CompareSpy = jest.SpyInstance<ReturnType<BcryptCompareFn>, Parameters<BcryptCompareFn>>;
+
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: ReturnType<typeof createMockPrisma>;
   let jwt: ReturnType<typeof createMockJwtService>;
+  let hashSpy: HashSpy;
+  let compareSpy: CompareSpy;
 
   beforeAll(() => {
     // jest.setup.ts définit déjà ces valeurs. On les réaffirme ici pour
@@ -93,8 +106,10 @@ describe('AuthService', () => {
 
     service = module.get<AuthService>(AuthService);
 
-    jest.spyOn(bcrypt, 'hash').mockResolvedValue('$2b$10$hashedpasswordmock');
-    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true);
+    hashSpy = jest.spyOn(bcrypt, 'hash') as unknown as HashSpy;
+    hashSpy.mockResolvedValue('$2b$10$hashedpasswordmock');
+    compareSpy = jest.spyOn(bcrypt, 'compare') as unknown as CompareSpy;
+    compareSpy.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -206,7 +221,7 @@ describe('AuthService', () => {
 
     it('devrait lever UnauthorizedException si password invalide', async () => {
       prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
-      jest.spyOn(bcrypt, 'compare').mockResolvedValueOnce(false);
+      compareSpy.mockResolvedValueOnce(false);
 
       await expect(service.login('kofi@test.tg', 'wrong-password')).rejects.toThrow(
         UnauthorizedException,

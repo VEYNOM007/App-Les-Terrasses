@@ -1,5 +1,6 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import * as cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
@@ -8,6 +9,9 @@ const DEFAULT_CORS_ORIGINS = 'http://localhost:3000';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true }); // rawBody requis pour le webhook Stripe
   app.setGlobalPrefix('v1');
+
+  // Cookies JWT httpOnly : parser des cookies entrants (access/refresh tokens)
+  app.use(cookieParser());
 
   // Sécurité de base : en-têtes HTTP (X-Frame-Options, CSP, HSTS, …)
   app.use(helmet());

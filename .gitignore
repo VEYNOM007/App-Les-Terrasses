@@ -8,5 +8,8 @@ dist/
 .DS_Store
 apps/api/generated/
 
+# Fichiers téléversés (KYC, contrats) — stockage disque local, jamais commité
+uploads/
+
 # TypeScript incremental build cache (regénéré par tsc, ne pas committer)
 *.tsbuildinfo

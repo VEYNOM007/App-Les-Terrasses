@@ -58,7 +58,8 @@ statut via un script de seed dédié.
 `LaunchService.checkFundingThreshold()`. Si vous ajoutez un autre chemin
 de confirmation de vente (ex: vente manuelle par un commercial hors app),
 il DOIT également déclencher ce check — sinon le seuil de financement ne
-sera jamais recalculé pour ces ventes.
+sera jamais recalculé pour ces ventes. C'est le cas de
+`ReservationService.adminSetStatus(reservationId, 'confirmee')` (Phase 2).
 
 ### Paiements — idempotence obligatoire
 `PaymentService.markInstallmentPaid()` est le point d'entrée unique pour
@@ -67,10 +68,19 @@ souvent renvoyés en double). Toute nouvelle logique de paiement doit
 passer par cette méthode, jamais écrire directement `installment.status`
 ailleurs dans le code.
 
+### Upload de fichiers (KYC)
+`POST /auth/kyc` accepte un multipart `documentType` + `file` (PNG/JPG/PDF,
+≤ 5 Mo) via multer (`apps/api/src/modules/auth/auth.controller.ts`). Le nom
+de fichier est généré côté serveur (UUID + extension dérivée du MIME — jamais
+le nom client, source classique de path traversal) et stocké sous `uploads/`
+(dans `.gitignore`, jamais commité). Les chemins sont résolus par
+`common/files/uploads.util.ts` qui rejette tout traversal (`..`). Le
+téléchargement `GET /portal/documents/:id/download` vérifie l'appartenance
+(réservation liée OU propriétaire KYC) avant de streamer le fichier.
+
 ### Modules encore à l'état de squelette (voir avant d'étoffer)
-`CatalogModule`, `ProjectModule`, `PortalModule`, `NotificationModule`,
-`AdminModule`, `ContractModule` ont une structure correcte mais des
-implémentations volontairement minces :
+`ContractModule` et la partie dispatch de `NotificationModule` restent
+volontairement minces :
 - `ContractService` : pas de génération PDF réelle, pas de champ
   `artisanAssignmentId` dédié sur `Document` (actuellement stocké dans
   `name`, à corriger proprement en ajoutant le champ au schema).
@@ -80,8 +90,9 @@ implémentations volontairement minces :
   configurées, sinon fallback **mode démo** (clés factices, URL d'aperçu),
   jamais un stub qui lève. Les signatures de webhooks sont toujours
   vérifiées, quel que soit `NODE_ENV` — en démo les clés factices signent.
-- `auth`, `reservation`, `payment` : durcis et testés (TS strict, guards
-  d'appartenance, DTOs, webhooks signés). Ne pas régresser ces garanties.
+- `auth`, `reservation`, `payment`, `admin`, `portal`, `catalog`, `artisan` :
+  implémentés pour la portée OpenAPI (Phase 2) et testés (R6) sur les chemins
+  argent/sécurité. Ne pas régresser ces garanties.
 
 Avant de coder une feature qui dépend d'un de ces modules, vérifier son
 état réel dans le code plutôt que de supposer qu'il est complet.
@@ -106,6 +117,9 @@ dans `.env.example` dans le même commit.
 2. ~~Clients CinetPay/Stripe réels~~ — **fait** (vrais fetch, fallback démo, webhooks signés).
 3. Frontend `apps/web` : catalogue public + flux réservation (priorité sur admin/artisan)
 4. ~~Tests ReservationModule / PaymentModule (R6)~~ — **fait** (spec + integration + e2e verts).
-5. Prochaine étape : **Phase 1** — parcours acheteur connecté (cookies httpOnly JWT,
-   pages `/login` `/register`, `/suivi` branché sur l'API), puis **Phase 2** complétude
-   OpenAPI (11 endpoints manquants), puis **Phase 3** prod readiness (VPS + Docker).
+5. ~~Phase 1 — parcours acheteur connecté~~ — **fait** (cookies httpOnly JWT,
+   pages `/login` `/register`, `/suivi` branché sur l'API).
+6. ~~Phase 2 — complétude OpenAPI~~ — **fait** (14 endpoints implémentés, méthodes
+   mortes câblées, 104 tests verts, docs alignées). Reste Phase 3 prod readiness
+   (VPS + Docker) ; penser aussi au flux de reset de mot de passe pour les
+   comptes artisans créés par `POST /admin/artisans` (mot de passe temporaire non exposé).

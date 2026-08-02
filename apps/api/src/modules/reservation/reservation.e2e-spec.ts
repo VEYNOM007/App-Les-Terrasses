@@ -14,6 +14,7 @@ import {
   createUserFixture,
   createProjectWithBlockAndUnits,
   disconnectTestPrisma,
+  extractCookieValue,
   getTestPrisma,
 } from '../../common/testing/test-db.helper';
 
@@ -83,14 +84,16 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
   });
 
   // ──────────────────────────────────────────────────
-  // Helper : login et retourne le JWT
+  // Helper : login et retourne le JWT (extrait du cookie httpOnly)
   // ──────────────────────────────────────────────────
 
   async function loginAndGetToken(email: string, password: string): Promise<string> {
     const res = await request(app.getHttpServer())
       .post(`/${API_PREFIX}/auth/login`)
       .send({ email, password });
-    return res.body.accessToken;
+    const token = extractCookieValue(res, 'access_token');
+    if (!token) throw new Error('access_token absent du Set-Cookie après login');
+    return token;
   }
 
   // ──────────────────────────────────────────────────

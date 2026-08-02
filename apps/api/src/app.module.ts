@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
 
@@ -19,6 +20,9 @@ import { AdminModule } from './modules/admin/admin.module';
 @Module({
   imports: [
     BullModule.forRoot({ connection: { url: process.env.REDIS_URL } }),
+    // Rate limiting global : 100 req/min/IP. Les webhooks providers
+    // (serveur-à-serveur) sont exemptés via @SkipThrottle().
+    ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 100 }] }),
     PrismaModule,
     RedisModule,
     NotificationModule, // global, doit être importé tôt

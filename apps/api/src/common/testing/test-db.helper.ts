@@ -235,3 +235,19 @@ export async function createReservationWithSchedule(opts: {
   return { reservation, schedule };
 }
 
+/**
+ * Extrait la valeur d'un cookie JWT depuis le header Set-Cookie d'une
+ * réponse supertest. Les cookies sont posés httpOnly par AuthController
+ * (access_token / refresh_token) — les tests e2e les relisent pour
+ * prouver le flow complet (login → cookie → route protégée).
+ */
+export function extractCookieValue(
+  res: { headers: Record<string, string | string[] | undefined> },
+  cookieName: string,
+): string | null {
+  const setCookie = res.headers['set-cookie'];
+  const raw = Array.isArray(setCookie) ? setCookie.join('; ') : (setCookie ?? '');
+  const match = raw.match(new RegExp(`(?:^|; )${cookieName}=([^;]+)`));
+  return match ? match[1] : null;
+}
+

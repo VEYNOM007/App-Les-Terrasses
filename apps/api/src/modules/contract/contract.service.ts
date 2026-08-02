@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
-import { DocumentType } from '@prisma/client';
+import { DocumentType, UserRole } from '@prisma/client';
 
 /**
  * Génère et suit les contrats — côté acheteur (contrat de réservation/vente
@@ -20,11 +20,17 @@ export class ContractService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async generateBuyerContract(reservationId: string, fileUrl: string) {
+  async generateBuyerContract(reservationId: string, fileUrl: string, userId: string, role: UserRole) {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id: reservationId },
     });
     if (!reservation) throw new NotFoundException('Réservation introuvable.');
+
+    // Un achat ne peut générer son contrat que sur sa propre réservation
+    // (les admins peuvent le faire pour tout le monde).
+    if (role !== UserRole.ADMIN && reservation.userId !== userId) {
+      throw new ForbiddenException('Cette réservation ne vous appartient pas.');
+    }
 
     const document = await this.prisma.document.create({
       data: {
@@ -43,12 +49,23 @@ export class ContractService {
     return document;
   }
 
-  async generateArtisanContract(assignmentId: string, fileUrl: string) {
+  async generateArtisanContract(
+    assignmentId: string,
+    fileUrl: string,
+    userId: string,
+    role: UserRole,
+  ) {
     const assignment = await this.prisma.artisanAssignment.findUnique({
       where: { id: assignmentId },
       include: { artisan: true },
     });
     if (!assignment) throw new NotFoundException('Affectation introuvable.');
+
+    // Seul l'artisan affecté (ou un admin) peut générer son contrat
+    // d'intervention.
+    if (role !== UserRole.ADMIN && assignment.artisan.userId !== userId) {
+      throw new ForbiddenException("Cette affectation ne vous appartient pas.");
+    }
 
     // Réutilise Document via kycOwnerId détourné en "owner" générique
     // serait ambigu — dans un schéma plus poussé, on ajouterait un champ
@@ -70,7 +87,17 @@ export class ContractService {
     return document;
   }
 
-  async listBuyerContracts(reservationId: string) {
+  async listBuyerContracts(reservationId: string, userId: string, role: UserRole) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: reservationId },
+      select: { userId: true },
+    });
+    if (!reservation) throw new NotFoundException('Réservation introuvable.');
+
+    if (role !== UserRole.ADMIN && reservation.userId !== userId) {
+      throw new ForbiddenException('Cette réservation ne vous appartient pas.');
+    }
+
     return this.prisma.document.findMany({
       where: { reservationId, type: DocumentType.CONTRAT },
       orderBy: { createdAt: 'desc' },

@@ -45,10 +45,20 @@ const USER_FIXTURE = {
   country: 'TG',
 };
 
+const USER_RESULT = {
+  id: 'user-001',
+  role: 'ACHETEUR',
+  email: 'kofi@test.tg',
+  fullName: 'Kofi Mensah',
+  phone: '+22890000000',
+  country: 'TG',
+};
+
 const createMockPrisma = () => ({
   user: {
     findFirst: jest.fn(),
     findUnique: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
     create: jest.fn(),
   },
   refreshToken: {
@@ -180,7 +190,11 @@ describe('AuthService', () => {
           previousTokenHash: null,
         }),
       });
-      expect(result).toEqual({ accessToken: 'access-mock', refreshToken: REFRESH_TOKEN_VALUE });
+      expect(result).toEqual({
+        accessToken: 'access-mock',
+        refreshToken: REFRESH_TOKEN_VALUE,
+        user: USER_RESULT,
+      });
     });
 
     it('devrait utiliser le country fourni plutot que TG par defaut', async () => {
@@ -243,7 +257,11 @@ describe('AuthService', () => {
           tokenHash: REFRESH_TOKEN_HASH,
         }),
       });
-      expect(result).toEqual({ accessToken: 'access-mock', refreshToken: REFRESH_TOKEN_VALUE });
+      expect(result).toEqual({
+        accessToken: 'access-mock',
+        refreshToken: REFRESH_TOKEN_VALUE,
+        user: USER_RESULT,
+      });
     });
   });
 
@@ -307,6 +325,7 @@ describe('AuthService', () => {
     it('devrait rotater un token valide : revoquer ancien, creer nouveau chaine, retourner nouvelle paire', async () => {
       jwt.verify.mockReturnValue(validPayload);
       prisma.refreshToken.findUnique.mockResolvedValue(activeStoredToken);
+      prisma.user.findUniqueOrThrow.mockResolvedValue(USER_FIXTURE);
       jwt.sign.mockReturnValueOnce('access-new').mockReturnValueOnce('refresh-new');
 
       const newRefreshHash = crypto.createHash('sha256').update('refresh-new').digest('hex');
@@ -328,7 +347,11 @@ describe('AuthService', () => {
         }),
       });
 
-      expect(result).toEqual({ accessToken: 'access-new', refreshToken: 'refresh-new' });
+      expect(result).toEqual({
+        accessToken: 'access-new',
+        refreshToken: 'refresh-new',
+        user: USER_RESULT,
+      });
     });
   });
 
@@ -367,7 +390,7 @@ describe('AuthService', () => {
   // ──────────────────────────────────────────────────
 
   describe('issueTokens (options de signature)', () => {
-    it('devrait signer access 15m et refresh 30d + JWT_REFRESH_SECRET', async () => {
+    it('devrait signer access 15m et refresh 30d + JWT_REFRESH_SECRET + jti unique', async () => {
       prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
       jwt.sign.mockReturnValue('tok');
 
@@ -378,9 +401,12 @@ describe('AuthService', () => {
         { sub: 'user-001', role: 'ACHETEUR' },
         { expiresIn: '15m' },
       );
+      // jti (UUID) : garantit l'unicité du refresh token même émis dans
+      // la même seconde (payload { sub, role } seul -> hash identique ->
+      // violation de contrainte unique en DB).
       expect(jwt.sign).toHaveBeenNthCalledWith(
         2,
-        { sub: 'user-001', role: 'ACHETEUR' },
+        expect.objectContaining({ sub: 'user-001', role: 'ACHETEUR', jti: expect.any(String) }),
         { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '30d' },
       );
     });

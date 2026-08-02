@@ -1,13 +1,32 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
-import { AssignmentStatus, QuoteStatus } from '@prisma/client';
+import { ArtisanTrade, AssignmentStatus, QuoteStatus, UserRole } from '@prisma/client';
+import { ArtisanTradeInput, CreateArtisanDto } from './dto/create-artisan.dto';
 
 export interface SubmitQuoteDto {
   amount: number;
   description: string;
   documentUrl?: string;
 }
+
+const ARTISAN_TRADE_BY_INPUT: Record<ArtisanTradeInput, ArtisanTrade> = {
+  maconnerie: ArtisanTrade.MACONNERIE,
+  electricite: ArtisanTrade.ELECTRICITE,
+  plomberie: ArtisanTrade.PLOMBERIE,
+  menuiserie: ArtisanTrade.MENUISERIE,
+  peinture: ArtisanTrade.PEINTURE,
+  carrelage: ArtisanTrade.CARRELAGE,
+  toiture: ArtisanTrade.TOITURE,
+  autre: ArtisanTrade.AUTRE,
+};
 
 @Injectable()
 export class ArtisanService {
@@ -151,10 +170,51 @@ export class ArtisanService {
 
   // ------------- Côté admin -------------
 
-  async proposeAssignment(
-    adminUserId: string,
-    data: { artisanId: string; blockId: string; scope?: string; startDate?: Date; endDate?: Date },
-  ) {
+  async listArtisans() {
+    return this.prisma.artisan.findMany({
+      include: {
+        user: { select: { id: true, email: true, phone: true, fullName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Crée le compte utilisateur (rôle ARTISAN) + le profil métier en une
+   * transaction. La spec ne prévoit pas de mot de passe : on en génère un
+   * temporaire aléatoire jamais exposé — la provision du mot de passe
+   * réel doit passer par un flux de réinitialisation (hors Phase 2).
+   */
+  async createArtisan(data: CreateArtisanDto) {
+    const tempPassword = crypto.randomBytes(18).toString('base64url');
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: data.email,
+          phone: data.phone,
+          fullName: data.fullName,
+          passwordHash,
+          role: UserRole.ARTISAN,
+        },
+      });
+
+      return tx.artisan.create({
+        data: {
+          userId: user.id,
+          companyName: data.companyName,
+          trade: ARTISAN_TRADE_BY_INPUT[data.trade],
+          tradeLicenseUrl: data.tradeLicenseUrl,
+        },
+        include: {
+          user: { select: { id: true, email: true, phone: true, fullName: true } },
+        },
+      });
+    });
+  }
+
+  async proposeAssignment(data: { artisanId: string; blockId: string; scope?: string; startDate?: string; endDate?: string }) {
     const assignment = await this.prisma.artisanAssignment.create({
       data: {
         artisanId: data.artisanId,
@@ -176,9 +236,15 @@ export class ArtisanService {
   }
 
   async reviewQuote(quoteId: string, decision: 'ACCEPTE' | 'REFUSE') {
+    const quote = await this.prisma.quote.findUnique({ where: { id: quoteId } });
+    if (!quote) throw new NotFoundException('Devis introuvable.');
+    if (quote.status !== QuoteStatus.ENVOYE) {
+      throw new BadRequestException('Seul un devis soumis (ENVOYE) peut être examiné.');
+    }
+
     return this.prisma.quote.update({
       where: { id: quoteId },
-      data: { status: decision as QuoteStatus },
+      data: { status: decision },
     });
   }
 }

@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, UnitStatus, UnitType, LaunchStatus, ConstructionPhase, Frontage, ReservationStatus } from '@prisma/client';
+import { PrismaClient, UserRole, UnitStatus, UnitType, LaunchStatus, ConstructionPhase, Frontage, ReservationStatus, type Project, type Block, type Unit } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -110,7 +110,7 @@ export async function createUserFixture(input: UserFixtureInput = {}) {
 export async function createProjectWithBlockAndUnits(
   unitCount = 1,
   opts: { blockLaunchStatus?: LaunchStatus; unitType?: UnitType } = {},
-): Promise<{ project: any; block: any; units: any[] }> {
+): Promise<{ project: Project; block: Block; units: Unit[] }> {
   const prisma = getTestPrisma();
   const project = await prisma.project.create({
     data: {

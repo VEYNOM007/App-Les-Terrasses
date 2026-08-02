@@ -20,7 +20,7 @@ export class ConstructionController {
     @Body() body: PublishConstructionUpdateDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.constructionService.publishUpdate(blockId, user.id, body);
+    return this.constructionService.publishUpdate(blockId, user, body);
   }
 
   @Get('units/:unitId/progress')

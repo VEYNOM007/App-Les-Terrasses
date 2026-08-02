@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -14,6 +14,11 @@ import { UpdateUnitDto } from './dto/update-unit.dto';
 @Controller('admin')
 export class ProjectController {
   constructor(private readonly projectService: ProjectService) {}
+
+  @Get('projects')
+  listAllProjects() {
+    return this.projectService.listAllProjects();
+  }
 
   @Post('projects')
   createProject(@Body() body: CreateProjectDto) {

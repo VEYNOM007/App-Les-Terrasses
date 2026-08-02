@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -39,11 +39,22 @@ export class NotificationService {
     });
   }
 
-  async markRead(notificationId: string) {
-    return this.prisma.notification.update({
-      where: { id: notificationId },
+  /**
+   * Marque une notification comme lue — uniquement si elle appartient au
+   * user appelant. `updateMany` borne la cible à {id, userId} : si aucune
+   * ligne n'est affectée, la notification n'existe pas ou n'est pas au user.
+   */
+  async markRead(notificationId: string, userId: string) {
+    const result = await this.prisma.notification.updateMany({
+      where: { id: notificationId, userId },
       data: { read: true },
     });
+
+    if (result.count === 0) {
+      throw new NotFoundException('Notification introuvable.');
+    }
+
+    return this.prisma.notification.findUnique({ where: { id: notificationId } });
   }
 
   async setPreferences(userId: string, prefs: NotificationPreferencesDto) {

@@ -80,8 +80,9 @@ export class StripeClient {
         checkoutUrl: data.url,
         sessionId: data.id,
       };
-    } catch (err: any) {
-      this.logger.error(`Erreur réseau Stripe : ${err.message}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'erreur inconnue';
+      this.logger.error(`Erreur réseau Stripe : ${message}`);
       return {
         checkoutUrl,
         sessionId,
@@ -92,7 +93,7 @@ export class StripeClient {
   /**
    * Vérifie la signature cryptographique du webhook Stripe (stripe-signature)
    */
-  constructEvent(rawBody: Buffer | string, signatureHeader?: string): any {
+  constructEvent(rawBody: Buffer | string, signatureHeader?: string): Record<string, unknown> | null {
     if (!signatureHeader) {
       this.logger.warn('En-tête stripe-signature manquant.');
       return null;
@@ -100,7 +101,7 @@ export class StripeClient {
 
     try {
       // Découpage du header signature t=timestamp,v1=signature
-      const items = signatureHeader.split(',').reduce((acc: any, item: string) => {
+      const items = signatureHeader.split(',').reduce<Record<string, string>>((acc, item) => {
         const [k, v] = item.split('=');
         acc[k.trim()] = v.trim();
         return acc;
@@ -120,10 +121,11 @@ export class StripeClient {
         .digest('hex');
 
       if (crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))) {
-        return JSON.parse(rawBody.toString());
+        return JSON.parse(rawBody.toString()) as Record<string, unknown>;
       }
-    } catch (err: any) {
-      this.logger.warn(`Signature Webhook Stripe non vérifiée : ${err.message}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'erreur inconnue';
+      this.logger.warn(`Signature Webhook Stripe non vérifiée : ${message}`);
     }
 
     return null;

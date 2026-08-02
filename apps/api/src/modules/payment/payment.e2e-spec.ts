@@ -239,7 +239,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
     expect(updated.status).toBe('PAYE');
   });
 
-  it('POST /payments/webhooks/cinetpay en dev (NODE_ENV != production) traite meme si signature invalide', async () => {
+  it('POST /payments/webhooks/cinetpay rejette une signature invalide (pas de bypass dev)', async () => {
     const user = await createUserFixture();
     const { units } = await createProjectWithBlockAndUnits(1);
     const { schedule } = await createReservationWithSchedule({
@@ -248,9 +248,8 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
     });
     const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
 
-    // verifySignature retourne false -> signature invalide.
-    // Comportement dev (documenté dans payment.service.ts) : on continue
-    // quand même — le check strict n'est actif qu'en production.
+    // verifySignature retourne false -> signature invalide. Le webhook est
+    // TOUJOURS rejeté, quel que soit NODE_ENV (plus de comportement dev).
     cinetPayClient.verifySignature.mockReturnValueOnce(false);
 
     const res = await request(app.getHttpServer())
@@ -261,15 +260,12 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
         metadata: { installmentId: installment.id },
       });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(400);
 
-    // En dev, le paiement est traité malgré la signature invalide.
-    // Comportement parallèle à Stripe (constructEvent retourne null en
-    // dev = pas de vérification, on accepte le body brut).
     const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
       where: { id: installment.id },
     });
-    expect(updated.status).toBe('PAYE');
+    expect(updated.status).toBe('EN_ATTENTE');
   });
 
   // ──────────────────────────────────────────────────

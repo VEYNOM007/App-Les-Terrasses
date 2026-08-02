@@ -29,20 +29,6 @@ export interface CinetPayWebhookPayload {
   metadata?: { installmentId?: string };
 }
 
-/**
- * Contract minimal d'un webhook Stripe checkout.session.completed.
- */
-export interface StripeWebhookEvent {
-  type: string;
-  data: {
-    object: {
-      payment_intent?: string;
-      id: string;
-      metadata?: { installmentId?: string };
-    };
-  };
-}
-
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
@@ -219,11 +205,13 @@ export class PaymentService {
   }
 
   /**
-   * Webhook CinetPay — vérifie la signature HMAC avant tout traitement.
+   * Webhook CinetPay — la signature HMAC est TOUJOURS vérifiée, quel que
+   * soit l'environnement (pas de bypass en dev). En mode démo la clé de
+   * secours `demo_secret_key` est connue et utilisée pour signer.
    */
   async handleCinetPayWebhook(payload: CinetPayWebhookPayload, signatureHeader: string) {
     const isValid = this.cinetPayClient.verifySignature(payload, signatureHeader);
-    if (!isValid && process.env.NODE_ENV === 'production') {
+    if (!isValid) {
       throw new BadRequestException('Signature CinetPay invalide.');
     }
 
@@ -241,28 +229,42 @@ export class PaymentService {
   }
 
   /**
-   * Webhook Stripe — vérifie la signature via constructEvent() puis traite checkout.session.completed.
+   * Webhook Stripe — la signature est TOUJOURS vérifiée via constructEvent()
+   * (pas de fallback sur le body brut). L'événement non vérifié est rejeté.
    */
   async handleStripeWebhook(rawBody: Buffer | string, signatureHeader: string) {
     const event = this.stripeClient.constructEvent(rawBody, signatureHeader);
 
-    if (!event && process.env.NODE_ENV === 'production') {
+    if (!event) {
       throw new BadRequestException('Signature Stripe invalide.');
     }
 
-    // En développement, accepter le body JSON brut si la signature n'est pas vérifiable
-    const payload: StripeWebhookEvent = event || (typeof rawBody === 'string' ? JSON.parse(rawBody) : JSON.parse(rawBody.toString()));
+    // Le client retourne un objet JSON non typé (Record<string, unknown>) ;
+    // on restreint au sous-ensemble lu ici, en tant que type (pas de `any`).
+    const checkoutSession = event as {
+      type?: string;
+      data?: {
+        object?: { metadata?: { installmentId?: string }; payment_intent?: string; id?: string };
+      };
+    };
 
-    if (payload?.type !== 'checkout.session.completed') {
+    if (checkoutSession.type !== 'checkout.session.completed') {
       return;
     }
 
-    const session = payload.data?.object;
+    const session = checkoutSession.data?.object;
     const installmentId = session?.metadata?.installmentId;
     if (!installmentId) {
       throw new BadRequestException('metadata.installmentId manquant dans le webhook Stripe.');
     }
 
-    await this.markInstallmentPaid(installmentId, PaymentProvider.STRIPE, session.payment_intent || session.id);
+    // Stripe garantit un `id` sur toute session checkout ; il sert de
+    // fallback si payment_intent est absent.
+    const providerRef = session?.payment_intent ?? session?.id;
+    if (!providerRef) {
+      throw new BadRequestException('Référence de session Stripe manquante.');
+    }
+
+    await this.markInstallmentPaid(installmentId, PaymentProvider.STRIPE, providerRef);
   }
 }

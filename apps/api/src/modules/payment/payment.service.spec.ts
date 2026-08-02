@@ -89,7 +89,6 @@ const createMockStripeClient = () => ({
   }),
   constructEvent: jest.fn().mockReturnValue(null),
 });
-
 // ────────────────────────────────────────────────────────────
 // Suite de tests
 // ────────────────────────────────────────────────────────────
@@ -313,6 +312,22 @@ describe('PaymentService', () => {
         ),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('devrait rejeter une signature invalide même hors production (pas de bypass dev)', async () => {
+      cinetPayClient.verifySignature.mockReturnValue(false);
+
+      await expect(
+        service.handleCinetPayWebhook(
+          {
+            cpm_result: '00',
+            cpm_trans_id: 'CPM-TX-004',
+            metadata: { installmentId: 'inst-001' },
+          },
+          'signature-invalide',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
+    });
   });
 
   // ──────────────────────────────────────────────────
@@ -320,19 +335,31 @@ describe('PaymentService', () => {
   // ──────────────────────────────────────────────────
 
   describe('handleStripeWebhook', () => {
+    it('devrait rejeter si la signature est invalide (constructEvent null)', async () => {
+      // La signature n'est jamais contournée, même hors production.
+      stripeClient.constructEvent.mockReturnValue(null);
+
+      const rawBody = JSON.stringify({ type: 'checkout.session.completed', data: { object: {} } });
+
+      await expect(service.handleStripeWebhook(rawBody, 'sig_invalide')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.paymentInstallment.findUnique).not.toHaveBeenCalled();
+    });
+
     it('devrait ignorer les événements Stripe non checkout.session.completed', async () => {
-      const rawBody = JSON.stringify({
+      stripeClient.constructEvent.mockReturnValue({
         type: 'payment_intent.succeeded',
         data: { object: {} },
       });
 
-      await service.handleStripeWebhook(rawBody, 'sig_test');
+      await service.handleStripeWebhook('raw-body', 'sig_test');
 
       expect(prisma.paymentInstallment.findUnique).not.toHaveBeenCalled();
     });
 
     it('devrait traiter un événement checkout.session.completed valide', async () => {
-      const rawBody = JSON.stringify({
+      stripeClient.constructEvent.mockReturnValue({
         type: 'checkout.session.completed',
         data: {
           object: {
@@ -349,7 +376,7 @@ describe('PaymentService', () => {
       });
       prisma.paymentInstallment.update.mockResolvedValue({});
 
-      await service.handleStripeWebhook(rawBody, 'sig_test');
+      await service.handleStripeWebhook('raw-body', 'sig_test');
 
       expect(prisma.paymentInstallment.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -364,7 +391,7 @@ describe('PaymentService', () => {
     });
 
     it('devrait rejeter si metadata.installmentId manquant dans la session Stripe', async () => {
-      const rawBody = JSON.stringify({
+      stripeClient.constructEvent.mockReturnValue({
         type: 'checkout.session.completed',
         data: {
           object: {
@@ -375,9 +402,9 @@ describe('PaymentService', () => {
         },
       });
 
-      await expect(
-        service.handleStripeWebhook(rawBody, 'sig_test'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.handleStripeWebhook('raw-body', 'sig_test')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

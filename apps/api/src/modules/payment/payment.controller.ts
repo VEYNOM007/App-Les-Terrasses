@@ -8,6 +8,7 @@ import {
   Req,
   RawBodyRequest,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { PaymentService, CinetPayWebhookPayload } from './payment.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -37,6 +38,7 @@ export class PaymentController {
    * Webhook CinetPay — pas de guard JWT (appel serveur à serveur), la
    * sécurité repose sur la vérification de signature dans le service.
    */
+  @SkipThrottle()
   @Post('webhooks/cinetpay')
   async cinetpayWebhook(
     @Body() payload: CinetPayWebhookPayload,
@@ -51,6 +53,7 @@ export class PaymentController {
    * signature HMAC ; s'assurer que le middleware Express est configuré
    * avec `express.raw()` sur cette route spécifique, avant tout body-parser JSON global.
    */
+  @SkipThrottle()
   @Post('webhooks/stripe')
   async stripeWebhook(
     @Req() req: RawBodyRequest<Request>,

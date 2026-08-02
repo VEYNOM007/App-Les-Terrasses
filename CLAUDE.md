@@ -68,27 +68,44 @@ passer par cette méthode, jamais écrire directement `installment.status`
 ailleurs dans le code.
 
 ### Modules encore à l'état de squelette (voir avant d'étoffer)
-`AuthModule`, `CatalogModule`, `ProjectModule`, `PortalModule`,
-`NotificationModule`, `AdminModule`, `ContractModule` ont une structure
-correcte mais des implémentations volontairement minces :
+`CatalogModule`, `ProjectModule`, `PortalModule`, `NotificationModule`,
+`AdminModule`, `ContractModule` ont une structure correcte mais des
+implémentations volontairement minces :
 - `ContractService` : pas de génération PDF réelle, pas de champ
   `artisanAssignmentId` dédié sur `Document` (actuellement stocké dans
   `name`, à corriger proprement en ajoutant le champ au schema).
 - `NotificationDispatchProcessor` : pas de client push/email/SMS branché.
-- `PaymentService.initiatePayment()` : stub qui lève une erreur, les
-  clients `CinetPayClient`/`StripeClient` réels restent à écrire.
+- `PaymentModule` (réalisé en Phase 0) : clients `CinetPayClient` /
+  `StripeClient` réels — un vrai `fetch` est tenté si les clés sont
+  configurées, sinon fallback **mode démo** (clés factices, URL d'aperçu),
+  jamais un stub qui lève. Les signatures de webhooks sont toujours
+  vérifiées, quel que soit `NODE_ENV` — en démo les clés factices signent.
+- `auth`, `reservation`, `payment` : durcis et testés (TS strict, guards
+  d'appartenance, DTOs, webhooks signés). Ne pas régresser ces garanties.
 
 Avant de coder une feature qui dépend d'un de ces modules, vérifier son
 état réel dans le code plutôt que de supposer qu'il est complet.
+
+### Durcissement Phase 0 (fait, à maintenir)
+- TypeScript **strict** sur `apps/api` : `tsc --noEmit` doit rester à 0
+  erreur. Interdiction de désactiver (`as any`, `@ts-ignore`).
+- Tous les handlers HTTP passent par des DTOs `class-validator` (ValidationPipe
+  global `whitelist` + `forbidNonWhitelisted`).
+- Les lectures/écritures liées au user doivent être scoped par appartenance
+  (`userId` passé depuis le token, jamais fourni par le client).
+- Signatures webhook CinetPay/Stripe : toujours vérifiées, aucun bypass.
 
 ### Variables d'environnement
 Voir `.env.example` à la racine. Ne jamais commit de `.env` réel (déjà
 dans `.gitignore`). Toute nouvelle variable ajoutée doit être documentée
 dans `.env.example` dans le même commit.
 
-## Ordre de priorité suggéré pour la suite du MVP
+## Ordre de priorité pour la suite du MVP
 
-1. Migration Prisma initiale + seed de données de démo (1 projet, 2 blocs à statuts différents, quelques unités)
-2. Clients CinetPay/Stripe réels dans PaymentModule
+1. ~~Migration Prisma initiale + seed de démo~~ — **fait** (2 migrations versionnées).
+2. ~~Clients CinetPay/Stripe réels~~ — **fait** (vrais fetch, fallback démo, webhooks signés).
 3. Frontend `apps/web` : catalogue public + flux réservation (priorité sur admin/artisan)
-4. Tests sur ReservationModule et PaymentModule (R6)
+4. ~~Tests ReservationModule / PaymentModule (R6)~~ — **fait** (spec + integration + e2e verts).
+5. Prochaine étape : **Phase 1** — parcours acheteur connecté (cookies httpOnly JWT,
+   pages `/login` `/register`, `/suivi` branché sur l'API), puis **Phase 2** complétude
+   OpenAPI (11 endpoints manquants), puis **Phase 3** prod readiness (VPS + Docker).

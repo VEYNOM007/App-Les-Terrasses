@@ -82,8 +82,9 @@ export class CinetPayClient {
         transactionId: params.transactionId,
         token: data.data.payment_token,
       };
-    } catch (err: any) {
-      this.logger.error(`Erreur réseau CinetPay : ${err.message}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'erreur inconnue';
+      this.logger.error(`Erreur réseau CinetPay : ${message}`);
       // Fallback sécurisé en mode sandbox
       return {
         paymentUrl: `https://checkout.cinetpay.com/sandbox/${params.transactionId}`,
@@ -95,7 +96,7 @@ export class CinetPayClient {
   /**
    * Vérifie la signature HMAC reçue dans l'en-tête x-cinetpay-signature
    */
-  verifySignature(payload: any, signatureHeader?: string): boolean {
+  verifySignature(payload: unknown, signatureHeader?: string): boolean {
     if (!signatureHeader) {
       this.logger.warn('En-tête x-cinetpay-signature manquant dans le webhook.');
       return false;
@@ -103,7 +104,7 @@ export class CinetPayClient {
 
     const calculatedHmac = crypto
       .createHmac('sha256', this.secretKey)
-      .update(JSON.stringify(payload))
+      .update(JSON.stringify(payload ?? {}))
       .digest('hex');
 
     return calculatedHmac === signatureHeader;

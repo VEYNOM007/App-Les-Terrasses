@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
+import { SearchUnitsQueryDto } from './dto/search-units-query.dto';
 
 @Controller('catalog')
 export class CatalogController {
@@ -16,7 +17,7 @@ export class CatalogController {
   }
 
   @Get('units')
-  searchUnits(@Query() query: any) {
+  searchUnits(@Query() query: SearchUnitsQueryDto) {
     return this.catalogService.searchUnits(query);
   }
 

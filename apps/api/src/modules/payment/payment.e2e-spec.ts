@@ -18,6 +18,7 @@ import {
   createProjectWithBlockAndUnits,
   createReservationWithSchedule,
   disconnectTestPrisma,
+  extractCookieValue,
   getTestPrisma,
 } from '../../common/testing/test-db.helper';
 
@@ -121,7 +122,9 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
     const res = await request(app.getHttpServer())
       .post(`/${API_PREFIX}/auth/login`)
       .send({ email, password });
-    return res.body.accessToken;
+    const token = extractCookieValue(res, 'access_token');
+    if (!token) throw new Error('access_token absent du Set-Cookie après login');
+    return token;
   }
 
   // ──────────────────────────────────────────────────

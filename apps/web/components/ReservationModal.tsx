@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, ShieldCheck, Clock, CreditCard, Smartphone, CheckCircle, Car, Loader2, AlertTriangle } from 'lucide-react';
 import { UnitTypology } from './CatalogGrid';
 import { createReservation, ReservationResponse } from '../lib/api';
+import { useAuth } from './AuthProvider';
 
 interface ReservationModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface ReservationModalProps {
 }
 
 export default function ReservationModal({ isOpen, onClose, selectedTypology }: ReservationModalProps) {
+  const { user } = useAuth();
   const [selectedBlock, setSelectedBlock] = useState<string>('Bloc A');
   const [selectedType, setSelectedType] = useState<string>('T2');
   const [parkingOption, setParkingOption] = useState<string>('SOUS_PILOTIS');
@@ -77,13 +79,10 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
     setErrorMessage('');
 
     try {
-      // Récupérer le token JWT depuis le localStorage (défini lors du login)
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
-      if (token) {
-        // Mode connecté : appel API réel
+      if (user) {
+        // Mode connecté : appel API réel, auth via cookie httpOnly
         const unitId = `unit-${selectedBlock.replace(/\s/g, '-').toLowerCase()}-${selectedType.toLowerCase()}`;
-        const result = await createReservation(unitId, token);
+        const result = await createReservation(unitId);
         setReservation(result);
       } else {
         // Mode démo : simulation de réservation (pas de backend)
@@ -99,8 +98,9 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
       }
 
       setStep('CONFIRMED');
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Une erreur est survenue lors de la réservation.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Une erreur est survenue lors de la réservation.';
+      setErrorMessage(message);
       setStep('ERROR');
     }
   };

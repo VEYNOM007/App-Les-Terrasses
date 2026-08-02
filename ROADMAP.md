@@ -1,6 +1,6 @@
 # ROADMAP — Terrasses de Baguida (Residence Catalog)
 
-> Snapshot au 2026-07-23. Ce document reflete l'etat reel du code (pas les
+> Snapshot au 2026-08-02. Ce document reflete l'etat reel du code (pas les
 > intentions). Toute modification de portee doit etre refletée ici au moment
 > du commit (R1 : un fichier = un commit = une mise a jour du ROADMAP si la
 > portee change).
@@ -27,18 +27,18 @@ réservation 48h, suivi acquéreur), avec des espaces dedies artisans et admin.
 
 | Module           | Etat     | Notes                                                                                                          |
 |------------------|----------|----------------------------------------------------------------------------------------------------------------|
-| `auth`           | IMPL     | JWT + Strategy + RolesGuard. Pas de test. Mot de passe / OAuth2 flow a valider.                                |
+| `auth`           | **OK**   | JWT + Strategy + RolesGuard + refresh tokens. Tests spec (bcrypt hash, exp, stratégie) verts (R6).            |
 | `catalog`        | IMPL     | `getSitePlan` / `searchUnits` / `getProject` OK. Pas de test.                                                  |
-| `project`        | IMPL     | CRUD admin sur `Project`. A tester.                                                                            |
-| `reservation`    | **OK**   | Verrou Redis anti-double-vente, expiration BullMQ, tests spec (R6).                                            |
-| `payment`        | **OK**   | Clients CinetPay + Stripe réels, idempotence `markInstallmentPaid`, tests spec webhooks (R6).                 |
-| `construction`   | IMPL     | `publishUpdate` avec garde-fou launchStatus. Pas de test.                                                      |
+| `project`        | IMPL     | CRUD admin sur `Project` via DTOs typés. A tester.                                                            |
+| `reservation`    | **OK**   | Verrou Redis anti-double-vente, expiration BullMQ, tests spec + integration + e2e (R6).                       |
+| `payment`        | **OK**   | Clients CinetPay + Stripe réels (fallback démo si clés absentes), webhooks signés sans bypass dev, idempotence `markInstallmentPaid`, tests spec + integration + e2e (R6). |
+| `construction`   | IMPL     | `publishUpdate` avec garde-fou launchStatus + vérification d'appartenance artisan (ArtisanAssignment). Pas de test. |
 | `launch`         | IMPL     | `checkFundingThreshold` — logique metier centrale. Pas de test.                                                |
-| `artisan`        | IMPL     | 178 LOC, plusieurs endpoints. Pas de test, a auditer vs regles de securite.                                    |
+| `artisan`        | IMPL     | Conforme : vérifie l'ArtisanAssignment (jamais `user.role` seul), `requireArtisanId` → 403 si absent. Pas de test dédié. |
 | `contract`       | STUB     | Pas de generation PDF reelle. Champ `artisanAssignmentId` manque sur `Document` (workaround via `name`).      |
-| `notification`   | STUB     | Processor BullMQ en place mais aucun client push/email/SMS branché.                                            |
+| `notification`   | STUB     | Processor BullMQ en place mais aucun client push/email/SMS branché. Ownership `markRead` sécurisé.             |
 | `portal`         | STUB     | Service de 33 LOC, à definir (acquereur connecte ?).                                                          |
-| `admin`          | STUB     | 43 LOC, a definir (dashboard, gestion projets ?).                                                             |
+| `admin`          | STUB     | `getOccupancy` / `getOverduePayments` typés. Méthodes mortes supprimées. Dashboard à definir.                 |
 
 ### Frontend (`apps/web`)
 
@@ -52,7 +52,7 @@ réservation 48h, suivi acquéreur), avec des espaces dedies artisans et admin.
 | MasterPlan        | IMPL    | Branche sur `fetchSitePlan` + fallback statique.                                                 |
 | ReservationModal  | IMPL    | Branche sur `POST /reservations` si JWT present, sinon demo.                                    |
 | LeadForm          | IMPL    | Genere un lien WhatsApp, pas d'API.                                                              |
-| `lib/api.ts`      | IMPL    | 3 endpoints (site-plan, units, reservation, payment-init). Manquent auth + suivi + portal.      |
+| `lib/api.ts`      | IMPL    | `fetchSitePlan` + `createReservation` branchés. Code mort retiré (R5). Manquent auth + suivi + portal.       |
 | **PWA shell**     | **OK**  | Manifest + SW + icônes + offline + update flow (ce jour).                                        |
 
 ### Base de données (`packages/database`)
@@ -61,10 +61,10 @@ réservation 48h, suivi acquéreur), avec des espaces dedies artisans et admin.
   Reservation, PaymentSchedule, Installment, User, Artisan, ArtisanAssignment,
   Document, Notification, Launch, …).
 - `seed.ts` : script de seed present.
-- **TODO** : 0 migration versionnée (`prisma/migrations/` vide). Pour la prod
-  il faut `prisma migrate dev --name init` puis versionner le dossier.
+- **OK** : 2 migrations versionnées (`20260723212901_init`,
+  `20260724045739_add_refresh_tokens`) — schema stable en prod.
 
-## 3. Changements PWA appliqués aujourd'hui (2026-07-23)
+## 3. Changements PWA appliqués (2026-07-23)
 
 Avant cette session, la PWA avait un manifest minimal et un SW basique sans
 strategie differentiee, et **aucune icône PNG n'existait** (refs cassées dans
@@ -95,17 +95,20 @@ strategie differentiee, et **aucune icône PNG n'existait** (refs cassées dans
 
 ### P0 — Obligatoire avant prod
 
-- [ ] **DB : generer et versionner la migration Prisma initiale**
-  (`apps/api` + `packages/database`). Sans cela pas de schema stable.
-- [ ] **Verifier `AuthModule`** : tests sur login/register/JWT (R6 côté
-  securité), valider hash mot de passe (`bcrypt`), expiration token.
-- [ ] **Tester `ReservationModule` e2e** : verrou Redis, expiration BullMQ,
-  confirmation, `checkFundingThreshold`. Tests unitaires presents, manque
-  l'integration.
-- [ ] **Tester `PaymentModule` e2e** : webhooks CinetPay + Stripe en
-  simulation, idempotence double webhook, recalcul launch.
-- [ ] **Variables d'env** : valider que `.env.example` couvre CinetPay + Stripe
-  + Redis + JWT_SECRET + DATABASE_URL. Ne **jamais** committer `.env`.
+- [x] **DB : migration Prisma initiale versionnée** — OK (`20260723212901_init`
+  + `20260724045739_add_refresh_tokens`).
+- [x] **`AuthModule` vérifié et testé** : tests login/register/JWT/refresh
+  (R6), hash `bcrypt`, expiration token. Verts.
+- [x] **`ReservationModule` testé (spec + integration + e2e)** : verrou
+  Redis, expiration BullMQ, confirmation, `checkFundingThreshold`.
+- [x] **`PaymentModule` testé (spec + integration + e2e)** : webhooks
+  CinetPay + Stripe en simulation, idempotence double webhook, recalcul
+  launch. Signatures vérifiées sans bypass dev.
+- [x] **Variables d'env** : `.env.example` couvre CinetPay + Stripe + Redis +
+  JWT + DATABASE_URL + DATABASE_URL_TEST + CORS_ORIGINS. `.env` jamais committé.
+- [ ] **Phase 0 (durcissement backend)** : TS strict + DTOs + guards
+  d'appartenance + code mort retiré — fait. Reste : revue CI sur les tests
+  e2e (dépendent de Postgres/Redis) avant prod.
 
 ### P1 — UX produit essentielle
 
@@ -114,7 +117,7 @@ strategie differentiee, et **aucune icône PNG n'existait** (refs cassées dans
 - [ ] **Front `/artisans` : brancher sur API réelle**
   (`GET /artisans/me/assignment`, `POST /artisans/quotes`).
 - [ ] **Front CatalogGrid : fetch des units réelles**
-  (`fetchBlockUnits` existe mais pas consommé).
+  (`GET /catalog/units` — le helper supprimé en Phase 0 est à recréer typé).
 - [ ] **Front Auth** : pages `/login` + `/register` (le `ReservationModal`
   cherche un JWT qui n'est nulle part créé).
 - [ ] **Notification** : brancher un provider (OneSignal / Firebase / Twilio).
@@ -141,12 +144,18 @@ strategie differentiee, et **aucune icône PNG n'existait** (refs cassées dans
 
 ### P4 — Dette technique observée
 
-- [ ] Plusieurs `.html` standalone à la racine du workspace parent
-  (`landing-page-lancement.html`, `maquette-plan-de-masse.html`) — à migrer ou
-  supprimer une fois les composants React equivalents validés.
-- [ ] `artisan.service.ts` a utiliser `user.role === 'ARTISAN'` — à verifier
-  contre le CLAUDE.md qui impose le lookup `ArtisanAssignment` (R-security).
-- [ ] Plusieurs `@ts-ignore` a chercher (aucun trouvé ce jour, a surveiller).
+- [x] `.html` standalone à la racine du workspace parent
+  (`landing-page-lancement.html`, `maquette-plan-de-masse.html`) — **supprimés**
+  en Phase 0 ; les composants React equivalents sont la référence.
+- [x] `artisan.service.ts` : **conforme** — lookup `ArtisanAssignment` imposé,
+  `requireArtisanId()` → 403 si profil absent (R-security).
+- [x] `as any` / `@ts-ignore` / code mort — **zéro** dans le code de
+  production (Phase 0 : TS strict, DTOs, doublons `auth/roles.*` et méthodes
+  mortes supprimés).
+- [ ] Tests ciblés manquants sur `construction`, `launch`, `catalog`,
+  `project`, `admin` (Phase 0 a couvert auth/payment/reservation).
+- [ ] `apps/api/src/common/testing/test-db.helper.ts` contient encore des
+  `as any` (usage test uniquement) — à typer proprement.
 
 ## 5. Regles rappel (extrait CLAUDE.md)
 
@@ -178,11 +187,18 @@ pnpm --filter web run dev               # Next.js sur :3000
 pnpm --filter web run build && pnpm --filter web run start
 ```
 
-## 7. Definition of Done (semaine courante)
+## 7. Definition of Done — Phase 0 (durcissement backend)
 
 - [x] PWA installable sur Chrome Android + iOS Safari
 - [x] Offline page fonctionnelle
 - [x] Update flow SW (banniere "mettre a jour")
 - [x] Manifest riche (shortcuts, maskable)
 - [x] TS strict sans `any` dans les modifs PWA
-- [x] Build Next.js green (7 routes statiques prerendues)
+- [x] Build Next.js green
+- [x] **TS strict `apps/api`** : `tsc --noEmit` = 0 erreur (81 tests verts avant Phase 0.6)
+- [x] **`as any` / `@ts-ignore` = 0** dans le code de production (DTOs + types Prisma)
+- [x] **Sécurité HTTP** : helmet, CORS restreint + `credentials: true`, ValidationPipe global, Throttler 100 req/min/IP, `@SkipThrottle()` webhooks
+- [x] **Guards d'appartenance** : notifications (`markRead`), contrats (propriétaire/admin), chantier (`publishUpdate` vérifie ArtisanAssignment)
+- [x] **Webhooks durcis** : signature vérifiée systématiquement (aucun bypass `NODE_ENV`), test dédié « pas de bypass dev »
+- [x] **Code mort supprimé** : doublons `auth/roles.*`, `admin.listReservations`/`updateReservationStatus`, `fetchBlockUnits`/`initiatePayment` web, `.html`/`.ts` orphelins racine parent
+- [x] Docs alignées (ROADMAP + CLAUDE.md) ; `CORS_ORIGINS` ajouté à `.env.example`

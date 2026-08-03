@@ -470,9 +470,13 @@ model Document {
   kycOwnerId String?
   kycOwner   User?  @relation("KycDocuments", fields: [kycOwnerId], references: [id])
 
+  artisanAssignmentId String?
+  artisanAssignment   ArtisanAssignment? @relation(fields: [artisanAssignmentId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
 
   @@index([reservationId])
+  @@index([artisanAssignmentId])
   @@map("documents")
 }
 
@@ -558,6 +562,8 @@ model ArtisanAssignment {
   @@index([blockId, status])
   @@index([artisanId, status])
   @@map("artisan_assignments")
+
+  documents Document[]
 }
 
 model Quote {

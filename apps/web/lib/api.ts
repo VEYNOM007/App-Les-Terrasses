@@ -75,6 +75,25 @@ export function fetchMe(): Promise<AuthUser> {
   return apiFetch<AuthUser>('/v1/auth/me');
 }
 
+export interface PasswordResetRequestResponse {
+  message: string;
+  resetToken: string | null;
+}
+
+export function requestPasswordReset(email: string): Promise<PasswordResetRequestResponse> {
+  return apiFetch<PasswordResetRequestResponse>('/v1/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/v1/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword }),
+  });
+}
+
 // ────────────────────────────────────────────────────────────
 // Plan de masse (public)
 // ────────────────────────────────────────────────────────────

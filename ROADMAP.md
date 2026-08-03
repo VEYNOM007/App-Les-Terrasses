@@ -35,7 +35,7 @@ réservation 48h, suivi acquéreur), avec des espaces dedies artisans et admin.
 | `construction`   | IMPL     | `publishUpdate` avec garde-fou launchStatus + vérification d'appartenance artisan (ArtisanAssignment). Pas de test. |
 | `launch`         | IMPL     | `checkFundingThreshold` — logique metier centrale. Pas de test.                                                |
 | `artisan`        | IMPL     | Conforme : vérifie l'ArtisanAssignment (jamais `user.role` seul), `requireArtisanId` → 403 si absent. Côté admin : `listArtisans` / `createArtisan` (mot de passe temporaire non exposé) / `proposeAssignment` / `reviewQuote` (404/400, suppression du cast `as`). |
-| `contract`       | STUB     | Pas de generation PDF reelle. Champ `artisanAssignmentId` manque sur `Document` (workaround via `name`).      |
+| `contract`       | IMPL     | Contrats acheteur/artisan sécurisés et liés à `Document` ; `artisanAssignmentId` est persisté. Génération PDF/signature encore à brancher. |
 | `notification`   | STUB     | Processor BullMQ en place mais aucun client push/email/SMS branché. Ownership `markRead` sécurisé. `POST /admin/clients/:id/relance` branché dessus. |
 | `portal`         | IMPL     | `getDashboard` / `listDocuments` / `getDocumentFile` (téléchargement stream + ownership réservation OU KYC, 403 tiers / 404 absent). Tests unit ownership (R6). |
 | `admin`          | **OK**   | Dashboard (`getOccupancy` / `getOverduePayments`) + artisans + réservations + clients/relance. Guards ADMIN partout. Tests unit `adminSetStatus`/`adminList` (R6). |
@@ -126,7 +126,8 @@ strategie differentiee, et **aucune icône PNG n'existait** (refs cassées dans
 ### P2 — Fonctionnalites metier non-bloquantes
 
 - [ ] **ContractModule** : vraie generation PDF (puppeteer ou partenaire
-  DocuSign) + ajouter `artisanAssignmentId` au schema Prisma.
+  DocuSign) + signature électronique. Le champ `artisanAssignmentId` et sa
+  migration sont désormais en place.
 - [ ] **AdminModule** : dashboard KPIs (ventes, fill rate, launches en cours).
 - [ ] **PortalModule** : clarifier le perimetre (acquereur connecte vs
   commercial vs notaire).

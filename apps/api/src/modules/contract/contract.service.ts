@@ -7,7 +7,7 @@ import { DocumentType, UserRole } from '@prisma/client';
  * Génère et suit les contrats — côté acheteur (contrat de réservation/vente
  * lié à une Reservation) et côté artisan (contrat d'intervention lié à une
  * ArtisanAssignment). Les deux réutilisent le modèle Document existant
- * plutôt que de dupliquer une nouvelle table, avec DocumentType.CONTRAT.
+   * plutôt que de dupliquer une nouvelle table, avec DocumentType.CONTRAT.
  *
  * La génération PDF elle-même (mise en page, signature électronique) est
  * déléguée à un provider externe (ex: DocuSign, ou génération PDF interne
@@ -67,15 +67,12 @@ export class ContractService {
       throw new ForbiddenException("Cette affectation ne vous appartient pas.");
     }
 
-    // Réutilise Document via kycOwnerId détourné en "owner" générique
-    // serait ambigu — dans un schéma plus poussé, on ajouterait un champ
-    // artisanAssignmentId dédié sur Document. Pour ce scaffold, on stocke
-    // la référence dans `name` et on notifie directement.
     const document = await this.prisma.document.create({
       data: {
         type: DocumentType.CONTRAT,
         name: `Contrat artisan - affectation ${assignmentId}`,
         fileUrl,
+        artisanAssignmentId: assignmentId,
       },
     });
 

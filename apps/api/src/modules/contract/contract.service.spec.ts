@@ -1,9 +1,22 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { DocumentType, UserRole } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { ContractSignerType, DocumentType, Prisma, UserRole } from '@prisma/client';
 import { ContractService } from './contract.service';
 import { ContractPdfService } from './contract-pdf.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+
+const VALID_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+const p2002 = () =>
+  new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: '5.22.0',
+  });
 
 const createMockPrisma = () => ({
   reservation: {
@@ -13,6 +26,12 @@ const createMockPrisma = () => ({
     findUnique: jest.fn(),
   },
   document: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+  },
+  contractSignature: {
     create: jest.fn(),
     findMany: jest.fn(),
   },
@@ -24,6 +43,7 @@ const createMockNotifications = () => ({
 
 const createMockPdf = () => ({
   generate: jest.fn().mockResolvedValue('/uploads/contracts/generated.pdf'),
+  sign: jest.fn().mockResolvedValue('/uploads/contracts/signed.pdf'),
 });
 
 describe('ContractService', () => {
@@ -151,6 +171,153 @@ describe('ContractService', () => {
     expect(prisma.document.findMany).toHaveBeenCalledWith({
       where: { reservationId: 'reservation-1', type: DocumentType.CONTRAT },
       orderBy: { createdAt: 'desc' },
+    });
+  });
+
+  describe('signContract', () => {
+    const buyerDocument = {
+      id: 'document-1',
+      fileUrl: '/uploads/contracts/1.pdf',
+      reservation: { userId: 'user-1' },
+      artisanAssignment: null,
+      signatures: [] as { signerType: ContractSignerType; signatureImageUrl: string }[],
+    };
+
+    beforeEach(() => {
+      prisma.contractSignature.create.mockResolvedValue({ id: 'signature-1' });
+      prisma.contractSignature.findMany.mockResolvedValue([]);
+      prisma.document.update.mockResolvedValue({ id: 'document-1', signedFileUrl: '/uploads/contracts/signed.pdf' });
+      prisma.document.findUnique.mockResolvedValue(buyerDocument);
+    });
+
+    it('refuse une image qui n\'est pas un vrai PNG (magic byte)', async () => {
+      await expect(
+        service.signContract('document-1', 'user-1', UserRole.ACHETEUR, Buffer.from('not-a-png')),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.contractSignature.create).not.toHaveBeenCalled();
+    });
+
+    it('refuse un document inconnu', async () => {
+      prisma.document.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('refuse un document sans propriétaire signataire résolvable', async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        id: 'document-1',
+        fileUrl: '/uploads/contracts/1.pdf',
+        reservation: null,
+        artisanAssignment: null,
+        signatures: [],
+      });
+
+      await expect(
+        service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('signe en PROPRIETAIRE pour l\'acheteur propriétaire (jamais ADMIN côté client)', async () => {
+      prisma.contractSignature.findMany.mockResolvedValue([
+        { signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: '/uploads/signatures/a.png' },
+      ]);
+      prisma.document.findUnique.mockResolvedValue(buyerDocument);
+
+      await service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG);
+
+      expect(prisma.contractSignature.create).toHaveBeenCalledWith({
+        data: {
+          documentId: 'document-1',
+          signerType: ContractSignerType.PROPRIETAIRE,
+          signerUserId: 'user-1',
+          signatureImageUrl: expect.stringMatching(/^\/uploads\/signatures\/[0-9a-f-]+\.png$/),
+        },
+      });
+    });
+
+    it('signe en PROPRIETAIRE pour l\'artisan affecté', async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        id: 'document-1',
+        fileUrl: '/uploads/contracts/1.pdf',
+        reservation: null,
+        artisanAssignment: { artisan: { userId: 'artisan-user-1' } },
+        signatures: [],
+      });
+
+      await service.signContract('document-1', 'artisan-user-1', UserRole.ARTISAN, VALID_PNG);
+
+      expect(prisma.contractSignature.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          signerType: ContractSignerType.PROPRIETAIRE,
+          signerUserId: 'artisan-user-1',
+        }),
+      });
+    });
+
+    it('refuse un tiers (ni propriétaire ni admin)', async () => {
+      await expect(
+        service.signContract('document-1', 'intruder-1', UserRole.ACHETEUR, VALID_PNG),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.contractSignature.create).not.toHaveBeenCalled();
+    });
+
+    it('refuse la signature ADMIN tant que le propriétaire n\'a pas signé', async () => {
+      prisma.document.findUnique.mockResolvedValue({ ...buyerDocument, signatures: [] });
+
+      await expect(
+        service.signContract('document-1', 'admin-1', UserRole.ADMIN, VALID_PNG),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.contractSignature.create).not.toHaveBeenCalled();
+    });
+
+    it('refuse le doublon de signature PROPRIETAIRE (409)', async () => {
+      prisma.contractSignature.create.mockRejectedValue(p2002());
+
+      await expect(
+        service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('refuse le doublon de signature ADMIN (409)', async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        ...buyerDocument,
+        signatures: [{ signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: '/uploads/signatures/a.png' }],
+      });
+      prisma.contractSignature.create.mockRejectedValue(p2002());
+
+      await expect(
+        service.signContract('document-1', 'admin-1', UserRole.ADMIN, VALID_PNG),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('contresigne le PDF et notifie une fois les deux signatures présentes', async () => {
+      prisma.document.findUnique
+        .mockResolvedValueOnce({
+          ...buyerDocument,
+          signatures: [{ signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: '/uploads/signatures/a.png' }],
+        })
+        .mockResolvedValue({ id: 'document-1', signatures: [] });
+      prisma.contractSignature.findMany.mockResolvedValue([
+        { signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: '/uploads/signatures/a.png' },
+        { signerType: ContractSignerType.ADMIN, signatureImageUrl: '/uploads/signatures/b.png' },
+      ]);
+
+      await service.signContract('document-1', 'admin-1', UserRole.ADMIN, VALID_PNG);
+
+      expect(pdf.sign).toHaveBeenCalledWith('/uploads/contracts/1.pdf', [
+        { label: 'Propriétaire', imageUrl: '/uploads/signatures/a.png' },
+        { label: 'Administration', imageUrl: '/uploads/signatures/b.png' },
+      ]);
+      expect(prisma.document.update).toHaveBeenCalledWith({
+        where: { id: 'document-1' },
+        data: { signedFileUrl: '/uploads/contracts/signed.pdf' },
+      });
+      expect(notifications.notifyUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ title: 'Contrat signé' }),
+      );
     });
   });
 });

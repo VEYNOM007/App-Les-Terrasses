@@ -277,3 +277,15 @@ l'accès des comptes créés sans mot de passe (artisans).
   `Secure` exigent HTTPS) ; provider SMS éventuel pour la remise des tokens
   de reset. L'envoi email SMTP est préparé ; il reste à renseigner les
   identifiants SMTP et le domaine dans l'environnement de production.
+
+## 10. Phase 4 — Parcours web de récupération (2026-08-03)
+
+- [x] **Demande de reset** : page `/forgot-password` reliée à
+  `POST /auth/forgot-password`, avec réponse générique anti-énumération.
+- [x] **Nouveau mot de passe** : page `/reset-password` reliée à
+  `POST /auth/reset-password`, token lu depuis le lien email, validation
+  frontend du mot de passe et confirmation de succès.
+- [x] **Navigation** : lien « Mot de passe oublié ? » ajouté à `/login`.
+- [x] **Vérifications** : routes Next générées en build et typecheck web
+  sans erreur.
+- [ ] **Reste** : reverse proxy TLS VPS et éventuel provider SMS.

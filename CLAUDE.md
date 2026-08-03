@@ -131,3 +131,7 @@ dans `.env.example` dans le même commit.
    `common/email/EmailModule`; restent le reverse proxy TLS sur le VPS
    (cookies `Secure` exigent HTTPS), les identifiants SMTP/domaine de prod et
    un éventuel provider SMS (Phase 4).
+8. ~~Phase 4 — parcours web de récupération~~ — **fait pour le flux email**
+   (`/forgot-password`, `/reset-password`, appels API typés, validation du
+   nouveau mot de passe). Restent le reverse proxy TLS VPS et un éventuel
+   provider SMS.

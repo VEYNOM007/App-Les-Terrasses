@@ -81,9 +81,9 @@ téléchargement `GET /portal/documents/:id/download` vérifie l'appartenance
 ### Modules encore à l'état de squelette (voir avant d'étoffer)
 `ContractModule` et la partie dispatch de `NotificationModule` restent
 volontairement minces :
-- `ContractService` : pas de génération PDF réelle, pas de champ
-  `artisanAssignmentId` dédié sur `Document` (actuellement stocké dans
-  `name`, à corriger proprement en ajoutant le champ au schema).
+- `ContractService` : pas de génération PDF réelle ni signature électronique.
+  Le champ `artisanAssignmentId` dédié sur `Document` est maintenant en place
+  et utilisé pour les contrats artisans.
 - `NotificationDispatchProcessor` : pas de client push/SMS branché. L'envoi
   email transactionnel de reset passe par `common/email/EmailService` (SMTP)
   et ne dépend pas du worker BullMQ.

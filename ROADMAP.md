@@ -27,18 +27,18 @@ réservation 48h, suivi acquéreur), avec des espaces dedies artisans et admin.
 
 | Module           | Etat     | Notes                                                                                                          |
 |------------------|----------|----------------------------------------------------------------------------------------------------------------|
-| `auth`           | **OK**   | JWT + Strategy + RolesGuard + refresh tokens. Tests spec (bcrypt hash, exp, stratégie) verts (R6).            |
-| `catalog`        | IMPL     | `getSitePlan` / `searchUnits` / `getProject` OK. Pas de test.                                                  |
-| `project`        | IMPL     | CRUD admin sur `Project` via DTOs typés. A tester.                                                            |
-| `reservation`    | **OK**   | Verrou Redis anti-double-vente, expiration BullMQ, tests spec + integration + e2e (R6).                       |
-| `payment`        | **OK**   | Clients CinetPay + Stripe réels (fallback démo si clés absentes), webhooks signés sans bypass dev, idempotence `markInstallmentPaid`, tests spec + integration + e2e (R6). |
+| `auth`           | **OK**   | JWT + Strategy + RolesGuard + refresh tokens. Tests spec (bcrypt hash, exp, stratégie) verts (R6). `POST /auth/kyc` (multipart, upload local `uploads/kyc/`, `kycStatus=EN_ATTENTE`). |
+| `catalog`        | IMPL     | `getSitePlan` / `searchUnits` / `getProject` / `getProjectBlocks` OK. Pas de test.                            |
+| `project`        | IMPL     | CRUD admin + `GET /admin/projects` (`listAllProjects` câblé, inclut brouillons). A tester.                     |
+| `reservation`    | **OK**   | Verrou Redis anti-double-vente, expiration BullMQ, `GET /reservations/:id` (garde appartenance 403), admin `adminList`/`adminSetStatus` (CONFIRMEE→unité VENDU + `checkFundingThreshold`). Tests spec + integration + e2e (R6). |
+| `payment`        | **OK**   | Clients CinetPay + Stripe réels (fallback démo si clés absentes), webhooks signés sans bypass dev, idempotence `markInstallmentPaid`. + `GET /payments/schedule/:reservationId` (ownership) + `GET /payments/history`. Tests spec + integration + e2e (R6). |
 | `construction`   | IMPL     | `publishUpdate` avec garde-fou launchStatus + vérification d'appartenance artisan (ArtisanAssignment). Pas de test. |
 | `launch`         | IMPL     | `checkFundingThreshold` — logique metier centrale. Pas de test.                                                |
-| `artisan`        | IMPL     | Conforme : vérifie l'ArtisanAssignment (jamais `user.role` seul), `requireArtisanId` → 403 si absent. Pas de test dédié. |
+| `artisan`        | IMPL     | Conforme : vérifie l'ArtisanAssignment (jamais `user.role` seul), `requireArtisanId` → 403 si absent. Côté admin : `listArtisans` / `createArtisan` (mot de passe temporaire non exposé) / `proposeAssignment` / `reviewQuote` (404/400, suppression du cast `as`). |
 | `contract`       | STUB     | Pas de generation PDF reelle. Champ `artisanAssignmentId` manque sur `Document` (workaround via `name`).      |
-| `notification`   | STUB     | Processor BullMQ en place mais aucun client push/email/SMS branché. Ownership `markRead` sécurisé.             |
-| `portal`         | STUB     | Service de 33 LOC, à definir (acquereur connecte ?).                                                          |
-| `admin`          | STUB     | `getOccupancy` / `getOverduePayments` typés. Méthodes mortes supprimées. Dashboard à definir.                 |
+| `notification`   | STUB     | Processor BullMQ en place mais aucun client push/email/SMS branché. Ownership `markRead` sécurisé. `POST /admin/clients/:id/relance` branché dessus. |
+| `portal`         | IMPL     | `getDashboard` / `listDocuments` / `getDocumentFile` (téléchargement stream + ownership réservation OU KYC, 403 tiers / 404 absent). Tests unit ownership (R6). |
+| `admin`          | **OK**   | Dashboard (`getOccupancy` / `getOverduePayments`) + artisans + réservations + clients/relance. Guards ADMIN partout. Tests unit `adminSetStatus`/`adminList` (R6). |
 
 ### Frontend (`apps/web`)
 
@@ -202,3 +202,34 @@ pnpm --filter web run build && pnpm --filter web run start
 - [x] **Webhooks durcis** : signature vérifiée systématiquement (aucun bypass `NODE_ENV`), test dédié « pas de bypass dev »
 - [x] **Code mort supprimé** : doublons `auth/roles.*`, `admin.listReservations`/`updateReservationStatus`, `fetchBlockUnits`/`initiatePayment` web, `.html`/`.ts` orphelins racine parent
 - [x] Docs alignées (ROADMAP + CLAUDE.md) ; `CORS_ORIGINS` ajouté à `.env.example`
+
+## 8. Phase 2 — Complétude OpenAPI (2026-08-03)
+
+Objectif : aligner le code sur `openapi-residence-catalog.yaml` — 14 endpoints
+manquants implémentés (dont des méthodes mortes câblées), avec tests R6.
+
+- [x] **Lecture publique** : `GET /catalog/projects/:id/blocks` ;
+  `GET /reservations/:id` (404/403 appartenance) ;
+  `GET /payments/schedule/:reservationId` (ownership) + `GET /payments/history`.
+- [x] **Fichiers (KYC + download)** : `POST /auth/kyc` (multipart `documentType` +
+  `file`, PNG/JPG/PDF ≤ 5 Mo, nom fichier généré UUID, `kycStatus=EN_ATTENTE`) ;
+  `GET /portal/documents/:id/download` (stream + ownership réservation OU KYC).
+  `uploads/` ajouté au `.gitignore`. `@types/multer` installé.
+- [x] **Admin** : `GET /admin/projects` (`listAllProjects` câblé) ;
+  `GET|POST /admin/artisans` ; `POST /admin/artisans/assignments`
+  (`proposeAssignment` câblé) ; `PATCH /admin/artisans/quotes/:id/review`
+  (`reviewQuote` câblé, cast `as` supprimé, gardes 404/400) ;
+  `GET /admin/reservations` + `PATCH /admin/reservations/:id/status`
+  (CONFIRMEE → unité VENDU + `checkFundingThreshold`, ANNULEE → unité DISPONIBLE) ;
+  `POST /admin/clients/:id/relance` (notification).
+  Tout sous `@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles('ADMIN')`.
+- [x] **Infra tests** : `RedisModule.onApplicationShutdown` ferme la connexion
+  ioredis (le worker jest restait bloqué après les e2e) ; `maxWorkers: 1` dans
+  la config jest (suites e2e/integration partageant `DATABASE_URL_TEST`, TRUNCATE
+  croisés en parallèle).
+- [x] **Vérifs** : `tsc --noEmit` = 0 erreur ; suite jest verte (10 suites,
+  104 tests : + KYC, + getSchedule/getHistory, + adminSetStatus/adminList,
+  + getDocumentFile) ; `nest build` OK.
+- [ ] **À noter (hors Phase 2)** : `createArtisan` génère un mot de passe
+  temporaire non exposé — un flux de réinitialisation de mot de passe est requis
+  avant que le compte artisan soit utilisable (à prévoir en Phase 3).

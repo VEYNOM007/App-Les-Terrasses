@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { DocumentType, KycStatus } from '@prisma/client';
 
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 30;
@@ -130,6 +131,29 @@ export class AuthService {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
+    });
+  }
+
+  /**
+   * Enregistre une pièce d'identité téléversée et passe le user en
+   * `kycStatus = EN_ATTENTE`. Le fichier a déjà été écrit sur disque par
+   * multer (fileFilter + limits appliqués) ; la base ne référence que le
+   * chemin relatif.
+   */
+  async uploadKyc(userId: string, file: { filename: string; originalname: string }) {
+    await this.prisma.document.create({
+      data: {
+        type: DocumentType.PIECE_IDENTITE,
+        name: file.originalname,
+        fileUrl: `/uploads/kyc/${file.filename}`,
+        kycOwnerId: userId,
+      },
+    });
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { kycStatus: KycStatus.EN_ATTENTE },
+      select: { id: true, kycStatus: true },
     });
   }
 

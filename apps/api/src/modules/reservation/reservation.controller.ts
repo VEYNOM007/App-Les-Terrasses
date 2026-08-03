@@ -19,6 +19,11 @@ export class ReservationController {
     return this.reservationService.findByUser(user.id);
   }
 
+  @Get(':id')
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.reservationService.findOne(id, user.id);
+  }
+
   @Delete(':id')
   cancel(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.reservationService.cancelReservation(id, user.id);

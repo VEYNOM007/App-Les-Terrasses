@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   Param,
   Headers,
@@ -32,6 +33,24 @@ export class PaymentController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.paymentService.initiatePayment(installmentId, provider, user.id);
+  }
+
+  /**
+   * Échéancier de paiement d'une réservation (propriétaire uniquement).
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('schedule/:reservationId')
+  getSchedule(@Param('reservationId') reservationId: string, @CurrentUser() user: AuthUser) {
+    return this.paymentService.getSchedule(reservationId, user.id);
+  }
+
+  /**
+   * Historique des paiements de l'utilisateur connecté.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('history')
+  getHistory(@CurrentUser() user: AuthUser) {
+    return this.paymentService.getHistory(user.id);
   }
 
   /**

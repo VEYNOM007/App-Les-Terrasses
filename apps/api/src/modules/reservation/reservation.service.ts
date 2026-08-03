@@ -10,8 +10,16 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisLockService } from '../../common/redis/redis-lock.service';
 import { LaunchService } from '../launch/launch.service';
 import { UnitStatus, ReservationStatus } from '@prisma/client';
+import { AdminReservationStatusInput } from '../admin/dto/reservation-status.dto';
 
 const RESERVATION_HOLD_HOURS = 48;
+
+const RESERVATION_STATUS_BY_INPUT: Record<AdminReservationStatusInput, ReservationStatus> = {
+  en_attente: ReservationStatus.EN_ATTENTE,
+  confirmee: ReservationStatus.CONFIRMEE,
+  annulee: ReservationStatus.ANNULEE,
+  livree: ReservationStatus.LIVREE,
+};
 
 @Injectable()
 export class ReservationService {
@@ -155,5 +163,82 @@ export class ReservationService {
       include: { unit: true, paymentSchedule: { include: { installments: true } } },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Détail d'une réservation — réservé à son propriétaire. 404 si
+   * inexistante, 403 si elle appartient à un autre utilisateur.
+   */
+  async findOne(reservationId: string, userId: string) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: {
+        unit: { include: { block: true } },
+        paymentSchedule: { include: { installments: true } },
+      },
+    });
+
+    if (!reservation) throw new NotFoundException('Réservation introuvable.');
+    if (reservation.userId !== userId) {
+      throw new ForbiddenException('Cette réservation ne vous appartient pas.');
+    }
+
+    return reservation;
+  }
+
+  // ------------- Côté admin -------------
+
+  /**
+   * Liste toutes les réservations (filtre statut optionnel) avec les
+   * coordonnées de l'acheteur — usage back-office commercial.
+   */
+  async adminList(status?: AdminReservationStatusInput) {
+    return this.prisma.reservation.findMany({
+      where: status ? { status: RESERVATION_STATUS_BY_INPUT[status] } : undefined,
+      include: {
+        user: { select: { id: true, fullName: true, email: true, phone: true } },
+        unit: { select: { id: true, blockId: true, type: true, floor: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Changement manuel de statut (vente commerciale hors app, livraison…).
+   * Prépare le même invariant que `confirmReservation()` :
+   *  - CONFIRMEE  -> unité VENDU + recalcul du seuil de financement du lot
+   *  - ANNULEE    -> unité de nouveau DISPONIBLE
+   *  - les autres transitions ne touchent que la réservation.
+   */
+  async adminSetStatus(reservationId: string, status: AdminReservationStatusInput) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: reservationId },
+    });
+    if (!reservation) throw new NotFoundException('Réservation introuvable.');
+
+    const target = RESERVATION_STATUS_BY_INPUT[status];
+    if (reservation.status === target) return reservation;
+
+    if (target === ReservationStatus.CONFIRMEE) {
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.reservation.update({ where: { id: reservationId }, data: { status: target } }),
+        this.prisma.unit.update({ where: { id: reservation.unitId }, data: { status: UnitStatus.VENDU } }),
+      ]);
+
+      const unit = await this.prisma.unit.findUniqueOrThrow({ where: { id: reservation.unitId } });
+      await this.launchService.checkFundingThreshold(unit.blockId);
+
+      return updated;
+    }
+
+    if (target === ReservationStatus.ANNULEE) {
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.reservation.update({ where: { id: reservationId }, data: { status: target } }),
+        this.prisma.unit.update({ where: { id: reservation.unitId }, data: { status: UnitStatus.DISPONIBLE } }),
+      ]);
+      return updated;
+    }
+
+    return this.prisma.reservation.update({ where: { id: reservationId }, data: { status: target } });
   }
 }

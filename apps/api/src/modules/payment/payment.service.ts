@@ -75,6 +75,45 @@ export class PaymentService {
   }
 
   /**
+   * Échéancier de paiement d'une réservation — réservé à son propriétaire.
+   * 404 si l'échéancier (ou la réservation) n'existe pas pour ce user :
+   * on ne révèle pas l'existence d'une réservation d'un tiers.
+   */
+  async getSchedule(reservationId: string, userId: string) {
+    const schedule = await this.prisma.paymentSchedule.findFirst({
+      where: { reservation: { id: reservationId, userId } },
+      include: { installments: { orderBy: { dueDate: 'asc' } } },
+    });
+
+    if (!schedule) {
+      throw new NotFoundException('Échéancier introuvable pour cette réservation.');
+    }
+
+    return {
+      reservationId,
+      totalAmount: schedule.totalAmount,
+      currency: schedule.currency,
+      installments: schedule.installments,
+    };
+  }
+
+  /**
+   * Historique de paiement de l'utilisateur : toutes les échéances de
+   * ses réservations, la plus proche de l'échéance en premier.
+   */
+  async getHistory(userId: string) {
+    return this.prisma.paymentInstallment.findMany({
+      where: { schedule: { reservation: { userId } } },
+      include: {
+        schedule: {
+          select: { reservation: { select: { id: true, unitId: true } } },
+        },
+      },
+      orderBy: { dueDate: 'desc' },
+    });
+  }
+
+  /**
    * Initie le paiement d'une échéance auprès du provider choisi.
    */
   async initiatePayment(installmentId: string, provider: PaymentProvider, userId: string) {

@@ -5,7 +5,7 @@ import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 /**
  * Tests unitaires — PaymentService
@@ -58,10 +58,12 @@ const createMockPrisma = () => ({
   },
   paymentSchedule: {
     create: jest.fn(),
+    findFirst: jest.fn(),
   },
   paymentInstallment: {
     findUnique: jest.fn(),
     findUniqueOrThrow: jest.fn(),
+    findMany: jest.fn(),
     update: jest.fn(),
   },
 });
@@ -259,6 +261,77 @@ describe('PaymentService', () => {
       await expect(
         service.initiatePayment('inst-001', 'PAYPAL' as any, 'user-001'),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ──────────────────────────────────────────────────
+  // getSchedule — échéancier d'une réservation (propriétaire)
+  // ──────────────────────────────────────────────────
+
+  describe('getSchedule', () => {
+    const scheduleFixture = {
+      id: 'sched-001',
+      reservationId: 'res-001',
+      totalAmount: 24_000_000,
+      currency: 'XOF',
+      installments: [
+        { id: 'inst-001', status: 'PAYE', dueDate: new Date('2026-07-01') },
+        { id: 'inst-002', status: 'EN_ATTENTE', dueDate: new Date('2026-09-01') },
+      ],
+    };
+
+    it('devrait renvoyer l\'échéancier au propriétaire de la réservation', async () => {
+      prisma.paymentSchedule.findFirst.mockResolvedValue(scheduleFixture);
+
+      const result = await service.getSchedule('res-001', 'user-001');
+
+      // Le scoping par {id, userId} garantit qu'on ne lit que ses propres réservations
+      expect(prisma.paymentSchedule.findFirst).toHaveBeenCalledWith({
+        where: { reservation: { id: 'res-001', userId: 'user-001' } },
+        include: { installments: { orderBy: { dueDate: 'asc' } } },
+      });
+
+      expect(result).toEqual({
+        reservationId: 'res-001',
+        totalAmount: 24_000_000,
+        currency: 'XOF',
+        installments: expect.any(Array),
+      });
+    });
+
+    it('devrait renvoyer 404 si la réservation n\'appartient pas au user (sans fuiter son existence)', async () => {
+      prisma.paymentSchedule.findFirst.mockResolvedValue(null);
+
+      await expect(service.getSchedule('res-001', 'user-intrus')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  // ──────────────────────────────────────────────────
+  // getHistory — historique des échéances du user
+  // ──────────────────────────────────────────────────
+
+  describe('getHistory', () => {
+    it('devrait lister toutes les échéances des réservations du user, plus récentes d\'abord', async () => {
+      prisma.paymentInstallment.findMany.mockResolvedValue([
+        { id: 'inst-001', status: 'PAYE' },
+        { id: 'inst-002', status: 'EN_ATTENTE' },
+      ]);
+
+      const result = await service.getHistory('user-001');
+
+      expect(prisma.paymentInstallment.findMany).toHaveBeenCalledWith({
+        where: { schedule: { reservation: { userId: 'user-001' } } },
+        include: {
+          schedule: {
+            select: { reservation: { select: { id: true, unitId: true } } },
+          },
+        },
+        orderBy: { dueDate: 'desc' },
+      });
+
+      expect(result).toHaveLength(2);
     });
   });
 

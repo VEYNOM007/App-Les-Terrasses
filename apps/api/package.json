@@ -33,6 +33,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.12",
+    "@types/multer": "^2.2.0",
     "@types/node": "^20.12.12",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.2.1",
@@ -56,6 +57,7 @@
     "setupFiles": [
       "<rootDir>/jest.setup.ts"
     ],
+    "maxWorkers": 1,
     "collectCoverageFrom": [
       "**/*.ts",
       "!**/*.spec.ts",

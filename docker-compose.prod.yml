@@ -3,8 +3,8 @@
 #
 # Prérequis :
 #   - .env rempli à partir de .env.example (secrets réels)
-#   - ports 3000 (web) et 3001 (api) ouverts, ou un reverse
-#     proxy (nginx/caddy) devant qui les route en interne.
+#   - APP_DOMAIN et API_DOMAIN pointent vers ce VPS
+#   - ports 80 et 443 ouverts pour Caddy/Let's Encrypt
 #
 # Usage :
 #   docker compose -f docker-compose.prod.yml up -d --build
@@ -79,8 +79,6 @@ services:
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
       PORT: 3001
-    ports:
-      - "3001:3001"
     volumes:
       - prod-uploads:/app/deploy/uploads
     depends_on:
@@ -94,14 +92,32 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL requis en prod}
     container_name: residence-catalog-prod-web
     restart: unless-stopped
     init: true
-    ports:
-      - "3000:3000"
     depends_on:
       api:
+        condition: service_started
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: residence-catalog-prod-caddy
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN requis en prod}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN requis en prod}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - prod-caddy-data:/data
+      - prod-caddy-config:/config
+    depends_on:
+      api:
+        condition: service_started
+      web:
         condition: service_started
 
 volumes:
@@ -111,3 +127,7 @@ volumes:
     name: residence-catalog-prod-redis-data
   prod-uploads:
     name: residence-catalog-prod-uploads
+  prod-caddy-data:
+    name: residence-catalog-prod-caddy-data
+  prod-caddy-config:
+    name: residence-catalog-prod-caddy-config

@@ -1,0 +1,21 @@
+# Reverse proxy TLS pour la stack de production.
+# Caddy obtient et renouvelle automatiquement les certificats Let's Encrypt
+# dès que APP_DOMAIN et API_DOMAIN pointent vers ce VPS.
+
+{$APP_DOMAIN} {
+	encode gzip
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+	reverse_proxy web:3000
+}
+
+{$API_DOMAIN} {
+	encode gzip
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+	reverse_proxy api:3001
+}

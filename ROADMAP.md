@@ -233,3 +233,41 @@ manquants implémentés (dont des méthodes mortes câblées), avec tests R6.
 - [ ] **À noter (hors Phase 2)** : `createArtisan` génère un mot de passe
   temporaire non exposé — un flux de réinitialisation de mot de passe est requis
   avant que le compte artisan soit utilisable (à prévoir en Phase 3).
+
+## 9. Phase 3 — Prod readiness (2026-08-03)
+
+Objectif : rendre la plateforme déployable sur un VPS (Docker) et débloquer
+l'accès des comptes créés sans mot de passe (artisans).
+
+- [x] **Conteneurisation** : `apps/api/Dockerfile` (multi-stage pnpm :
+  deps → build avec `prisma generate` → runtime `pnpm deploy --prod`,
+  user non-root, openssl/libc6-compat pour Prisma sur Alpine ; cible
+  `migrate` séparée) ; `apps/web/Dockerfile` (Next.js `output: 'standalone'`,
+  `ARG NEXT_PUBLIC_API_URL` inlinée au build) ; `.dockerignore` racine
+  (`**/node_modules` — les `node_modules` imbriqués cassaient les symlinks
+  pnpm dans l'image).
+- [x] **Orchestration** : `docker-compose.prod.yml` (db + redis internes,
+  job one-shot `migrate` (`prisma migrate deploy`) avant l'API, uploads
+  persistants dans un volume, `init: true`, healthchecks) ; compose de dev
+  inchangé. `multer` déclaré en dépendance API (il n'était résolu que par
+  hoisting en dev — absent du bundle de prod sinon). Le client Prisma
+  généré est recopié dans le dossier `pnpm deploy` (le store pnpm global
+  ne l'embarque pas).
+- [x] **Reset de mot de passe (R6)** : modèle `PasswordResetToken` (hash
+  SHA-256, 1h, usage unique) + migration ; `POST /auth/forgot-password`
+  (anti-énumération, token retourné en mode démo uniquement) ;
+  `POST /auth/reset-password` (consomme le token, **révoque tous les
+  refresh tokens** du user) ; `POST /admin/artisans` retourne désormais
+  `{ artisan, resetToken }` — l'admin transmet le token à l'artisan.
+  Spec OpenAPI alignée (`/auth/forgot-password`, `/auth/reset-password`,
+  réponse `POST /admin/artisans`).
+- [x] **Tests R6** : 23 tests unitaires Auth (anti-énumération, expiration,
+  usage unique, révocation des sessions) + 10 tests e2e (flow complet
+  forgot → reset → sessions mortes). Suite complète : 10 suites,
+  114/114 tests verts.
+- [x] **Vérifs** : `tsc --noEmit` = 0 ; builds réels des 3 images OK ;
+  stack prod montée localement : migrations appliquées, `/v1/catalog/projects`
+  200, register/login OK avec cookies `Secure; HttpOnly`, web 200.
+- [ ] **Reste (hors Phase 3)** : reverse proxy TLS sur le VPS (les cookies
+  `Secure` exigent HTTPS) ; provider email/SMS pour la remise des tokens
+  de reset en self-service (actuellement transmis par l'admin ou mode démo).

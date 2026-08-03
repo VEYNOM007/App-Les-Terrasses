@@ -261,13 +261,19 @@ l'accès des comptes créés sans mot de passe (artisans).
   `{ artisan, resetToken }` — l'admin transmet le token à l'artisan.
   Spec OpenAPI alignée (`/auth/forgot-password`, `/auth/reset-password`,
   réponse `POST /admin/artisans`).
-- [x] **Tests R6** : 23 tests unitaires Auth (anti-énumération, expiration,
-  usage unique, révocation des sessions) + 10 tests e2e (flow complet
-  forgot → reset → sessions mortes). Suite complète : 10 suites,
-  114/114 tests verts.
+- [x] **Tests R6** : tests unitaires Auth/Email (anti-énumération, expiration,
+  usage unique, révocation des sessions, remise SMTP) + tests e2e (flow
+  complet forgot → reset → sessions mortes). Suite complète : 11 suites,
+  120/120 tests verts.
+- [x] **Email de reset** : `EmailService` SMTP générique dans
+  `common/email` (Resend, Brevo, Mailgun ou relais SMTP), lien construit via
+  `PUBLIC_WEB_URL`, mode démo hors production si SMTP absent et aucun token
+  exposé/loggé en production. `AuthModule` déclare explicitement sa
+  dépendance à `EmailModule`.
 - [x] **Vérifs** : `tsc --noEmit` = 0 ; builds réels des 3 images OK ;
   stack prod montée localement : migrations appliquées, `/v1/catalog/projects`
   200, register/login OK avec cookies `Secure; HttpOnly`, web 200.
 - [ ] **Reste (hors Phase 3)** : reverse proxy TLS sur le VPS (les cookies
-  `Secure` exigent HTTPS) ; provider email/SMS pour la remise des tokens
-  de reset en self-service (actuellement transmis par l'admin ou mode démo).
+  `Secure` exigent HTTPS) ; provider SMS éventuel pour la remise des tokens
+  de reset. L'envoi email SMTP est préparé ; il reste à renseigner les
+  identifiants SMTP et le domaine dans l'environnement de production.

@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
+import { EmailModule } from './common/email/email.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -25,6 +26,7 @@ import { AdminModule } from './modules/admin/admin.module';
     ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 100 }] }),
     PrismaModule,
     RedisModule,
+    EmailModule,
     NotificationModule, // global, doit être importé tôt
     AuthModule,
     CatalogModule,

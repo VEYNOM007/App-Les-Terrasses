@@ -141,5 +141,5 @@ dans `.env.example` dans le même commit.
    internes). Reste le renseignement des domaines réels et leur DNS.
 10. **Tests métier ciblés** — `ConstructionService` et `LaunchService` sont
     maintenant couverts (garde d’affectation, statut de construction,
-    seuil de pré-vente et transitions de financement). Restent `catalog`,
-    `project`, `admin` et le typage du helper de base de test.
+    seuil de pré-vente et transitions de financement), ainsi que `catalog`,
+    `project` et `admin`. Reste le typage du helper de base de test.

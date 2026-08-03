@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
 import * as request from 'supertest';
 import { AuthModule } from './auth.module';
+import { EmailService } from '../../common/email/email.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
@@ -39,10 +40,12 @@ describe('AuthModule — e2e HTTP cookies httpOnly (supertest)', () => {
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [PrismaModule, AuthModule],
+      imports: [PrismaModule, AuthModule], // AuthModule importe EmailModule (EmailService)
     })
       .overrideProvider(PrismaService)
       .useValue(testPrisma)
+      .overrideProvider(EmailService)
+      .useValue({ sendPasswordResetEmail: jest.fn().mockResolvedValue({ delivered: true, mode: 'smtp' }) })
       .compile();
 
     app = moduleFixture.createNestApplication();

@@ -1,10 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
-import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { EmailService } from '../../common/email/email.service';
 
 /**
  * Tests unitaires — AuthService (refresh tokens durcis)
@@ -93,6 +94,10 @@ const createMockJwtService = () => ({
   verify: jest.fn(),
 });
 
+const createMockEmailService = () => ({
+  sendPasswordResetEmail: jest.fn(),
+});
+
 const REFRESH_TOKEN_VALUE = 'real-refresh-jwt-value';
 const REFRESH_TOKEN_HASH = crypto.createHash('sha256').update(REFRESH_TOKEN_VALUE).digest('hex');
 
@@ -111,6 +116,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let prisma: ReturnType<typeof createMockPrisma>;
   let jwt: ReturnType<typeof createMockJwtService>;
+  let email: ReturnType<typeof createMockEmailService>;
   let hashSpy: HashSpy;
   let compareSpy: CompareSpy;
 
@@ -124,12 +130,14 @@ describe('AuthService', () => {
   beforeEach(async () => {
     prisma = createMockPrisma();
     jwt = createMockJwtService();
+    email = createMockEmailService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
+        { provide: EmailService, useValue: email },
       ],
     }).compile();
 
@@ -511,17 +519,71 @@ describe('AuthService', () => {
       );
     });
 
-    it("ne devrait pas exposer le token en production (le mailer n'est pas encore branche)", async () => {
+    it("en production, ne devrait pas exposer le token mais l'envoyer par email", async () => {
       const previous = process.env.NODE_ENV;
       process.env.NODE_ENV = 'production';
+      email.sendPasswordResetEmail.mockResolvedValue({ delivered: true, mode: 'smtp' });
       prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
 
       try {
         const result = await service.forgotPassword('kofi@test.tg');
+
         expect(result.resetToken).toBeNull();
         expect(prisma.passwordResetToken.create).toHaveBeenCalled();
+
+        const createCall = prisma.passwordResetToken.create.mock.calls[0][0].data;
+        expect(email.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
+        const [to, token] = email.sendPasswordResetEmail.mock.calls[0];
+        expect(to).toBe('kofi@test.tg');
+        // Le token transmis par email est le clair dont seul le hash est persisté
+        expect(crypto.createHash('sha256').update(token).digest('hex')).toBe(createCall.tokenHash);
       } finally {
         process.env.NODE_ENV = previous;
+      }
+    });
+
+    it('en production sans SMTP, ne devrait ni exposer le token ni faire planter la requete', async () => {
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      email.sendPasswordResetEmail.mockResolvedValue({ delivered: false, mode: 'demo' });
+      prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      try {
+        const result = await service.forgotPassword('kofi@test.tg');
+
+        expect(result).toEqual({
+          message:
+            'Si un compte est associé à cet email, un lien de réinitialisation a été envoyé.',
+          resetToken: null,
+        });
+        expect(email.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
+        expect(errorSpy).toHaveBeenCalled();
+      } finally {
+        process.env.NODE_ENV = previous;
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('en production si le SMTP echoue, conserve la reponse anti-enumeration', async () => {
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      email.sendPasswordResetEmail.mockRejectedValue(new Error('SMTP indisponible'));
+      prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
+      const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      try {
+        const result = await service.forgotPassword('kofi@test.tg');
+
+        expect(result).toEqual({
+          message:
+            'Si un compte est associé à cet email, un lien de réinitialisation a été envoyé.',
+          resetToken: null,
+        });
+        expect(errorSpy).toHaveBeenCalled();
+      } finally {
+        process.env.NODE_ENV = previous;
+        errorSpy.mockRestore();
       }
     });
   });

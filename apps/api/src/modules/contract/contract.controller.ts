@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ContractService } from './contract.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -12,19 +12,17 @@ export class ContractController {
   @Post('buyer/:reservationId')
   generateBuyerContract(
     @Param('reservationId') reservationId: string,
-    @Body('fileUrl') fileUrl: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.contractService.generateBuyerContract(reservationId, fileUrl, user.id, user.role);
+    return this.contractService.generateBuyerContract(reservationId, user.id, user.role);
   }
 
   @Post('artisan/:assignmentId')
   generateArtisanContract(
     @Param('assignmentId') assignmentId: string,
-    @Body('fileUrl') fileUrl: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.contractService.generateArtisanContract(assignmentId, fileUrl, user.id, user.role);
+    return this.contractService.generateArtisanContract(assignmentId, user.id, user.role);
   }
 
   @Get('buyer/:reservationId')

@@ -139,3 +139,7 @@ dans `.env.example` dans le même commit.
 9. ~~Phase 4 — reverse proxy TLS~~ — **préparé** (`Caddyfile`, routage
    `APP_DOMAIN`/`API_DOMAIN`, certificats automatiques, ports web/API
    internes). Reste le renseignement des domaines réels et leur DNS.
+10. **Tests métier ciblés** — `ConstructionService` et `LaunchService` sont
+    maintenant couverts (garde d’affectation, statut de construction,
+    seuil de pré-vente et transitions de financement). Restent `catalog`,
+    `project`, `admin` et le typage du helper de base de test.

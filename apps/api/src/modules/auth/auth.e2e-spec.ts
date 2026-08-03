@@ -225,4 +225,114 @@ describe('AuthModule — e2e HTTP cookies httpOnly (supertest)', () => {
     const revokedCount = stored.filter((t) => t.revokedAt !== null).length;
     expect(revokedCount).toBe(1);
   });
+
+  it('POST /auth/forgot-password : reponse identique que le compte existe ou non', async () => {
+    const unknownRes = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/forgot-password`)
+      .send({ email: 'personne@test.tg' });
+
+    expect(unknownRes.status).toBe(200);
+    expect(unknownRes.body.message).toBeTruthy();
+    expect(unknownRes.body.resetToken).toBeNull();
+
+    await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/register`)
+      .send({
+        email: 'reset@test.tg',
+        phone: '+22891000007',
+        password: 'Secret123!',
+        fullName: 'Reset User',
+      })
+      .expect(201);
+
+    const knownRes = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/forgot-password`)
+      .send({ email: 'reset@test.tg' });
+
+    expect(knownRes.status).toBe(200);
+    expect(knownRes.body.message).toBe(unknownRes.body.message); // même message (anti-énumération)
+    expect(knownRes.body.resetToken).toBeTruthy(); // mode démo (NODE_ENV=test)
+  });
+
+  it('POST /auth/reset-password : nouveau mot de passe, anciennes sessions révoquées', async () => {
+    await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/register`)
+      .send({
+        email: 'reset2@test.tg',
+        phone: '+22891000008',
+        password: 'OldPass123!',
+        fullName: 'Reset Two',
+      })
+      .expect(201);
+
+    // Session "attaquant/légitime" avant le reset : on garde son refresh token
+    const loginRes = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/login`)
+      .send({ email: 'reset2@test.tg', password: 'OldPass123!' });
+    const preResetRefresh = extractCookieValue(loginRes, 'refresh_token');
+    expect(preResetRefresh).toBeTruthy();
+
+    // Demande + consommation du token
+    const forgotRes = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/forgot-password`)
+      .send({ email: 'reset2@test.tg' });
+    const token = forgotRes.body.resetToken;
+    expect(token).toBeTruthy();
+
+    const resetRes = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/reset-password`)
+      .send({ token, newPassword: 'NewPass456!' });
+    expect(resetRes.status).toBe(200);
+    expect(resetRes.body).toEqual({ message: 'Mot de passe mis à jour.' });
+
+    // Ancien mot de passe refusé, nouveau accepté
+    await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/login`)
+      .send({ email: 'reset2@test.tg', password: 'OldPass123!' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/login`)
+      .send({ email: 'reset2@test.tg', password: 'NewPass456!' })
+      .expect(200);
+
+    // La session d'avant le reset est morte : refresh refusé
+    await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/refresh`)
+      .set('Cookie', `refresh_token=${preResetRefresh}`)
+      .expect(401);
+  });
+
+  it('POST /auth/reset-password : token invalide -> 400, token déjà utilisé -> 400', async () => {
+    const invalidRes = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/reset-password`)
+      .send({ token: 'token-faux', newPassword: 'NewPass456!' });
+    expect(invalidRes.status).toBe(400);
+
+    await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/register`)
+      .send({
+        email: 'reset3@test.tg',
+        phone: '+22891000009',
+        password: 'Secret123!',
+        fullName: 'Reset Three',
+      })
+      .expect(201);
+
+    const forgotRes = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/forgot-password`)
+      .send({ email: 'reset3@test.tg' });
+    const token = forgotRes.body.resetToken;
+    expect(token).toBeTruthy();
+
+    await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/reset-password`)
+      .send({ token, newPassword: 'NewPass456!' })
+      .expect(200);
+
+    // Usage unique : second appel avec le même token refusé
+    await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/auth/reset-password`)
+      .send({ token, newPassword: 'AutrePass789!' })
+      .expect(400);
+  });
 });

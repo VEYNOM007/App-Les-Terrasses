@@ -123,6 +123,66 @@ paths:
       responses:
         "200": { description: Document reçu, statut KYC mis à jour }
 
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Demander un lien de réinitialisation de mot de passe
+      description: >
+        Réponse identique que l'email existe ou non (anti-énumération).
+        Le token est à usage unique et expire au bout d'une heure. En
+        l'absence de provider email/SMS, il est retourné dans la réponse
+        en mode démo uniquement (NODE_ENV !== production).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: >
+            Demande traitée. Si un compte existe, un token est créé ;
+            `resetToken` n'est renvoyé qu'en mode démo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { type: string }
+                  resetToken: { type: string, nullable: true }
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Définir un nouveau mot de passe via un token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, format: password, minLength: 8 }
+      responses:
+        "200":
+          description: >
+            Mot de passe mis à jour, tous les refresh tokens du user sont
+            révoqués (les sessions existantes expirent au prochain refresh).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { type: string }
+        "400": { description: Token invalide, expiré ou déjà utilisé }
+
   # ============ CATALOG (public) ============
   /catalog/projects:
     get:
@@ -644,6 +704,12 @@ paths:
     post:
       tags: [Admin]
       summary: Enregistrer un nouvel artisan (compte + profil métier)
+      description: >
+        Crée le compte utilisateur (rôle ARTISAN) et le profil métier en une
+        transaction. Aucun mot de passe n'est fourni : un token de
+        réinitialisation à usage unique est généré et retourné à l'admin,
+        qui le transmet à l'artisan par son canal habituel. L'artisan
+        finalise ensuite via `POST /auth/reset-password`.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -651,7 +717,18 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/ArtisanInput' }
       responses:
-        "201": { description: Artisan créé }
+        "201":
+          description: Artisan créé, token de premier accès retourné
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [artisan]
+                properties:
+                  artisan: { $ref: '#/components/schemas/Artisan' }
+                  resetToken:
+                    type: string
+                    description: Token de réinitialisation à usage unique (1h) à transmettre à l'artisan
 
   /admin/artisans/assignments:
     post:

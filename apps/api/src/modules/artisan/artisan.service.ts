@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+import { AuthService } from '../auth/auth.service';
 import { ArtisanTrade, AssignmentStatus, QuoteStatus, UserRole } from '@prisma/client';
 import { ArtisanTradeInput, CreateArtisanDto } from './dto/create-artisan.dto';
 
@@ -33,6 +34,7 @@ export class ArtisanService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationService,
+    private readonly auth: AuthService,
   ) {}
 
   /**
@@ -181,16 +183,17 @@ export class ArtisanService {
 
   /**
    * Crée le compte utilisateur (rôle ARTISAN) + le profil métier en une
-   * transaction. La spec ne prévoit pas de mot de passe : on en génère un
-   * temporaire aléatoire jamais exposé — la provision du mot de passe
-   * réel doit passer par un flux de réinitialisation (hors Phase 2).
+   * transaction. La spec ne prévoit pas de mot de passe : on en stocke un
+   * temporaire aléatoire que personne ne connaît, puis on émet un token de
+   * réinitialisation à usage unique (1h) retourné à l'admin — c'est lui qui
+   * le transmet à l'artisan, qui finalise son accès via `POST /auth/reset-password`.
    */
   async createArtisan(data: CreateArtisanDto) {
     const tempPassword = crypto.randomBytes(18).toString('base64url');
     const passwordHash = await bcrypt.hash(tempPassword, 10);
 
-    return this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
+    const { user, artisan } = await this.prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
         data: {
           email: data.email,
           phone: data.phone,
@@ -200,9 +203,9 @@ export class ArtisanService {
         },
       });
 
-      return tx.artisan.create({
+      const newArtisan = await tx.artisan.create({
         data: {
-          userId: user.id,
+          userId: newUser.id,
           companyName: data.companyName,
           trade: ARTISAN_TRADE_BY_INPUT[data.trade],
           tradeLicenseUrl: data.tradeLicenseUrl,
@@ -211,7 +214,13 @@ export class ArtisanService {
           user: { select: { id: true, email: true, phone: true, fullName: true } },
         },
       });
+
+      return { user: newUser, artisan: newArtisan };
     });
+
+    const resetToken = await this.auth.issuePasswordResetToken(user.id);
+
+    return { artisan, resetToken };
   }
 
   async proposeAssignment(data: { artisanId: string; blockId: string; scope?: string; startDate?: string; endDate?: string }) {

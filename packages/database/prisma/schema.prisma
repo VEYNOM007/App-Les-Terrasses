@@ -174,6 +174,7 @@ model User {
   constructionUpdatesPublished ConstructionUpdate[] @relation("PublishedBy")
   artisanProfile     Artisan?
   refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -211,6 +212,34 @@ model RefreshToken {
   @@index([expiresAt])
   @@index([previousTokenHash])
   @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------
+// PASSWORD RESET TOKENS (usage unique)
+// ---------------------------------------------------
+// Token en clair jamais persisté : seul le hash SHA-256 est stocké (même
+// principe que les refresh tokens — le token est un long random, un hash
+// rapide suffit). Expiration courte (1h) + usage unique (usedAt) pour
+// borner la fenêtre d'utilisation en cas de fuite. Le reset révoque tous
+// les refresh tokens actifs du user (les sessions existantes meurent).
+// La remise du token à l'utilisateur (email/SMS) n'est pas encore branchée
+// (pas de provider) : en mode démo le token est retourné dans la réponse,
+// sinon il est loggé. Voir AuthService.forgotPassword.
+// ---------------------------------------------------
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?  // null = actif ; non-null = déjà consommé
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 // ---------------------------------------------------

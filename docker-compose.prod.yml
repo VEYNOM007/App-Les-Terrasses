@@ -1,0 +1,113 @@
+# ==========================================================
+# Résidence Catalog — stack de production (VPS unique)
+#
+# Prérequis :
+#   - .env rempli à partir de .env.example (secrets réels)
+#   - ports 3000 (web) et 3001 (api) ouverts, ou un reverse
+#     proxy (nginx/caddy) devant qui les route en interne.
+#
+# Usage :
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml logs -f api
+#   docker compose -f docker-compose.prod.yml down
+#
+# Les migrations Prisma sont appliquées par le job one-shot
+# `migrate` avant le démarrage de l'API. Les uploads (KYC,
+# contrats) persistent dans le volume `prod-uploads`.
+# ==========================================================
+
+name: residence-catalog-prod
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: residence-catalog-prod-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis dans .env}
+      POSTGRES_DB: ${POSTGRES_DB:-residence_catalog}
+    # Pas de port hôte exposé : la DB reste dans le réseau interne.
+    volumes:
+      - prod-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: residence-catalog-prod-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - prod-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    container_name: residence-catalog-prod-migrate
+    restart: "no"
+    # DATABASE_URL pointe vers le service interne `db` (jamais localhost ici).
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-residence_catalog}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: residence-catalog-prod-api
+    restart: unless-stopped
+    init: true # init PID 1 : gestion propre des signaux Node
+    env_file: .env
+    environment:
+      # Overrides réseau interne (priment sur .env).
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-residence_catalog}?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - prod-uploads:/app/deploy/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    container_name: residence-catalog-prod-web
+    restart: unless-stopped
+    init: true
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  prod-db-data:
+    name: residence-catalog-prod-db-data
+  prod-redis-data:
+    name: residence-catalog-prod-redis-data
+  prod-uploads:
+    name: residence-catalog-prod-uploads

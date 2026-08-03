@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
@@ -8,6 +8,9 @@ import { DocumentType, KycStatus } from '@prisma/client';
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 30;
 const REFRESH_TOKEN_TTL_MS = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1h
+const RESET_GENERIC_MESSAGE =
+  'Si un compte est associé à cet email, un lien de réinitialisation a été envoyé.';
 
 /**
  * Hash SHA-256 du refresh token. On ne stocke jamais le token en clair :
@@ -132,6 +135,88 @@ export class AuthService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+  }
+
+  /**
+   * Crée un token de réinitialisation à usage unique (1h) pour un user et
+   * retourne le token en clair (seul le hash est persisté). Méthode
+   * publique : utilisée par `forgotPassword` ET par `createArtisan` pour
+   * le premier accès d'un compte créé sans mot de passe.
+   */
+  async issuePasswordResetToken(userId: string): Promise<string> {
+    const rawToken = crypto.randomBytes(32).toString('base64url');
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId,
+        tokenHash: hashRefreshToken(rawToken),
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+      },
+    });
+    return rawToken;
+  }
+
+  /**
+   * Demande de réinitialisation de mot de passe.
+   *
+   * Anti-énumération : la réponse est identique que l'email existe ou non,
+   * et aucun travail coûteux n'est fait quand le compte n'existe pas.
+   *
+   * Remise du token : aucun provider email/SMS n'est encore branché (Phase 4).
+   * Hors production le token est retourné dans la réponse + loggé (mode démo,
+   * comme le fallback des clients de paiement) ; en production il n'est ni
+   * retourné ni loggé — la transmission relève du futur mailer. Les comptes
+   * artisans, eux, reçoivent leur token directement de l'admin (createArtisan).
+   */
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return { message: RESET_GENERIC_MESSAGE, resetToken: null };
+    }
+
+    const rawToken = await this.issuePasswordResetToken(user.id);
+
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(`Reset token pour ${email}: ${rawToken}`);
+      return { message: RESET_GENERIC_MESSAGE, resetToken: rawToken };
+    }
+
+    return { message: RESET_GENERIC_MESSAGE, resetToken: null };
+  }
+
+  /**
+   * Définit un nouveau mot de passe via un token à usage unique.
+   * Vérifie hash + expiration + non-consommation, puis en une transaction :
+   * consomme le token, met à jour le hash et révoque TOUS les refresh tokens
+   * actifs du user (tout reset = toutes les sessions meurent, y compris un
+   * éventuel attaquant ayant obtenu le token).
+   */
+  async resetPassword(token: string, newPassword: string) {
+    const record = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash: hashRefreshToken(token) },
+    });
+
+    if (!record || record.usedAt !== null || record.expiresAt < new Date()) {
+      throw new BadRequestException('Token de réinitialisation invalide ou expiré.');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      });
+      await tx.user.update({
+        where: { id: record.userId },
+        data: { passwordHash },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    });
+
+    return { message: 'Mot de passe mis à jour.' };
   }
 
   /**

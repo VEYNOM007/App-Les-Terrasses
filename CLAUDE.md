@@ -120,6 +120,11 @@ dans `.env.example` dans le même commit.
 5. ~~Phase 1 — parcours acheteur connecté~~ — **fait** (cookies httpOnly JWT,
    pages `/login` `/register`, `/suivi` branché sur l'API).
 6. ~~Phase 2 — complétude OpenAPI~~ — **fait** (14 endpoints implémentés, méthodes
-   mortes câblées, 104 tests verts, docs alignées). Reste Phase 3 prod readiness
-   (VPS + Docker) ; penser aussi au flux de reset de mot de passe pour les
-   comptes artisans créés par `POST /admin/artisans` (mot de passe temporaire non exposé).
+   mortes câblées, 104 tests verts, docs alignées).
+7. ~~Phase 3 — prod readiness~~ — **fait** (Dockerfiles api+web,
+   `docker-compose.prod.yml`, flux reset de mot de passe pour les comptes
+   créés sans mot de passe : artisans via `POST /admin/artisans` →
+   `{ artisan, resetToken }`, self-service via `POST /auth/forgot-password` +
+   `POST /auth/reset-password`). Reste : reverse proxy TLS sur le VPS (cookies
+   `Secure` exigent HTTPS) et provider email/SMS pour la remise des tokens
+   en self-service (Phase 4).

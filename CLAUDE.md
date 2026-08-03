@@ -142,4 +142,4 @@ dans `.env.example` dans le même commit.
 10. **Tests métier ciblés** — `ConstructionService` et `LaunchService` sont
     maintenant couverts (garde d’affectation, statut de construction,
     seuil de pré-vente et transitions de financement), ainsi que `catalog`,
-    `project` et `admin`. Reste le typage du helper de base de test.
+    `project` et `admin`. `as any`/`@ts-ignore` sont absents de `apps/api/src`.

@@ -155,8 +155,7 @@ strategie differentiee, et **aucune icône PNG n'existait** (refs cassées dans
 - [x] Tests ciblés ajoutés sur `catalog`, `project`, `admin` (en plus de
   `construction`/`launch` couverts en Phase 4) ; la suite API atteint
   16 suites et 148 tests verts.
-- [ ] `apps/api/src/common/testing/test-db.helper.ts` contient encore des
-  `as any` (usage test uniquement) — à typer proprement.
+- [x] `as any` / `@ts-ignore` absents de `apps/api/src` (y compris les tests).
 
 ## 5. Regles rappel (extrait CLAUDE.md)
 

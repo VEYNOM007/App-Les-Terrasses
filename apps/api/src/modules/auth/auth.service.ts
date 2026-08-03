@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { EmailService } from '../../common/email/email.service';
 import { DocumentType, KycStatus } from '@prisma/client';
 
 const ACCESS_TOKEN_TTL = '15m';
@@ -26,7 +27,11 @@ function hashRefreshToken(token: string): string {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly email: EmailService,
+  ) {}
 
   async register(data: { email: string; phone: string; password: string; fullName: string; country?: string }) {
     const existing = await this.prisma.user.findFirst({
@@ -161,11 +166,15 @@ export class AuthService {
    * Anti-énumération : la réponse est identique que l'email existe ou non,
    * et aucun travail coûteux n'est fait quand le compte n'existe pas.
    *
-   * Remise du token : aucun provider email/SMS n'est encore branché (Phase 4).
-   * Hors production le token est retourné dans la réponse + loggé (mode démo,
-   * comme le fallback des clients de paiement) ; en production il n'est ni
-   * retourné ni loggé — la transmission relève du futur mailer. Les comptes
-   * artisans, eux, reçoivent leur token directement de l'admin (createArtisan).
+   * Remise du token :
+   *   - Hors production (dev/test) : token retourné dans la réponse + loggé
+   *     (mode démo, comme le fallback des clients de paiement).
+   *   - En production : le token n'est ni retourné ni loggé — il part par
+   *     email via EmailService. Si SMTP n'est pas configuré, une erreur est
+   *     loggée côté serveur (jamais le lien) et la réponse reste générique
+   *     pour ne pas révéler l'existence du compte.
+   * Les comptes artisans, eux, reçoivent leur token directement de l'admin
+   * (createArtisan).
    */
   async forgotPassword(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
@@ -178,6 +187,22 @@ export class AuthService {
     if (process.env.NODE_ENV !== 'production') {
       this.logger.log(`Reset token pour ${email}: ${rawToken}`);
       return { message: RESET_GENERIC_MESSAGE, resetToken: rawToken };
+    }
+
+    let delivered = false;
+    let mode = 'smtp';
+    try {
+      const result = await this.email.sendPasswordResetEmail(user.email, rawToken);
+      delivered = result.delivered;
+      mode = result.mode;
+    } catch {
+      // Ne jamais révéler l'échec SMTP via le statut HTTP ou le message.
+    }
+
+    if (!delivered) {
+      this.logger.error(
+        `Lien de reset pour ${email} non transmis (mode ${mode}) — token émis mais inutilisable.`,
+      );
     }
 
     return { message: RESET_GENERIC_MESSAGE, resetToken: null };

@@ -1,0 +1,28 @@
+# Dépendances / builds (tous les niveaux — monorepo pnpm)
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+
+# Secrets — jamais dans l'image
+.env
+.env.local
+.env.*.local
+
+# Données locales
+uploads/
+*.log
+
+# Fichiers système
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Docs
+ROADMAP.md
+CLAUDE.md
+openapi-residence-catalog.yaml

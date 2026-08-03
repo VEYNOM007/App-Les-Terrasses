@@ -75,6 +75,11 @@ function LoginForm() {
             placeholder="••••••••"
             className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
           />
+          <div className="text-right mt-2">
+            <a href="/forgot-password" className="text-xs text-lagoon-light hover:underline font-mono">
+              Mot de passe oublié ?
+            </a>
+          </div>
         </div>
 
         <button

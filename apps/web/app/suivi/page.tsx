@@ -13,9 +13,19 @@ import {
   AlertCircle,
   Loader2,
   Home,
+  FileText,
+  PenLine,
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
-import { fetchPortalDashboard, PortalDashboard } from '../../lib/api';
+import SignaturePad from '../../components/SignaturePad';
+import {
+  fetchPortalDashboard,
+  fetchPortalDocuments,
+  downloadDocument,
+  signContract,
+  PortalDashboard,
+  PortalDocument,
+} from '../../lib/api';
 
 function formatXOF(value: string | number): string {
   const n = typeof value === 'string' ? Number(value) : value;
@@ -61,6 +71,11 @@ export default function SuiviAcquereur() {
   const [dashboards, setDashboards] = useState<PortalDashboard[]>([]);
   const [error, setError] = useState('');
   const [loadingData, setLoadingData] = useState(true);
+  const [documents, setDocuments] = useState<PortalDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+  const [documentsError, setDocumentsError] = useState('');
+  const [signingDocumentId, setSigningDocumentId] = useState<string | null>(null);
+  const [signingError, setSigningError] = useState('');
 
   useEffect(() => {
     if (isLoading) return;
@@ -85,6 +100,57 @@ export default function SuiviAcquereur() {
   useEffect(() => {
     if (user) void load();
   }, [user, load]);
+
+  const loadDocuments = useCallback(async () => {
+    setDocumentsLoading(true);
+    setDocumentsError('');
+    try {
+      const data = await fetchPortalDocuments();
+      setDocuments(data);
+    } catch (err) {
+      setDocumentsError(err instanceof Error ? err.message : 'Impossible de charger vos documents.');
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) void loadDocuments();
+  }, [user, loadDocuments]);
+
+  const handleDownload = async (documentId: string) => {
+    try {
+      const blob = await downloadDocument(documentId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'contrat.pdf';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setSigningError('Téléchargement impossible pour le moment.');
+    }
+  };
+
+  const handleConfirmSignature = async (documentId: string, signature: Blob) => {
+    setSigningError('');
+    try {
+      await signContract(documentId, signature);
+      setSigningDocumentId(null);
+      await loadDocuments();
+    } catch (err) {
+      setSigningError(err instanceof Error ? err.message : 'Signature impossible pour le moment.');
+    }
+  };
+
+  const hasOwnerSignature = (document: PortalDocument) =>
+    document.signatures?.some((s) => s.signerType === 'PROPRIETAIRE') ?? false;
+
+  const isFullySigned = (document: PortalDocument) =>
+    document.signatures?.some((s) => s.signerType === 'PROPRIETAIRE') === true &&
+    document.signatures?.some((s) => s.signerType === 'ADMIN') === true;
 
   if (isLoading || !user) {
     return (
@@ -282,6 +348,104 @@ export default function SuiviAcquereur() {
               </div>
             );
           })
+        )}
+
+        <div className="bg-ink-card border border-paper/20 rounded-md p-6">
+          <h3 className="font-serif text-xl font-semibold text-paper mb-4 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-sand" /> Mes Documents & Contrats
+          </h3>
+
+          {documentsLoading ? (
+            <div className="flex items-center gap-3 font-mono text-xs text-paper/60 py-8">
+              <Loader2 className="w-4 h-4 animate-spin text-laterite-light" /> Chargement de vos
+              documents…
+            </div>
+          ) : documentsError ? (
+            <div className="bg-laterite/15 border border-laterite/40 rounded p-4 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-laterite-light shrink-0" />
+              <p className="text-xs text-paper font-mono flex-1">{documentsError}</p>
+              <button
+                onClick={() => void loadDocuments()}
+                className="bg-paper/10 hover:bg-paper/20 text-paper font-mono text-xs px-3 py-1.5 rounded"
+              >
+                Réessayer
+              </button>
+            </div>
+          ) : documents.length === 0 ? (
+            <p className="text-xs text-paper/60 font-mono">
+              Aucun document disponible pour le moment. Votre contrat apparaîtra ici une fois généré.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {documents.map((document) => {
+                const signed = isFullySigned(document);
+                const ownerSigned = hasOwnerSignature(document);
+                return (
+                  <div
+                    key={document.id}
+                    className="p-3.5 bg-paper/5 border border-paper/10 rounded flex flex-col md:flex-row md:items-center gap-3"
+                  >
+                    <div className="flex-1">
+                      <div className="font-mono text-sm text-paper font-bold">{document.name}</div>
+                      <div className="text-xs text-paper/50 font-mono">
+                        Créé le {formatDate(document.createdAt)} ·{' '}
+                        {signed ? (
+                          <span className="text-lagoon-light">Signé</span>
+                        ) : ownerSigned ? (
+                          <span className="text-sand">Signé propriétaire — en attente de l'administration</span>
+                        ) : (
+                          <span>En attente de signature</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => void handleDownload(document.id)}
+                        className="inline-flex items-center gap-2 border border-paper/30 hover:border-sand text-paper font-mono text-xs px-3 py-2 rounded transition-all"
+                      >
+                        <Download className="w-4 h-4" /> Télécharger
+                      </button>
+                      {!signed && !ownerSigned && (
+                        <button
+                          onClick={() => setSigningDocumentId(document.id)}
+                          className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-3 py-2 rounded transition-all font-semibold"
+                        >
+                          <PenLine className="w-4 h-4" /> Signer
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {signingDocumentId && (
+          <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="w-full max-w-lg bg-ink border border-paper/25 rounded-md p-5 space-y-4">
+              <h4 className="font-serif text-lg font-semibold text-paper">
+                Signature de votre contrat
+              </h4>
+              <p className="text-xs text-paper/60 font-mono">
+                Dessinez votre signature manuscrite ci-dessous puis validez. Votre signature est
+                transmise de façon sécurisée et l'administration contresignera ensuite.
+              </p>
+              {signingError && (
+                <div className="bg-laterite/15 border border-laterite/40 rounded p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-laterite-light shrink-0" />
+                  <p className="text-xs text-paper font-mono">{signingError}</p>
+                </div>
+              )}
+              <SignaturePad
+                onConfirm={(blob) => void handleConfirmSignature(signingDocumentId, blob)}
+                onCancel={() => {
+                  setSigningDocumentId(null);
+                  setSigningError('');
+                }}
+              />
+            </div>
+          </div>
         )}
       </div>
 

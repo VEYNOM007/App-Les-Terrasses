@@ -152,9 +152,9 @@ strategie differentiee, et **aucune icône PNG n'existait** (refs cassées dans
 - [x] `as any` / `@ts-ignore` / code mort — **zéro** dans le code de
   production (Phase 0 : TS strict, DTOs, doublons `auth/roles.*` et méthodes
   mortes supprimés).
-- [ ] Tests ciblés manquants sur `catalog`, `project`, `admin` (Phase 0 a
-  couvert auth/payment/reservation ; Phase 4 couvre désormais
-  `construction`/`launch`).
+- [x] Tests ciblés ajoutés sur `catalog`, `project`, `admin` (en plus de
+  `construction`/`launch` couverts en Phase 4) ; la suite API atteint
+  16 suites et 148 tests verts.
 - [ ] `apps/api/src/common/testing/test-db.helper.ts` contient encore des
   `as any` (usage test uniquement) — à typer proprement.
 

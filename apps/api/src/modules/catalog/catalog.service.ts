@@ -60,7 +60,10 @@ export class CatalogService {
   }
 
   async getUnit(id: string) {
-    return this.prisma.unit.findUnique({ where: { id }, include: { block: true } });
+    return this.prisma.unit.findFirst({
+      where: { id, block: { project: { status: ProjectStatus.PUBLIE } } },
+      include: { block: true },
+    });
   }
 
   /**

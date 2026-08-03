@@ -95,6 +95,14 @@ enum DocumentType {
   DEVIS
 }
 
+// Qui a signé un contrat : le propriétaire (acheteur ou artisan) signe
+// d'abord (PROPRIETAIRE), puis un admin contresigne (ADMIN). L'ordre et
+// l'unicité sont appliqués en base via @@unique([documentId, signerType]).
+enum ContractSignerType {
+  PROPRIETAIRE
+  ADMIN
+}
+
 enum NotificationChannel {
   PUSH
   EMAIL
@@ -175,6 +183,7 @@ model User {
   artisanProfile     Artisan?
   refreshTokens      RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  contractSignatures ContractSignature[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -473,11 +482,37 @@ model Document {
   artisanAssignmentId String?
   artisanAssignment   ArtisanAssignment? @relation(fields: [artisanAssignmentId], references: [id], onDelete: Cascade)
 
+  // PDF contresigné : l'original `fileUrl` reste intact (audit), la version
+  // signée (2 images de signature embarquées) est stockée à part.
+  signedFileUrl String?
+
+  signatures ContractSignature[]
+
   createdAt DateTime @default(now())
 
   @@index([reservationId])
   @@index([artisanAssignmentId])
   @@map("documents")
+}
+
+// Une ligne par signataire d'un contrat. L'unicité (documentId, signerType)
+// rend la double signature PROPRIETAIRE puis ADMIN immuable en base : un
+// doublon lève P2002, traduit en 409 Conflict par ContractService.
+model ContractSignature {
+  id         String @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  signerType        ContractSignerType
+  signerUserId      String
+  signerUser        User @relation(fields: [signerUserId], references: [id])
+  signatureImageUrl String
+
+  signedAt DateTime @default(now())
+
+  @@unique([documentId, signerType])
+  @@index([documentId])
+  @@map("contract_signatures")
 }
 
 // ---------------------------------------------------

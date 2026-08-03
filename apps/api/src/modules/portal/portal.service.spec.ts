@@ -23,6 +23,7 @@ const mockResolveUploadFilePath = resolveUploadFilePath as jest.MockedFunction<
 const createMockPrisma = () => ({
   document: {
     findUnique: jest.fn(),
+    findMany: jest.fn(),
   },
 });
 
@@ -80,6 +81,21 @@ describe('PortalService', () => {
       expect(result).toBeDefined();
     });
 
+    it('devrait servir la version contresignée (signedFileUrl) quand elle existe', async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        id: 'doc-003',
+        fileUrl: '/uploads/contracts/original.pdf',
+        signedFileUrl: '/uploads/contracts/signed.pdf',
+        reservation: { userId: 'user-001' },
+        kycOwner: null,
+      });
+
+      const result = await service.getDocumentFile('doc-003', 'user-001');
+
+      expect(mockResolveUploadFilePath).toHaveBeenCalledWith('/uploads/contracts/signed.pdf');
+      expect(result).toBeDefined();
+    });
+
     it('devrait rejeter (403) un document appartenant à un autre utilisateur', async () => {
       prisma.document.findUnique.mockResolvedValue({
         id: 'doc-001',
@@ -100,6 +116,24 @@ describe('PortalService', () => {
       await expect(service.getDocumentFile('doc-inexistant', 'user-001')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('listDocuments', () => {
+    it('devrait lister les contrats d\'une réservation ET d\'une affectation artisan', async () => {
+      prisma.document.findMany.mockResolvedValue([]);
+
+      await service.listDocuments('user-001');
+
+      expect(prisma.document.findMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { reservation: { userId: 'user-001' } },
+            { artisanAssignment: { artisan: { userId: 'user-001' } } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
     });
   });
 });

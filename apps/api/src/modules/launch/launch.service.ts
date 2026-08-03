@@ -104,7 +104,8 @@ export class LaunchService {
       generatedAt: new Date(),
       totalUnits: block.units.length,
       soldUnits: soldUnits.length,
-      fillRatePercent: Math.round((soldUnits.length / block.units.length) * 100),
+      fillRatePercent:
+        block.units.length === 0 ? 0 : Math.round((soldUnits.length / block.units.length) * 100),
       totalPreVenduAmount: totalPreVendu,
       totalDejaEncaisseAmount: totalDejaEncaisse,
       currency: soldUnits[0]?.currency ?? 'XOF',
@@ -180,13 +181,14 @@ export class LaunchService {
     const soldUnits = block.units.filter(
       (u) => u.status === UnitStatus.VENDU || u.status === UnitStatus.LIVRE,
     ).length;
+    const totalUnits = block.units.length;
 
     return {
       launchStatus: block.launchStatus,
       fundingThresholdPercent: block.fundingThresholdPercent,
-      currentFillRatePercent: Math.round((soldUnits / block.units.length) * 100),
+      currentFillRatePercent: totalUnits === 0 ? 0 : Math.round((soldUnits / totalUnits) * 100),
       soldUnits,
-      totalUnits: block.units.length,
+      totalUnits,
       thresholdReachedAt: block.thresholdReachedAt,
       financingSecuredAt: block.financingSecuredAt,
     };

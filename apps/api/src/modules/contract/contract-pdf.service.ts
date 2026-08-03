@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
-import { UPLOAD_ROOT } from '../../common/files/uploads.util';
+import { UPLOAD_ROOT, resolveUploadFilePath } from '../../common/files/uploads.util';
 
 export interface ContractPdfSection {
   heading: string;
@@ -14,6 +14,11 @@ export interface ContractPdfInput {
   title: string;
   reference: string;
   sections: ContractPdfSection[];
+}
+
+export interface ContractPdfSignature {
+  label: string;
+  imageUrl: string;
 }
 
 const PAGE_WIDTH = 595.28;
@@ -74,12 +79,61 @@ export class ContractPdfService {
     cursorY -= 15;
     drawLine('Document généré automatiquement par Résidence Catalog.', { size: 9 });
 
+    return this.persist(document);
+  }
+
+  /**
+   * Contresigne un PDF existant : charge le fichier original (résolu via
+   * resolveUploadFilePath), incorpore les images de signature (PNG) sur la
+   * dernière page et écrit une version signée à part. L'original reste
+   * intact — seul `signedFileUrl` référence la copie signée.
+   */
+  async sign(fileUrl: string, signatures: ContractPdfSignature[]): Promise<string> {
+    const { absolutePath } = resolveUploadFilePath(fileUrl);
+    const document = await PDFDocument.load(await readFile(absolutePath));
+    const regular = await document.embedFont(StandardFonts.Helvetica);
+    const bold = await document.embedFont(StandardFonts.HelveticaBold);
+    const page = document.getPage(document.getPageCount() - 1);
+    const { width: pageWidth } = page.getSize();
+
+    const signatureBoxHeight = 70;
+    const gap = 40;
+    const available = pageWidth - MARGIN * 2 - gap * (signatures.length - 1);
+    const boxWidth = available / signatures.length;
+
+    let cursorY = MARGIN;
+    page.drawText('SIGNATURES', { x: MARGIN, y: cursorY, size: 13, font: bold });
+    cursorY -= 32;
+
+    let x = MARGIN;
+    for (const signature of signatures) {
+      const { absolutePath: imagePath } = resolveUploadFilePath(signature.imageUrl);
+      const image = await document.embedPng(await readFile(imagePath));
+      const scale = Math.min(boxWidth / image.width, signatureBoxHeight / image.height);
+      const drawWidth = image.width * scale;
+      const drawHeight = image.height * scale;
+      page.drawImage(image, { x, y: cursorY - drawHeight, width: drawWidth, height: drawHeight });
+      page.drawText(signature.label, { x, y: cursorY - drawHeight - 14, size: 9, font: regular });
+      x += boxWidth + gap;
+    }
+
+    page.drawText(`Document signé le ${new Date().toISOString()}`, {
+      x: MARGIN,
+      y: MARGIN - 18,
+      size: 9,
+      font: regular,
+      color: rgb(0.45, 0.45, 0.45),
+    });
+
+    return this.persist(document);
+  }
+
+  private async persist(document: PDFDocument): Promise<string> {
     const fileName = `${randomUUID()}.pdf`;
     const relativeDirectory = 'contracts';
     const absoluteDirectory = path.join(UPLOAD_ROOT, relativeDirectory);
     await mkdir(absoluteDirectory, { recursive: true });
     await writeFile(path.join(absoluteDirectory, fileName), await document.save());
-
     return `/uploads/${relativeDirectory}/${fileName}`;
   }
 }

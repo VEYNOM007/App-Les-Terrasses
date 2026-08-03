@@ -27,7 +27,12 @@ export class PortalService {
 
   async listDocuments(userId: string) {
     return this.prisma.document.findMany({
-      where: { reservation: { userId } },
+      where: {
+        OR: [
+          { reservation: { userId } },
+          { artisanAssignment: { artisan: { userId } } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -54,6 +59,8 @@ export class PortalService {
       throw new ForbiddenException("Ce document ne vous appartient pas.");
     }
 
-    return resolveUploadFilePath(document.fileUrl);
+    // Un contrat signé se télécharge dans sa version contresignée ; l'original
+    // (fileUrl) reste archivé pour l'audit.
+    return resolveUploadFilePath(document.signedFileUrl ?? document.fileUrl);
   }
 }

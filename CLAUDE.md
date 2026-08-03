@@ -79,11 +79,13 @@ téléchargement `GET /portal/documents/:id/download` vérifie l'appartenance
 (réservation liée OU propriétaire KYC) avant de streamer le fichier.
 
 ### Modules encore à l'état de squelette (voir avant d'étoffer)
-`ContractModule` et la partie dispatch de `NotificationModule` restent
-volontairement minces :
-- `ContractService` : pas de génération PDF réelle ni signature électronique.
-  Le champ `artisanAssignmentId` dédié sur `Document` est maintenant en place
-  et utilisé pour les contrats artisans.
+La partie dispatch de `NotificationModule` reste volontairement mince :
+- `ContractService` : **génération PDF réelle** (`ContractPdfService.generate`,
+  `pdf-lib`, copie persisée sur disque) et **signature électronique double**
+  en place — `POST /contracts/:documentId/sign` (canvas PNG côté web,
+  `ContractSignature` PROPRIETAIRE puis ADMIN, idempotent 409, ownership
+  réservation OU ArtisanAssignment, PDF contresigné via
+  `ContractPdfService.sign` exposé par `signedFileUrl`).
 - `NotificationDispatchProcessor` : pas de client push/SMS branché. L'envoi
   email transactionnel de reset passe par `common/email/EmailService` (SMTP)
   et ne dépend pas du worker BullMQ.

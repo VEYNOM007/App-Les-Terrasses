@@ -195,3 +195,52 @@ export interface PortalDashboard {
 export function fetchPortalDashboard(): Promise<PortalDashboard[]> {
   return apiFetch<PortalDashboard[]>('/v1/portal/dashboard');
 }
+
+// ────────────────────────────────────────────────────────────
+// Documents & contrats
+// ────────────────────────────────────────────────────────────
+
+export interface ContractSignature {
+  id: string;
+  signerType: 'PROPRIETAIRE' | 'ADMIN';
+  signatureImageUrl: string;
+  signedAt: string;
+}
+
+export interface PortalDocument {
+  id: string;
+  type: string;
+  name: string;
+  fileUrl: string;
+  signedFileUrl: string | null;
+  createdAt: string;
+  signatures?: ContractSignature[];
+}
+
+export function fetchPortalDocuments(): Promise<PortalDocument[]> {
+  return apiFetch<PortalDocument[]>('/v1/portal/documents');
+}
+
+export interface DownloadDocumentOptions {
+  disposition?: 'inline' | 'attachment';
+}
+
+export async function downloadDocument(documentId: string, options: DownloadDocumentOptions = {}) {
+  const res = await fetch(
+    `${API_BASE_URL}/v1/portal/documents/${documentId}/download${
+      options.disposition === 'attachment' ? '?disposition=attachment' : ''
+    }`,
+    { credentials: 'include' },
+  );
+  if (!res.ok) throw new Error(`Erreur téléchargement: ${res.status}`);
+  return res.blob();
+}
+
+export async function signContract(documentId: string, signatureBlob: Blob): Promise<PortalDocument> {
+  const form = new FormData();
+  form.append('signature', signatureBlob, 'signature.png');
+  return apiFetch<PortalDocument>(`/v1/contracts/${documentId}/sign`, {
+    method: 'POST',
+    body: form,
+  });
+}

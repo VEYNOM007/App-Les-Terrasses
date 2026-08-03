@@ -6,6 +6,7 @@ import { NotificationService } from '../notification/notification.service';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { PaymentProvider } from '@prisma/client';
 
 /**
  * Tests unitaires — PaymentService
@@ -136,7 +137,7 @@ describe('PaymentService', () => {
       });
       prisma.paymentInstallment.update.mockResolvedValue({});
 
-      await service.markInstallmentPaid('inst-001', 'CINETPAY' as any, 'TX-ref-001');
+      await service.markInstallmentPaid('inst-001', PaymentProvider.CINETPAY, 'TX-ref-001');
 
       // Vérification : update appelé avec status PAYE
       expect(prisma.paymentInstallment.update).toHaveBeenCalledWith({
@@ -165,7 +166,7 @@ describe('PaymentService', () => {
         paidAt: new Date('2026-07-20'),
       });
 
-      await service.markInstallmentPaid('inst-001', 'CINETPAY' as any, 'TX-ref-001');
+      await service.markInstallmentPaid('inst-001', PaymentProvider.CINETPAY, 'TX-ref-001');
 
       // Vérification : aucun update ne doit être déclenché
       expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
@@ -182,7 +183,7 @@ describe('PaymentService', () => {
 
       // Pas d'exception — juste un warning en log
       await expect(
-        service.markInstallmentPaid('inst-inexistant', 'STRIPE' as any, 'TX-ref-999'),
+        service.markInstallmentPaid('inst-inexistant', PaymentProvider.STRIPE, 'TX-ref-999'),
       ).resolves.toBeUndefined();
 
       expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
@@ -201,10 +202,10 @@ describe('PaymentService', () => {
       });
 
       await expect(
-        service.initiatePayment('inst-001', 'CINETPAY' as any, 'user-001'),
+        service.initiatePayment('inst-001', PaymentProvider.CINETPAY, 'user-001'),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.initiatePayment('inst-001', 'CINETPAY' as any, 'user-001'),
+        service.initiatePayment('inst-001', PaymentProvider.CINETPAY, 'user-001'),
       ).rejects.toThrow('déjà payée');
     });
 
@@ -215,10 +216,10 @@ describe('PaymentService', () => {
       });
 
       await expect(
-        service.initiatePayment('inst-001', 'CINETPAY' as any, 'user-intrus'),
+        service.initiatePayment('inst-001', PaymentProvider.CINETPAY, 'user-intrus'),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.initiatePayment('inst-001', 'CINETPAY' as any, 'user-intrus'),
+        service.initiatePayment('inst-001', PaymentProvider.CINETPAY, 'user-intrus'),
       ).rejects.toThrow("n'appartient pas");
     });
 
@@ -229,7 +230,7 @@ describe('PaymentService', () => {
       });
       prisma.paymentInstallment.update.mockResolvedValue({});
 
-      const result = await service.initiatePayment('inst-001', 'CINETPAY' as any, 'user-001');
+      const result = await service.initiatePayment('inst-001', PaymentProvider.CINETPAY, 'user-001');
 
       expect(result).toHaveProperty('paymentUrl');
       expect(result).toHaveProperty('transactionId');
@@ -244,7 +245,7 @@ describe('PaymentService', () => {
       });
       prisma.paymentInstallment.update.mockResolvedValue({});
 
-      const result = await service.initiatePayment('inst-001', 'STRIPE' as any, 'user-001');
+      const result = await service.initiatePayment('inst-001', PaymentProvider.STRIPE, 'user-001');
 
       expect(result).toHaveProperty('paymentUrl');
       expect(result).toHaveProperty('sessionId');
@@ -259,7 +260,11 @@ describe('PaymentService', () => {
       });
 
       await expect(
-        service.initiatePayment('inst-001', 'PAYPAL' as any, 'user-001'),
+        service.initiatePayment(
+          'inst-001',
+          'PAYPAL' as unknown as PaymentProvider,
+          'user-001',
+        ),
       ).rejects.toThrow(BadRequestException);
     });
   });

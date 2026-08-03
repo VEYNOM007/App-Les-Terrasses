@@ -84,7 +84,9 @@ volontairement minces :
 - `ContractService` : pas de génération PDF réelle, pas de champ
   `artisanAssignmentId` dédié sur `Document` (actuellement stocké dans
   `name`, à corriger proprement en ajoutant le champ au schema).
-- `NotificationDispatchProcessor` : pas de client push/email/SMS branché.
+- `NotificationDispatchProcessor` : pas de client push/SMS branché. L'envoi
+  email transactionnel de reset passe par `common/email/EmailService` (SMTP)
+  et ne dépend pas du worker BullMQ.
 - `PaymentModule` (réalisé en Phase 0) : clients `CinetPayClient` /
   `StripeClient` réels — un vrai `fetch` est tenté si les clés sont
   configurées, sinon fallback **mode démo** (clés factices, URL d'aperçu),
@@ -125,6 +127,7 @@ dans `.env.example` dans le même commit.
    `docker-compose.prod.yml`, flux reset de mot de passe pour les comptes
    créés sans mot de passe : artisans via `POST /admin/artisans` →
    `{ artisan, resetToken }`, self-service via `POST /auth/forgot-password` +
-   `POST /auth/reset-password`). Reste : reverse proxy TLS sur le VPS (cookies
-   `Secure` exigent HTTPS) et provider email/SMS pour la remise des tokens
-   en self-service (Phase 4).
+   `POST /auth/reset-password`). Email SMTP générique préparé via
+   `common/email/EmailModule`; restent le reverse proxy TLS sur le VPS
+   (cookies `Secure` exigent HTTPS), les identifiants SMTP/domaine de prod et
+   un éventuel provider SMS (Phase 4).

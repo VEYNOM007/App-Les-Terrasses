@@ -998,6 +998,109 @@ paths:
       responses:
         "200": { description: Relance envoyée }
 
+  /contracts/buyer/{reservationId}:
+    post:
+      tags: [Contrats]
+      summary: Générer le contrat de réservation/vente d'un acheteur
+      description: >
+        Le PDF est généré côté serveur à partir des données métier (aucun
+        fichier client accepté). Seul l'acheteur de la réservation ou un
+        admin peut générer le contrat.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: Contrat généré
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
+        "403": { description: Réservation ne vous appartient pas }
+        "404": { description: Réservation introuvable }
+    get:
+      tags: [Contrats]
+      summary: Lister les contrats d'une réservation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Liste des contrats
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Document' }
+        "403": { description: Réservation ne vous appartient pas }
+        "404": { description: Réservation introuvable }
+
+  /contracts/artisan/{assignmentId}:
+    post:
+      tags: [Contrats]
+      summary: Générer le contrat d'intervention d'un artisan
+      description: >
+        PDF généré côté serveur à partir de l'affectation artisan. Seul
+        l'artisan affecté ou un admin peut le générer.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: Contrat généré
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
+        "403": { description: Affectation ne vous appartient pas }
+        "404": { description: Affectation introuvable }
+
+  /contracts/{documentId}/sign:
+    post:
+      tags: [Contrats]
+      summary: Signer un contrat (image PNG de signature)
+      description: >
+        Le signataire est dérivé du JWT : le propriétaire (acheteur ou
+        artisan) signe en premier, puis un admin contresigne. L'image PNG
+        est validée par son magic byte réel (≤ 2 Mo). Une fois les deux
+        signatures présentes, le PDF est contresigné et le propriétaire est
+        notifié.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [signature]
+              properties:
+                signature:
+                  type: string
+                  format: binary
+                  description: Signature manuscrite (PNG, ≤ 2 Mo)
+      responses:
+        "201":
+          description: Signature enregistrée (contrat contresigné si complété)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
+        "400": { description: Fichier manquant, non-PNG ou > 2 Mo }
+        "403": { description: Non autorisé (tiers ou document sans propriétaire) }
+        "404": { description: Document introuvable }
+        "409": { description: Déjà signé par ce signataire ou admin avant le propriétaire }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1198,7 +1301,20 @@ components:
         id: { type: string }
         type: { type: string, enum: [contrat, attestation, quittance] }
         name: { type: string }
+        fileUrl: { type: string }
+        signedFileUrl: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
+        signatures:
+          type: array
+          items: { $ref: '#/components/schemas/ContractSignature' }
+
+    ContractSignature:
+      type: object
+      properties:
+        id: { type: string }
+        signerType: { type: string, enum: [PROPRIETAIRE, ADMIN] }
+        signatureImageUrl: { type: string }
+        signedAt: { type: string, format: date-time }
 
     Notification:
       type: object

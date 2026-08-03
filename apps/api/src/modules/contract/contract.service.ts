@@ -2,6 +2,7 @@ import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { DocumentType, UserRole } from '@prisma/client';
+import { ContractPdfService } from './contract-pdf.service';
 
 /**
  * Génère et suit les contrats — côté acheteur (contrat de réservation/vente
@@ -18,11 +19,16 @@ export class ContractService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationService,
+    private readonly pdf: ContractPdfService,
   ) {}
 
-  async generateBuyerContract(reservationId: string, fileUrl: string, userId: string, role: UserRole) {
+  async generateBuyerContract(reservationId: string, userId: string, role: UserRole) {
     const reservation = await this.prisma.reservation.findUnique({
       where: { id: reservationId },
+      include: {
+        user: true,
+        unit: { include: { block: { include: { project: true } } } },
+      },
     });
     if (!reservation) throw new NotFoundException('Réservation introuvable.');
 
@@ -31,6 +37,31 @@ export class ContractService {
     if (role !== UserRole.ADMIN && reservation.userId !== userId) {
       throw new ForbiddenException('Cette réservation ne vous appartient pas.');
     }
+
+    const fileUrl = await this.pdf.generate({
+      title: 'Contrat de réservation et de vente',
+      reference: reservationId,
+      sections: [
+        {
+          heading: 'Acquéreur',
+          lines: [
+            `Nom : ${reservation.user.fullName}`,
+            `Email : ${reservation.user.email}`,
+            `Téléphone : ${reservation.user.phone}`,
+          ],
+        },
+        {
+          heading: 'Bien réservé',
+          lines: [
+            `Projet : ${reservation.unit.block.project.name}`,
+            `Bloc : ${reservation.unit.block.name}`,
+            `Typologie : ${reservation.unit.type}`,
+            `Surface : ${reservation.unit.surface} m²`,
+            `Prix : ${reservation.unit.price.toString()} ${reservation.unit.currency}`,
+          ],
+        },
+      ],
+    });
 
     const document = await this.prisma.document.create({
       data: {
@@ -51,13 +82,12 @@ export class ContractService {
 
   async generateArtisanContract(
     assignmentId: string,
-    fileUrl: string,
     userId: string,
     role: UserRole,
   ) {
     const assignment = await this.prisma.artisanAssignment.findUnique({
       where: { id: assignmentId },
-      include: { artisan: true },
+      include: { artisan: true, block: { include: { project: true } } },
     });
     if (!assignment) throw new NotFoundException('Affectation introuvable.');
 
@@ -66,6 +96,29 @@ export class ContractService {
     if (role !== UserRole.ADMIN && assignment.artisan.userId !== userId) {
       throw new ForbiddenException("Cette affectation ne vous appartient pas.");
     }
+
+    const fileUrl = await this.pdf.generate({
+      title: "Contrat d'intervention artisan",
+      reference: assignmentId,
+      sections: [
+        {
+          heading: 'Artisan',
+          lines: [
+            `Entreprise : ${assignment.artisan.companyName}`,
+            `Métier : ${assignment.artisan.trade}`,
+          ],
+        },
+        {
+          heading: 'Chantier',
+          lines: [
+            `Projet : ${assignment.block.project.name}`,
+            `Bloc : ${assignment.block.name}`,
+            `Périmètre : ${assignment.scope ?? 'Non précisé'}`,
+            `Statut de l'affectation : ${assignment.status}`,
+          ],
+        },
+      ],
+    });
 
     const document = await this.prisma.document.create({
       data: {

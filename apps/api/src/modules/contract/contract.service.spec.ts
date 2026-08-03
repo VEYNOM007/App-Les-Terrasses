@@ -1,6 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DocumentType, UserRole } from '@prisma/client';
 import { ContractService } from './contract.service';
+import { ContractPdfService } from './contract-pdf.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 
@@ -21,17 +22,24 @@ const createMockNotifications = () => ({
   notifyUser: jest.fn().mockResolvedValue(undefined),
 });
 
+const createMockPdf = () => ({
+  generate: jest.fn().mockResolvedValue('/uploads/contracts/generated.pdf'),
+});
+
 describe('ContractService', () => {
   let service: ContractService;
   let prisma: ReturnType<typeof createMockPrisma>;
   let notifications: ReturnType<typeof createMockNotifications>;
+  let pdf: ReturnType<typeof createMockPdf>;
 
   beforeEach(() => {
     prisma = createMockPrisma();
     notifications = createMockNotifications();
+    pdf = createMockPdf();
     service = new ContractService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationService,
+      pdf as unknown as ContractPdfService,
     );
     prisma.document.create.mockResolvedValue({ id: 'document-1' });
   });
@@ -41,7 +49,7 @@ describe('ContractService', () => {
       prisma.reservation.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.generateBuyerContract('reservation-1', '/contracts/1.pdf', 'user-1', UserRole.ACHETEUR),
+        service.generateBuyerContract('reservation-1', 'user-1', UserRole.ACHETEUR),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -49,21 +57,36 @@ describe('ContractService', () => {
       prisma.reservation.findUnique.mockResolvedValue({ userId: 'owner-1' });
 
       await expect(
-        service.generateBuyerContract('reservation-1', '/contracts/1.pdf', 'intruder-1', UserRole.ACHETEUR),
+        service.generateBuyerContract('reservation-1', 'intruder-1', UserRole.ACHETEUR),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.document.create).not.toHaveBeenCalled();
     });
 
     it('crée le contrat lié à la réservation et notifie son propriétaire', async () => {
-      prisma.reservation.findUnique.mockResolvedValue({ userId: 'user-1' });
+      prisma.reservation.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        user: { fullName: 'Kofi Mensah', email: 'kofi@test.tg', phone: '+22890000000' },
+        unit: {
+          type: 'T2',
+          surface: 55,
+          price: { toString: () => '35000000' },
+          currency: 'XOF',
+          block: { name: 'Bloc A', project: { name: 'Projet Test' } },
+        },
+      });
 
-      await service.generateBuyerContract('reservation-1', '/contracts/1.pdf', 'user-1', UserRole.ACHETEUR);
+      await service.generateBuyerContract('reservation-1', 'user-1', UserRole.ACHETEUR);
+
+      expect(pdf.generate).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Contrat de réservation et de vente',
+        reference: 'reservation-1',
+      }));
 
       expect(prisma.document.create).toHaveBeenCalledWith({
         data: {
           type: DocumentType.CONTRAT,
           name: 'Contrat de vente - reservation-1',
-          fileUrl: '/contracts/1.pdf',
+          fileUrl: '/uploads/contracts/generated.pdf',
           reservationId: 'reservation-1',
         },
       });
@@ -79,11 +102,11 @@ describe('ContractService', () => {
       prisma.artisanAssignment.findUnique.mockResolvedValue({
         id: 'assignment-1',
         artisan: { userId: 'artisan-user-1' },
+        block: { name: 'Bloc A', project: { name: 'Projet Test' } },
       });
 
       await service.generateArtisanContract(
         'assignment-1',
-        '/contracts/artisan-1.pdf',
         'artisan-user-1',
         UserRole.ARTISAN,
       );
@@ -92,7 +115,7 @@ describe('ContractService', () => {
         data: {
           type: DocumentType.CONTRAT,
           name: 'Contrat artisan - affectation assignment-1',
-          fileUrl: '/contracts/artisan-1.pdf',
+          fileUrl: '/uploads/contracts/generated.pdf',
           artisanAssignmentId: 'assignment-1',
         },
       });
@@ -111,7 +134,6 @@ describe('ContractService', () => {
       await expect(
         service.generateArtisanContract(
           'assignment-1',
-          '/contracts/artisan-1.pdf',
           'intruder-1',
           UserRole.ARTISAN,
         ),

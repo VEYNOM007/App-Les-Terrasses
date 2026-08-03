@@ -289,3 +289,15 @@ l'accès des comptes créés sans mot de passe (artisans).
 - [x] **Vérifications** : routes Next générées en build et typecheck web
   sans erreur.
 - [ ] **Reste** : reverse proxy TLS VPS et éventuel provider SMS.
+
+## 11. Phase 4 — Reverse proxy TLS (2026-08-03)
+
+- [x] **Caddy** : `Caddyfile` route `APP_DOMAIN` vers Next et `API_DOMAIN`
+  vers Nest, avec certificats Let's Encrypt automatiques, compression et
+  HSTS côté API.
+- [x] **Isolation réseau** : seuls les ports `80/443` sont publiés par
+  `docker-compose.prod.yml`; les services `api` et `web` restent internes.
+- [x] **Configuration** : `APP_DOMAIN`, `API_DOMAIN` et
+  `NEXT_PUBLIC_API_URL` documentés dans `.env.example`.
+- [ ] **Déploiement réel** : remplacer les domaines d'exemple, créer les
+  enregistrements DNS A/AAAA vers le VPS et ouvrir `80/443`.

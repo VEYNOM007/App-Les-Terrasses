@@ -44,6 +44,7 @@ export async function cleanupTestDatabase(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "refresh_tokens",
+      "password_reset_tokens",
       "payment_installments",
       "payment_schedules",
       "reservations",

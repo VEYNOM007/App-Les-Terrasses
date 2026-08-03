@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
@@ -54,24 +54,39 @@ const USER_RESULT = {
   country: 'TG',
 };
 
-const createMockPrisma = () => ({
-  user: {
-    findFirst: jest.fn(),
-    findUnique: jest.fn(),
-    findUniqueOrThrow: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-  },
-  document: {
-    create: jest.fn(),
-  },
-  refreshToken: {
-    create: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-    updateMany: jest.fn(),
-  },
-});
+const createMockPrisma = () => {
+  const prisma = {
+    user: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    document: {
+      create: jest.fn(),
+    },
+    refreshToken: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    passwordResetToken: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    $transaction: jest.fn(),
+  };
+
+  // Le callback de transaction reçoit le mock lui-même comme `tx`.
+  prisma.$transaction.mockImplementation(
+    async (callback: (tx: typeof prisma) => unknown) => callback(prisma),
+  );
+
+  return prisma;
+};
 
 const createMockJwtService = () => ({
   sign: jest.fn(),
@@ -448,6 +463,133 @@ describe('AuthService', () => {
       });
 
       expect(result).toEqual({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
+    });
+  });
+
+  // ──────────────────────────────────────────────────
+  // forgotPassword — réinitialisation (AuthModule, R6)
+  // ──────────────────────────────────────────────────
+
+  describe('forgotPassword', () => {
+    it("devrait renvoyer une reponse identique (anti-enumeration) si l'email n'existe pas", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      const result = await service.forgotPassword('inconnu@test.tg');
+
+      expect(result).toEqual({
+        message:
+          'Si un compte est associé à cet email, un lien de réinitialisation a été envoyé.',
+        resetToken: null,
+      });
+      expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+    });
+
+    it('devrait creer un token a usage unique (1h) persiste uniquement en hash, et le retourner en mode demo', async () => {
+      prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
+
+      const result = await service.forgotPassword('kofi@test.tg');
+
+      const createCall = prisma.passwordResetToken.create.mock.calls[0][0].data;
+      expect(createCall).toEqual({
+        userId: 'user-001',
+        tokenHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      });
+      // Fenêtre d'expiration ~1h
+      const ttlMs = createCall.expiresAt.getTime() - Date.now();
+      expect(ttlMs).toBeGreaterThan(50 * 60 * 1000);
+      expect(ttlMs).toBeLessThanOrEqual(60 * 60 * 1000);
+
+      // Le hash persisté est le SHA-256 du token en clair, jamais le clair
+      expect(result.resetToken).toBeTruthy();
+      if (result.resetToken === null) {
+        throw new Error('resetToken attendu en mode demo');
+      }
+      expect(result.resetToken).not.toBe(createCall.tokenHash);
+      expect(crypto.createHash('sha256').update(result.resetToken).digest('hex')).toBe(
+        createCall.tokenHash,
+      );
+    });
+
+    it("ne devrait pas exposer le token en production (le mailer n'est pas encore branche)", async () => {
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      prisma.user.findUnique.mockResolvedValue(USER_FIXTURE);
+
+      try {
+        const result = await service.forgotPassword('kofi@test.tg');
+        expect(result.resetToken).toBeNull();
+        expect(prisma.passwordResetToken.create).toHaveBeenCalled();
+      } finally {
+        process.env.NODE_ENV = previous;
+      }
+    });
+  });
+
+  // ──────────────────────────────────────────────────
+  // resetPassword — consommation du token (AuthModule, R6)
+  // ──────────────────────────────────────────────────
+
+  describe('resetPassword', () => {
+    const activeResetToken = {
+      id: 'prt-001',
+      userId: 'user-001',
+      tokenHash: 'some-sha256-hash',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000), // valide 1h
+      usedAt: null,
+    };
+
+    it('devrait lever BadRequestException si le token est inconnu', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue(null);
+
+      await expect(service.resetPassword('token-inconnu', 'NouveauPass1!')).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(bcrypt.hash).not.toHaveBeenCalled();
+    });
+
+    it('devrait lever BadRequestException si le token est expire', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue({
+        ...activeResetToken,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+
+      await expect(service.resetPassword('token-expire', 'NouveauPass1!')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('devrait lever BadRequestException si le token est deja utilise (usage unique)', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue({
+        ...activeResetToken,
+        usedAt: new Date(),
+      });
+
+      await expect(service.resetPassword('token-consomme', 'NouveauPass1!')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('devrait consommer le token, mettre a jour le hash et revoquer toutes les sessions', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue(activeResetToken);
+
+      const result = await service.resetPassword('token-valide', 'NouveauPass1!');
+
+      expect(bcrypt.hash).toHaveBeenCalledWith('NouveauPass1!', 10);
+      expect(prisma.passwordResetToken.update).toHaveBeenCalledWith({
+        where: { id: 'prt-001' },
+        data: expect.objectContaining({ usedAt: expect.any(Date) }),
+      });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-001' },
+        data: { passwordHash: '$2b$10$hashedpasswordmock' },
+      });
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-001', revokedAt: null },
+        data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+      });
+      expect(result).toEqual({ message: 'Mot de passe mis à jour.' });
     });
   });
 });

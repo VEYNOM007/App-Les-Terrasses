@@ -1,8 +1,18 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { mkdir, writeFile } from 'fs/promises';
+import { randomUUID } from 'crypto';
+import * as path from 'path';
+import { Prisma, ContractSignerType, DocumentType, UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
-import { DocumentType, UserRole } from '@prisma/client';
 import { ContractPdfService } from './contract-pdf.service';
+import { UPLOAD_ROOT, isPng } from '../../common/files/uploads.util';
 
 /**
  * Génère et suit les contrats — côté acheteur (contrat de réservation/vente
@@ -152,5 +162,100 @@ export class ContractService {
       where: { reservationId, type: DocumentType.CONTRAT },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Signe un contrat. Le signataire est dérivé du JWT, jamais du client :
+   * le propriétaire (acheteur ou artisan) signe en PROPRIETAIRE, un admin
+   * en ADMIN. L'ordre PROPRIETAIRE puis ADMIN est imposé, et l'unicité
+   * (documentId, signerType) est garantie en base — un doublon lève P2002,
+   * traduit en 409. Une fois les deux signatures présentes, le PDF est
+   * contresigné (signedFileUrl) et le propriétaire est notifié.
+   */
+  async signContract(documentId: string, userId: string, role: UserRole, signatureBuffer: Buffer) {
+    if (!isPng(signatureBuffer)) {
+      throw new BadRequestException('Signature invalide : PNG requis.');
+    }
+
+    const signatureImageUrl = await this.persistSignature(signatureBuffer);
+
+    const document = await this.prisma.document.findUnique({
+      where: { id: documentId },
+      include: {
+        reservation: { select: { userId: true } },
+        artisanAssignment: { include: { artisan: { select: { userId: true } } } },
+        signatures: { select: { signerType: true, signatureImageUrl: true } },
+      },
+    });
+    if (!document) throw new NotFoundException('Document introuvable.');
+
+    const ownerId = document.reservation?.userId ?? document.artisanAssignment?.artisan.userId ?? null;
+    if (!ownerId) {
+      throw new ForbiddenException("Ce document n'a pas de propriétaire signataire.");
+    }
+
+    const signerType = role === UserRole.ADMIN ? ContractSignerType.ADMIN : ContractSignerType.PROPRIETAIRE;
+    if (signerType === ContractSignerType.ADMIN) {
+      const ownerSigned = document.signatures.some((s) => s.signerType === ContractSignerType.PROPRIETAIRE);
+      if (!ownerSigned) {
+        throw new ConflictException('Le propriétaire doit signer avant l\'administration.');
+      }
+    } else if (ownerId !== userId) {
+      throw new ForbiddenException('Seul le propriétaire du contrat peut le signer.');
+    }
+
+    try {
+      await this.prisma.contractSignature.create({
+        data: { documentId, signerType, signerUserId: userId, signatureImageUrl },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Ce contrat est déjà signé par ce signataire.');
+      }
+      throw error;
+    }
+
+    const signatures = await this.prisma.contractSignature.findMany({
+      where: { documentId },
+      select: { signerType: true, signatureImageUrl: true },
+    });
+
+    if (
+      signatures.some((s) => s.signerType === ContractSignerType.PROPRIETAIRE) &&
+      signatures.some((s) => s.signerType === ContractSignerType.ADMIN)
+    ) {
+      const ownerSignature = signatures.find((s) => s.signerType === ContractSignerType.PROPRIETAIRE);
+      const adminSignature = signatures.find((s) => s.signerType === ContractSignerType.ADMIN);
+      const signedFileUrl = await this.pdf.sign(document.fileUrl, [ownerSignature, adminSignature]
+        .filter((s): s is NonNullable<typeof s> => s !== undefined)
+        .map((s) => ({
+          label: s.signerType === ContractSignerType.PROPRIETAIRE ? 'Propriétaire' : 'Administration',
+          imageUrl: s.signatureImageUrl,
+        })));
+
+      await this.prisma.document.update({
+        where: { id: documentId },
+        data: { signedFileUrl },
+      });
+
+      await this.notifications.notifyUser(ownerId, {
+        title: 'Contrat signé',
+        body: 'Votre contrat est entièrement signé et disponible au téléchargement.',
+      });
+    }
+
+    return this.prisma.document.findUnique({
+      where: { id: documentId },
+      include: { signatures: true },
+    });
+  }
+
+  private async persistSignature(buffer: Buffer): Promise<string> {
+    const fileName = `${randomUUID()}.png`;
+    const relativeDirectory = 'signatures';
+    const absoluteDirectory = path.join(UPLOAD_ROOT, relativeDirectory);
+    await mkdir(absoluteDirectory, { recursive: true });
+    await writeFile(path.join(absoluteDirectory, fileName), buffer);
+    return `/uploads/${relativeDirectory}/${fileName}`;
   }
 }

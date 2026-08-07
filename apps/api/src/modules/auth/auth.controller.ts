@@ -29,12 +29,24 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 export const ACCESS_TOKEN_COOKIE = 'access_token';
 export const REFRESH_TOKEN_COOKIE = 'refresh_token';
 
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-};
+/**
+ * Options des cookies de session. Le `domain` n'est posé que si
+ * COOKIE_DOMAIN est défini (production multi-sous-domaines : le cookie
+ * posé par api-baguida.<domaine> doit être partagé avec baguida.<domaine>).
+ * Les deux sous-domaines partagent le même registrable domain : c'est du
+ * cross-origin mais same-site, donc SameSite=Lax suffit — pas de passage à
+ * None (qui imposerait Secure absolu et affaiblirait la protection anti-CSRF).
+ * Absent en dev local (localhost) pour rester fonctionnel.
+ */
+export function getCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
+  };
+}
 
 const KYC_UPLOAD_DIR = 'uploads/kyc';
 const KYC_MAX_SIZE = 5 * 1024 * 1024; // 5 Mo
@@ -73,18 +85,18 @@ const kycFileInterceptor = FileInterceptor('file', {
 
 function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
   res.cookie(ACCESS_TOKEN_COOKIE, accessToken, {
-    ...COOKIE_OPTIONS,
+    ...getCookieOptions(),
     maxAge: 15 * 60 * 1000, // 15 min (TTL de l'access token)
   });
   res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, {
-    ...COOKIE_OPTIONS,
+    ...getCookieOptions(),
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 jours
   });
 }
 
 function clearAuthCookies(res: Response) {
-  res.clearCookie(ACCESS_TOKEN_COOKIE, COOKIE_OPTIONS);
-  res.clearCookie(REFRESH_TOKEN_COOKIE, COOKIE_OPTIONS);
+  res.clearCookie(ACCESS_TOKEN_COOKIE, getCookieOptions());
+  res.clearCookie(REFRESH_TOKEN_COOKIE, getCookieOptions());
 }
 
 @Controller('auth')

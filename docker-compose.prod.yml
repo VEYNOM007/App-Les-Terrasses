@@ -79,6 +79,9 @@ services:
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
       PORT: 3001
+      # Requis : sans lui, le cookie posé par api-baguida.<domaine> n'est
+      # jamais partagé avec le frontend baguida.<domaine> (auth web cassée).
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?COOKIE_DOMAIN requis en prod (.domaine-racine)}
     volumes:
       - prod-uploads:/app/deploy/uploads
     depends_on:

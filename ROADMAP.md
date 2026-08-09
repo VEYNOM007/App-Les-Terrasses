@@ -298,7 +298,7 @@ l'accès des comptes créés sans mot de passe (artisans).
 ## 11. Phase 4 — Reverse proxy TLS (2026-08-03)
 
 - [x] **Reverse proxy** : server blocks Nginx hôte
-  (`deploy/nginx/immo-les-terrasse.conf`) routent `immo-les-terrasse.com`
+  (`infra/nginx/immo-les-terrasse.conf`) routent `immo-les-terrasse.com`
   vers Next (127.0.0.1:3002) et `api.immo-les-terrasse.com` vers Nest
   (127.0.0.1:3001); certificats Let's Encrypt via `certbot --nginx`.
 - [x] **Isolation réseau** : `docker-compose.prod.yml` publie `api` et `web`

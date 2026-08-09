@@ -132,15 +132,18 @@ dans `.env.example` dans le même commit.
    `POST /auth/reset-password`). Email SMTP générique préparé via
    `common/email/EmailModule`; restent le reverse proxy TLS sur le VPS
    (cookies `Secure` exigent HTTPS), les identifiants SMTP/domaine de prod et
-   un éventuel provider SMS (Phase 4). Le reverse proxy Caddy est préparé
-   dans `Caddyfile` et le compose prod ne publie plus directement API/web.
+   un éventuel provider SMS (Phase 4). Le reverse proxy TLS est assuré par
+   l'Nginx hôte (server blocks de référence dans
+   `infra/nginx/immo-les-terrasse.conf`) ; le compose prod ne publie
+   API/web que sur `127.0.0.1` (jamais directement).
 8. ~~Phase 4 — parcours web de récupération~~ — **fait pour le flux email**
    (`/forgot-password`, `/reset-password`, appels API typés, validation du
    nouveau mot de passe). Restent le renseignement des domaines/DNS du VPS
    et un éventuel provider SMS.
-9. ~~Phase 4 — reverse proxy TLS~~ — **préparé** (`Caddyfile`, routage
-   `APP_DOMAIN`/`API_DOMAIN`, certificats automatiques, ports web/API
-   internes). Reste le renseignement des domaines réels et leur DNS.
+9. ~~Phase 4 — reverse proxy TLS~~ — **préparé** (server blocks Nginx hôte
+   dans `infra/nginx/immo-les-terrasse.conf`, routage `WEB_DOMAIN`/
+   `API_DOMAIN`, ports API/web publiés sur `127.0.0.1`). Restent les
+   certificats Let's Encrypt via `certbot --nginx` une fois le DNS en place.
 10. **Tests métier ciblés** — `ConstructionService` et `LaunchService` sont
     maintenant couverts (garde d’affectation, statut de construction,
     seuil de pré-vente et transitions de financement), ainsi que `catalog`,

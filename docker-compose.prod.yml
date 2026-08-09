@@ -1,19 +1,26 @@
 # ==========================================================
-# Résidence Catalog — stack de production (VPS unique)
+# Résidence Catalog — stack de production (VPS partagé)
 #
 # Prérequis :
 #   - .env rempli à partir de .env.example (secrets réels)
-#   - APP_DOMAIN et API_DOMAIN pointent vers ce VPS
-#   - ports 80 et 443 ouverts pour Caddy/Let's Encrypt
+#   - L'Nginx hôte est le reverse proxy TLS (server blocks
+#     de référence dans infra/nginx/) — PAS de Caddy.
+#   - DNS A immo-les-terrasse.com / api.immo-les-terrasse.com
+#     pointant vers ce VPS AVANT `certbot --nginx`.
 #
 # Usage :
 #   docker compose -f docker-compose.prod.yml up -d --build
 #   docker compose -f docker-compose.prod.yml logs -f api
 #   docker compose -f docker-compose.prod.yml down
 #
-# Les migrations Prisma sont appliquées par le job one-shot
-# `migrate` avant le démarrage de l'API. Les uploads (KYC,
-# contrats) persistent dans le volume `prod-uploads`.
+# Notes :
+#   - api et web ne sont publiés QUE sur 127.0.0.1 : l'Nginx
+#     hôte (80/443) les proxie. Jamais d'exposition directe.
+#   - Ports hôte : 3001 (api), 3002 (web) — 3000 est occupé
+#     par un autre projet (ComptaAI) sur ce VPS partagé.
+#   - Les migrations Prisma sont appliquées par le job one-shot
+#     `migrate` avant le démarrage de l'API. Les uploads (KYC,
+#     contrats) persistent dans le volume `prod-uploads`.
 # ==========================================================
 
 name: residence-catalog-prod
@@ -72,6 +79,9 @@ services:
     container_name: residence-catalog-prod-api
     restart: unless-stopped
     init: true # init PID 1 : gestion propre des signaux Node
+    # Publié sur localhost uniquement : proxy par l'Nginx hôte.
+    ports:
+      - "127.0.0.1:3001:3001"
     env_file: .env
     environment:
       # Overrides réseau interne (priment sur .env).
@@ -79,6 +89,9 @@ services:
       REDIS_URL: redis://redis:6379
       NODE_ENV: production
       PORT: 3001
+      # Requis : sans lui, le cookie posé par api-baguida.<domaine> n'est
+      # jamais partagé avec le frontend baguida.<domaine> (auth web cassée).
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?COOKIE_DOMAIN requis en prod (.domaine-racine)}
     volumes:
       - prod-uploads:/app/deploy/uploads
     depends_on:
@@ -96,28 +109,12 @@ services:
     container_name: residence-catalog-prod-web
     restart: unless-stopped
     init: true
-    depends_on:
-      api:
-        condition: service_started
-
-  caddy:
-    image: caddy:2-alpine
-    container_name: residence-catalog-prod-caddy
-    restart: unless-stopped
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN requis en prod}
-      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN requis en prod}
+    # Publié sur localhost uniquement (3002) : proxy par l'Nginx hôte.
+    # 3000 (hôte) est occupé par ComptaAI sur ce VPS.
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - prod-caddy-data:/data
-      - prod-caddy-config:/config
+      - "127.0.0.1:3002:3000"
     depends_on:
       api:
-        condition: service_started
-      web:
         condition: service_started
 
 volumes:
@@ -127,7 +124,3 @@ volumes:
     name: residence-catalog-prod-redis-data
   prod-uploads:
     name: residence-catalog-prod-uploads
-  prod-caddy-data:
-    name: residence-catalog-prod-caddy-data
-  prod-caddy-config:
-    name: residence-catalog-prod-caddy-config

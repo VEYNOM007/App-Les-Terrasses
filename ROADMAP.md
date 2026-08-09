@@ -297,12 +297,13 @@ l'accès des comptes créés sans mot de passe (artisans).
 
 ## 11. Phase 4 — Reverse proxy TLS (2026-08-03)
 
-- [x] **Caddy** : `Caddyfile` route `APP_DOMAIN` vers Next et `API_DOMAIN`
-  vers Nest, avec certificats Let's Encrypt automatiques, compression et
-  HSTS côté API.
-- [x] **Isolation réseau** : seuls les ports `80/443` sont publiés par
-  `docker-compose.prod.yml`; les services `api` et `web` restent internes.
-- [x] **Configuration** : `APP_DOMAIN`, `API_DOMAIN` et
+- [x] **Reverse proxy** : server blocks Nginx hôte
+  (`infra/nginx/immo-les-terrasse.conf`) routent `immo-les-terrasse.com`
+  vers Next (127.0.0.1:3002) et `api.immo-les-terrasse.com` vers Nest
+  (127.0.0.1:3001); certificats Let's Encrypt via `certbot --nginx`.
+- [x] **Isolation réseau** : `docker-compose.prod.yml` publie `api` et `web`
+  sur `127.0.0.1` uniquement; seuls `80/443` (Nginx hôte) sont ouverts.
+- [x] **Configuration** : `WEB_DOMAIN`, `API_DOMAIN` et
   `NEXT_PUBLIC_API_URL` documentés dans `.env.example`.
-- [ ] **Déploiement réel** : remplacer les domaines d'exemple, créer les
-  enregistrements DNS A/AAAA vers le VPS et ouvrir `80/443`.
+- [ ] **Déploiement réel** : domaines réels + DNS A posés (vers le VPS),
+  `certbot --nginx` puis démarrage de la stack.

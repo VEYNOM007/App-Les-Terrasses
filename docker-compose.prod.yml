@@ -4,7 +4,7 @@
 # Prérequis :
 #   - .env rempli à partir de .env.example (secrets réels)
 #   - L'Nginx hôte est le reverse proxy TLS (server blocks
-#     de référence dans deploy/nginx/) — PAS de Caddy.
+#     de référence dans infra/nginx/) — PAS de Caddy.
 #   - DNS A immo-les-terrasse.com / api.immo-les-terrasse.com
 #     pointant vers ce VPS AVANT `certbot --nginx`.
 #

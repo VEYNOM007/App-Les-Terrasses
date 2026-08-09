@@ -6,7 +6,7 @@ import Footer from '../../components/Footer';
 import ReservationModal from '../../components/ReservationModal';
 import ComplexOverviewViewer from '../../components/catalogue/ComplexOverviewViewer';
 import Apartment3DModal from '../../components/catalogue/Apartment3DModal';
-import { getCatalogData, ComplexInfo, Unit3DDetails } from '../../lib/catalogData';
+import { getCatalogData, DEFAULT_COMPLEX_DATA, ComplexInfo, Unit3DDetails } from '../../lib/catalogData';
 import { UnitTypology } from '../../components/CatalogGrid';
 import {
   Building,
@@ -25,7 +25,9 @@ import {
 } from 'lucide-react';
 
 export default function CataloguePage() {
-  const [catalogData, setCatalogData] = useState<ComplexInfo>(getCatalogData());
+  // Toujours initialiser avec DEFAULT_COMPLEX_DATA (identique SSR/client)
+  // puis charger le localStorage uniquement dans useEffect pour éviter l'erreur d'hydratation
+  const [catalogData, setCatalogData] = useState<ComplexInfo>(DEFAULT_COMPLEX_DATA);
   const [selectedUnitFor3D, setSelectedUnitFor3D] = useState<Unit3DDetails | null>(null);
   const [is3DModalOpen, setIs3DModalOpen] = useState<boolean>(false);
 
@@ -38,6 +40,7 @@ export default function CataloguePage() {
   const [filterMaxPrice, setFilterMaxPrice] = useState<number>(100000000);
 
   useEffect(() => {
+    // Chargement après hydratation uniquement
     setCatalogData(getCatalogData());
   }, []);
 

@@ -92,17 +92,17 @@ export const DEFAULT_COMPLEX_DATA: ComplexInfo = {
   views: [
     {
       id: 'view-masterplan',
-      title: 'Plan de Masse Interactif 3D',
-      subtitle: 'Vue d\'ensemble des 4 Blocs (A, B, C, D) et Façade Nord Commerciale',
+      title: 'Plan de Masse Officiel & Sélection des Blocs',
+      subtitle: 'Vue d\'ensemble Aérienne · Résidence Les Terrasses Baguida',
       category: 'masterplan',
-      imageUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1600&q=80',
-      description: 'Découpe officielle des lots sur 6 593 m². Résidence fermée avec poste de garde 24h/7j, parking sous-sol & pilotis, et groupe solaire de secours.',
+      imageUrl: '/masterplan-les-terrasses.jpg',
+      description: 'Vue aérienne officielle. Cliquez directement sur les Blocs Nord 1 & 2, Blocs Sud 1 & 2 ou la Façade Boutiques pour découvrir les appartements et réserver sur plan.',
       hotspots: [
-        { id: 'hs-block-a', label: 'Bloc A · Studios & T2', targetBlockId: 'unit-studio', top: '35%', left: '25%' },
-        { id: 'hs-block-b', label: 'Bloc B · T3 Famille', targetBlockId: 'unit-t3', top: '30%', left: '60%' },
-        { id: 'hs-block-c', label: 'Bloc C · T3 & T5 Attique', targetBlockId: 'unit-t5', top: '65%', left: '70%' },
-        { id: 'hs-block-d', label: 'Bloc D · Penthouse T5', targetBlockId: 'unit-t5', top: '70%', left: '30%' },
-        { id: 'hs-commerce', label: 'Façade Commerciale Nord', targetBlockId: 'unit-commerce', top: '15%', left: '45%' },
+        { id: 'hs-block-nord-1', label: 'BLOC NORD 1 · Studios & T2', targetBlockId: 'unit-studio', top: '28%', left: '38%' },
+        { id: 'hs-block-nord-2', label: 'BLOC NORD 2 · T2 Spacieux', targetBlockId: 'unit-t2', top: '28%', left: '68%' },
+        { id: 'hs-block-sud-1', label: 'BLOC SUD 1 · T3 Familial', targetBlockId: 'unit-t3', top: '60%', left: '34%' },
+        { id: 'hs-block-sud-2', label: 'BLOC SUD 2 · Penthouse T5 Attique', targetBlockId: 'unit-t5', top: '60%', left: '68%' },
+        { id: 'hs-commerce', label: 'Boutiques Nord · Commercial', targetBlockId: 'unit-commerce', top: '14%', left: '50%' },
       ],
     },
     {

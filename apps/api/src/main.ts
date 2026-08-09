@@ -1,5 +1,6 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import * as cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -7,7 +8,18 @@ import { AppModule } from './app.module';
 const DEFAULT_CORS_ORIGINS = 'http://localhost:3000';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true }); // rawBody requis pour le webhook Stripe
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true, // rawBody requis pour le webhook Stripe
+  });
+
+  // L'API est exposée derrière l'Nginx hôte (reverse proxy) : on fait
+  // confiance au premier saut pour que req.ip reflète le client réel
+  // (rate-limit par-IP du Throttler — sinon tous les clients apparaissent
+  // comme 127.0.0.1) et que req.protocol/req.secure soient corrects.
+  // Nginx append $remote_addr en fin de X-Forwarded-For : l'IP lue est la
+  // vraie IP client, non falsifiable.
+  app.set('trust proxy', 1);
+
   app.setGlobalPrefix('v1');
 
   // Cookies JWT httpOnly : parser des cookies entrants (access/refresh tokens)

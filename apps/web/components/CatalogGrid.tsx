@@ -85,9 +85,19 @@ export default function CatalogGrid({ onSelectUnit }: { onSelectUnit?: (typology
               Du Studio au T5, un même standard de finition
             </h2>
           </div>
-          <p className="text-sm font-mono text-paper/60 max-w-md">
-            Finitions sobres et standardisées pour conserver des prix abordables, sans compromis sur la sécurité et le confort de la résidence fermée.
-          </p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <p className="text-sm font-mono text-paper/60 max-w-md">
+              Finitions sobres et standardisées pour conserver des prix abordables, sans compromis sur la sécurité et le confort de la résidence fermée.
+            </p>
+            <a
+              href="/catalogue"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-5 py-3 rounded inline-flex items-center gap-2 shrink-0 transition-all shadow-lg font-bold"
+            >
+              Ouvrir le Catalogue 3D ↗
+            </a>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">

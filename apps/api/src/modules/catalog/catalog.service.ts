@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { ProjectStatus, UnitStatus, UnitType } from '@prisma/client';
+import { MediaType, ProjectStatus, UnitStatus, UnitType } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
+import {
+  buildInstallmentPlan,
+  DEFAULT_DOWN_PAYMENT_PERCENT,
+} from '../../common/payment/installment-plan';
 
 @Injectable()
 export class CatalogService {
@@ -59,11 +64,108 @@ export class CatalogService {
     return { data, total, page };
   }
 
+  /**
+   * Fiche unité enrichie — alimente la fiche produit (sheet) du catalogue :
+   * unité + bloc + projet (infos marketing) + médias ordonnés.
+   */
   async getUnit(id: string) {
     return this.prisma.unit.findFirst({
       where: { id, block: { project: { status: ProjectStatus.PUBLIE } } },
-      include: { block: true },
+      include: {
+        block: {
+          include: {
+            project: {
+              select: { id: true, name: true, marketingInfo: true, siteMapImageUrl: true },
+            },
+          },
+        },
+        media: { orderBy: { sortOrder: 'asc' } },
+      },
     });
+  }
+
+  /**
+   * Agrégats par typologie (STUDIO, T2, T3, …) pour la navigation hybride
+   * du catalogue : compteurs + prix de départ + liste des unités disponibles
+   * (id réel, bloc, étage, surface, prix, présence d'un rendu 3D). Chaque
+   * carte mène ensuite à la fiche unité individuelle via /units/:id.
+   */
+  async getTypologies() {
+    const units = await this.prisma.unit.findMany({
+      where: { block: { project: { status: ProjectStatus.PUBLIE } } },
+      include: {
+        block: { select: { name: true, frontage: true } },
+        media: {
+          where: { type: MediaType.RENDU_3D },
+          select: { id: true },
+        },
+      },
+      orderBy: { price: 'asc' },
+    });
+
+    const byType = new Map<UnitType, typeof units>();
+    for (const unit of units) {
+      const bucket = byType.get(unit.type) ?? [];
+      bucket.push(unit);
+      byType.set(unit.type, bucket);
+    }
+
+    return [...byType.entries()].map(([type, list]) => {
+      const available = list.filter((u) => u.status === UnitStatus.DISPONIBLE);
+      const minPrice = list.reduce<Decimal>(
+        (min, u) => (u.price.lt(min) ? u.price : min),
+        list[0].price,
+      );
+      return {
+        type,
+        totalUnits: list.length,
+        availableUnits: available.length,
+        minPrice,
+        units: list.map((u) => ({
+          id: u.id,
+          blockName: u.block.name,
+          blockFrontage: u.block.frontage,
+          floor: u.floor,
+          surface: u.surface,
+          price: u.price,
+          status: u.status,
+          hasRendu3D: u.media.length > 0,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Aperçu public de l'échéancier pour une unité — alimente le simulateur
+   * de financement du catalogue. Basé sur le prix catalogue `unit.price`
+   * (les offres sont confidentielles et propres à chaque réservation).
+   * Même fonction pure que PaymentService.generateSchedule().
+   */
+  async getPaymentPreview(unitId: string, downPaymentPercent?: number) {
+    const unit = await this.prisma.unit.findFirst({
+      where: { id: unitId, block: { project: { status: ProjectStatus.PUBLIE } } },
+      select: { id: true, price: true, currency: true, type: true },
+    });
+    if (!unit) {
+      throw new NotFoundException('Unité introuvable.');
+    }
+
+    const percent = downPaymentPercent ?? DEFAULT_DOWN_PAYMENT_PERCENT;
+    const plan = buildInstallmentPlan({ totalAmount: unit.price.toNumber(), downPaymentPercent: percent });
+
+    return {
+      unitId: unit.id,
+      unitType: unit.type,
+      totalAmount: unit.price,
+      currency: unit.currency,
+      downPaymentPercent: percent,
+      installments: plan.map(({ label, amount, dueDate, percent: pct }) => ({
+        label,
+        amount,
+        dueDate,
+        percent: pct,
+      })),
+    };
   }
 
   /**

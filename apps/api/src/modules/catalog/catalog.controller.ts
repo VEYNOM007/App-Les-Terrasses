@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import { SearchUnitsQueryDto } from './dto/search-units-query.dto';
+import { PaymentPreviewQueryDto } from './dto/payment-preview-query.dto';
 
 @Controller('catalog')
 export class CatalogController {
@@ -26,9 +27,22 @@ export class CatalogController {
     return this.catalogService.searchUnits(query);
   }
 
+  @Get('typologies')
+  getTypologies() {
+    return this.catalogService.getTypologies();
+  }
+
   @Get('units/:id')
   getUnit(@Param('id') id: string) {
     return this.catalogService.getUnit(id);
+  }
+
+  @Get('units/:id/payment-preview')
+  getPaymentPreview(
+    @Param('id') id: string,
+    @Query() query: PaymentPreviewQueryDto,
+  ) {
+    return this.catalogService.getPaymentPreview(id, query.downPaymentPercent);
   }
 
   @Get('projects/:id/site-plan')

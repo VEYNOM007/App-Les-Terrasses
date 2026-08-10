@@ -1,13 +1,16 @@
 import { execFileSync } from 'child_process';
 import * as path from 'path';
+import { TRUNCATE_METIER_SQL } from './common/testing/test-db.helper';
 
 /**
  * Exécuté par Jest une seule fois, AVANT toutes les suites de tests.
  *
- * Garantit que la base de test (DATABASE_URL_TEST) existe et est à jour
- * avec les migrations Prisma, sans aucune étape manuelle :
+ * Garantit que la base de test (DATABASE_URL_TEST) existe, est à jour
+ * avec les migrations Prisma ET vierge de toute donnée, sans aucune
+ * étape manuelle :
  *   1. crée la base si elle n'existe pas (idempotent, P1009 = existe déjà),
- *   2. applique les migrations en attente (prisma migrate deploy).
+ *   2. applique les migrations en attente (prisma migrate deploy),
+ *   3. purge les tables métier (TRUNCATE) pour partir d'un état vide.
  *
  * C'est la seule source de vérité pour la synchronisation du schéma de
  * test : ni docker-compose, ni la CI ne doivent créer/migrer residence_catalog_test
@@ -63,5 +66,14 @@ module.exports = async function globalSetup(): Promise<void> {
     process.execPath,
     [prismaCli(), 'migrate', 'deploy', '--schema', SCHEMA_PATH],
     { env: buildChildEnv({ DATABASE_URL: testUrl }), stdio: 'inherit' },
+  );
+
+  // Purge des données : chaque invocation de Jest part d'une base vierge.
+  // Évite que des fixtures à emails fixes (e2e) ne se heurtent à des données
+  // résiduelles d'un run interrompu (violation d'unicité => flake non reproductible).
+  execFileSync(
+    process.execPath,
+    [prismaCli(), 'db', 'execute', '--url', testUrl, '--stdin'],
+    { input: TRUNCATE_METIER_SQL, env: buildChildEnv({}), stdio: 'pipe' },
   );
 };

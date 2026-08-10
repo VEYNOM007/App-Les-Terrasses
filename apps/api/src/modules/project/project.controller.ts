@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -8,6 +8,7 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
+import { CreateUnitMediaDto, UpdateUnitMediaDto } from './dto/unit-media.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
@@ -43,5 +44,20 @@ export class ProjectController {
   @Patch('units/:id')
   updateUnit(@Param('id') id: string, @Body() body: UpdateUnitDto) {
     return this.projectService.updateUnit(id, body);
+  }
+
+  @Post('units/:unitId/media')
+  addMedia(@Param('unitId') unitId: string, @Body() body: CreateUnitMediaDto) {
+    return this.projectService.addMedia(unitId, body);
+  }
+
+  @Patch('media/:mediaId')
+  updateMedia(@Param('mediaId') mediaId: string, @Body() body: UpdateUnitMediaDto) {
+    return this.projectService.updateMedia(mediaId, body);
+  }
+
+  @Delete('media/:mediaId')
+  removeMedia(@Param('mediaId') mediaId: string) {
+    return this.projectService.removeMedia(mediaId);
   }
 }

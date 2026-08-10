@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUrl, Max, Min } from 'class-validator';
 import { UnitStatus, UnitType } from '@prisma/client';
 
 /**
@@ -37,10 +37,24 @@ export class CreateUnitDto {
   @IsString()
   planImage?: string;
 
+  /** @deprecated Remplacé par les UnitMedia (POST /admin/units/:unitId/media). */
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   photos?: string[];
+
+  @IsOptional()
+  @IsString()
+  marketingDescription?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  highlights?: string[];
+
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  virtualTourUrl?: string;
 
   @IsOptional()
   @IsEnum(UnitStatus)

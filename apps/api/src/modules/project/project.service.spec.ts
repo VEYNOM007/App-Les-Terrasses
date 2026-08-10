@@ -1,9 +1,16 @@
-import { Frontage, ProjectStatus, UnitStatus, UnitType } from '@prisma/client';
+import {
+  Frontage,
+  MediaType,
+  ProjectStatus,
+  UnitStatus,
+  UnitType,
+} from '@prisma/client';
 import { ProjectService } from './project.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
+import { CreateUnitMediaDto } from './dto/unit-media.dto';
 
 const createMockPrisma = () => ({
   project: {
@@ -17,6 +24,11 @@ const createMockPrisma = () => ({
   unit: {
     create: jest.fn(),
     update: jest.fn(),
+  },
+  unitMedia: {
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
   },
 });
 
@@ -117,5 +129,90 @@ describe('ProjectService', () => {
     await service.listAllProjects();
 
     expect(prisma.project.findMany).toHaveBeenCalledWith({ include: { blocks: true } });
+  });
+
+  describe('médias d’unité (admin)', () => {
+    it('ajoute un média à une unité en appliquant le sortOrder par défaut 0', async () => {
+      const data: CreateUnitMediaDto = {
+        type: MediaType.RENDU_3D,
+        url: 'https://cdn.example.com/3d.png',
+        altText: 'Vue d\'artiste',
+      };
+      prisma.unitMedia.create.mockResolvedValue({ id: 'media-1', ...data, sortOrder: 0 });
+
+      const result = await service.addMedia('unit-1', data);
+
+      expect(prisma.unitMedia.create).toHaveBeenCalledWith({
+        data: {
+          unitId: 'unit-1',
+          type: MediaType.RENDU_3D,
+          url: 'https://cdn.example.com/3d.png',
+          altText: 'Vue d\'artiste',
+          sortOrder: 0,
+        },
+      });
+      expect(result.sortOrder).toBe(0);
+    });
+
+    it('ajoute un média en respectant un sortOrder explicite', async () => {
+      const data: CreateUnitMediaDto = {
+        type: MediaType.PHOTO,
+        url: 'https://cdn.example.com/photo.jpg',
+        sortOrder: 7,
+      };
+      prisma.unitMedia.create.mockResolvedValue({ id: 'media-2', ...data });
+
+      await service.addMedia('unit-1', data);
+
+      expect(prisma.unitMedia.create).toHaveBeenCalledWith({
+        data: {
+          unitId: 'unit-1',
+          type: MediaType.PHOTO,
+          url: 'https://cdn.example.com/photo.jpg',
+          altText: undefined,
+          sortOrder: 7,
+        },
+      });
+    });
+
+    it('met à jour partiellement un média', async () => {
+      prisma.unitMedia.update.mockResolvedValue({
+        id: 'media-1',
+        type: MediaType.PLAN,
+        url: 'https://cdn.example.com/plan-new.png',
+        altText: 'Plan à jour',
+        sortOrder: 2,
+      });
+
+      const result = await service.updateMedia('media-1', { altText: 'Plan à jour' });
+
+      expect(prisma.unitMedia.update).toHaveBeenCalledWith({
+        where: { id: 'media-1' },
+        data: {
+          type: undefined,
+          url: undefined,
+          altText: 'Plan à jour',
+          sortOrder: undefined,
+        },
+      });
+      expect(result.altText).toBe('Plan à jour');
+    });
+
+    it('supprime un média existant', async () => {
+      prisma.unitMedia.delete.mockResolvedValue({ id: 'media-1' });
+
+      const result = await service.removeMedia('media-1');
+
+      expect(prisma.unitMedia.delete).toHaveBeenCalledWith({ where: { id: 'media-1' } });
+      expect(result).toEqual({ id: 'media-1' });
+    });
+
+    it('remonte une 404 quand le média à supprimer n\'existe pas', async () => {
+      prisma.unitMedia.delete.mockRejectedValue(new Error('P2025: Record not found'));
+
+      await expect(service.removeMedia('media-inconnue')).rejects.toThrow(
+        'Média introuvable.',
+      );
+    });
   });
 });

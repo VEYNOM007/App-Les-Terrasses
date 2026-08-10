@@ -89,7 +89,17 @@ export class LaunchService {
     });
 
     const soldUnits = block.units.filter((u) => u.reservations.length > 0);
-    const totalPreVendu = soldUnits.reduce((sum, u) => sum + u.price.toNumber(), 0);
+
+    // Montant réellement engagé par l'acheteur (offerPrice ?? prix catalogue) :
+    // le dossier de financement doit refléter la réalité, pas un prix plus
+    // flatteur. L'écart avec la valeur catalogue reste visible (les deux
+    // sommes sont exposées) — un dossier honnête vaut mieux qu'un chiffre
+    // qui s'avère faux après vérification.
+    const totalCatalogAmount = soldUnits.reduce((sum, u) => sum + u.price.toNumber(), 0);
+    const totalPreVendu = soldUnits.reduce(
+      (sum, u) => sum + (u.reservations[0].offerPrice ?? u.price).toNumber(),
+      0,
+    );
     const totalDejaEncaisse = soldUnits.reduce((sum, u) => {
       const schedule = u.reservations[0]?.paymentSchedule;
       const paid = schedule?.installments
@@ -106,13 +116,16 @@ export class LaunchService {
       soldUnits: soldUnits.length,
       fillRatePercent:
         block.units.length === 0 ? 0 : Math.round((soldUnits.length / block.units.length) * 100),
+      totalCatalogAmount,
       totalPreVenduAmount: totalPreVendu,
       totalDejaEncaisseAmount: totalDejaEncaisse,
       currency: soldUnits[0]?.currency ?? 'XOF',
       buyers: soldUnits.map((u) => ({
         unitType: u.type,
         floor: u.floor,
-        price: u.price,
+        catalogPrice: u.price,
+        committedAmount: u.reservations[0].offerPrice ?? u.price,
+        offerLabel: u.reservations[0].offerLabel,
         buyerName: u.reservations[0].user.fullName,
         buyerPhone: u.reservations[0].user.phone,
         reservationStatus: u.reservations[0].status,

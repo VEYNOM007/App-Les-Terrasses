@@ -98,5 +98,8 @@ export function buildInstallmentPlan({
     .reduce((sum, item) => sum + item.amount, 0);
   items[items.length - 1].amount = totalAmount - alreadyAllocated;
 
-  return items;
+  // Les tranches de montant nul n'ont aucune réalité de paiement (ex : acompte
+  // à 100 % ⇒ plus aucune tranche d'équilibre). Les exclure garde l'échéancier
+  // lisible et la somme inchangée (les montants exclus valent 0).
+  return items.filter((item) => item.amount > 0);
 }

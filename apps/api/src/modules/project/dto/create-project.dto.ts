@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsArray, IsEnum, IsObject, IsOptional, IsString, IsUrl } from 'class-validator';
 import { ProjectStatus } from '@prisma/client';
 
 /**
@@ -29,6 +29,17 @@ export class CreateProjectDto {
   @IsOptional()
   @IsUrl({ require_tld: false })
   siteMapImageUrl?: string;
+
+  /** Contenu marketing du projet (accroches, arguments de vente, …). */
+  @IsOptional()
+  @IsObject()
+  marketingInfo?: Record<string, unknown>;
+
+  /** Vues du catalogue (galerie, plan de masse, vue aérienne, …). */
+  @IsOptional()
+  @IsArray()
+  @IsObject({ each: true })
+  views?: Record<string, unknown>[];
 
   @IsOptional()
   @IsEnum(ProjectStatus)

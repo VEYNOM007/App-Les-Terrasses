@@ -184,7 +184,7 @@ une échéance payée. `Block.launchStatus` gouverne tout.
 ```bash
 # Racine monorepo
 pnpm install
-pnpm --filter database run db:seed      # alimente projets / blocs / units
+pnpm --filter database run seed        # alimente projets / blocs / units
 pnpm --filter api run start:dev         # NestJS sur :3001
 pnpm --filter web run dev               # Next.js sur :3000
 

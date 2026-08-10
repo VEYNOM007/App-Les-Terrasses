@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -31,18 +32,16 @@ export class ReservationService {
   ) {}
 
   /**
-   * Crée une réservation pour une unité, en garantissant qu'une seule
-   * réservation active ne peut exister par unité à un instant T.
-   *
-   * Étape 1 (Redis) : lock court pour éviter que deux requêtes HTTP
-   *   concurrentes n'entrent toutes les deux dans la transaction Prisma
-   *   au même instant (fenêtre de quelques millisecondes).
-   * Étape 2 (Postgres) : la transaction Prisma est la source de vérité —
-   *   même sans le lock Redis (ex: Redis down), l'update conditionnel
-   *   `WHERE status = DISPONIBLE` empêche la double-réservation grâce à
-   *   l'atomicité de la transaction SQL.
+   * Cœur partagé de création de réservation : lock Redis + transaction
+   * Prisma (update conditionnel `WHERE status = DISPONIBLE`). Utilisé par
+   * le parcours acheteur (reserveUnit, sans offre) et par le parcours
+   * admin (adminCreateReservation, avec offre personnalisée éventuelle).
    */
-  async reserveUnit(unitId: string, userId: string) {
+  private async createReservationCore(
+    unitId: string,
+    userId: string,
+    offer?: { offerPrice?: number; offerLabel?: string },
+  ) {
     const lockKey = this.redisLock.lockKeyForUnit(unitId);
     const token = await this.redisLock.acquire(lockKey, 10_000);
 
@@ -78,6 +77,8 @@ export class ReservationService {
             userId,
             status: ReservationStatus.EN_ATTENTE,
             lockExpiresAt,
+            offerPrice: offer?.offerPrice,
+            offerLabel: offer?.offerLabel,
           },
         });
 
@@ -96,6 +97,51 @@ export class ReservationService {
       // On libère toujours le lock Redis, succès ou échec.
       await this.redisLock.release(lockKey, token);
     }
+  }
+
+  /**
+   * Crée une réservation pour une unité, en garantissant qu'une seule
+   * réservation active ne peut exister par unité à un instant T.
+   */
+  async reserveUnit(unitId: string, userId: string) {
+    return this.createReservationCore(unitId, userId);
+  }
+
+  /**
+   * Vente commerciale enregistrée par un admin (`POST /admin/reservations`).
+   * Réutilise le même mécanisme anti-double-vente que le parcours acheteur
+   * (lock Redis + transaction), sans chemin de paiement parallèle.
+   *
+   * Règles d'offre : `offerPrice` doit être strictement positif et ne peut
+   * pas dépasser le prix catalogue `unit.price` — le prix public reste
+   * immuable, l'écart (s'il existe) est volontairement visible dans le
+   * dossier de financement. L'échéancier est ensuite généré sur
+   * `offerPrice ?? unit.price` par PaymentService.generateSchedule().
+   */
+  async adminCreateReservation(input: {
+    unitId: string;
+    userId: string;
+    offerPrice?: number;
+    offerLabel?: string;
+  }) {
+    const unit = await this.prisma.unit.findUnique({ where: { id: input.unitId } });
+    if (!unit) throw new NotFoundException('Unité introuvable.');
+
+    if (input.offerPrice !== undefined) {
+      if (input.offerPrice <= 0) {
+        throw new BadRequestException('offerPrice doit être un montant strictement positif.');
+      }
+      if (input.offerPrice > unit.price.toNumber()) {
+        throw new BadRequestException(
+          "offerPrice ne peut pas dépasser le prix catalogue de l'unité.",
+        );
+      }
+    }
+
+    return this.createReservationCore(input.unitId, input.userId, {
+      offerPrice: input.offerPrice,
+      offerLabel: input.offerLabel,
+    });
   }
 
   /**

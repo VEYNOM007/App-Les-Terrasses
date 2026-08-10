@@ -280,6 +280,38 @@ paths:
               schema: { $ref: '#/components/schemas/Unit' }
         "404": { description: Unité introuvable }
 
+  /catalog/units/{unitId}/payment-preview:
+    get:
+      tags: [Catalog]
+      summary: Aperçu public de l'échéancier (simulateur de financement, basé sur le prix catalogue)
+      parameters:
+        - $ref: '#/components/parameters/UnitId'
+        - name: downPaymentPercent
+          in: query
+          required: false
+          description: Acompte en % (1-100). Défaut 10. À 100 %, une seule échéance (acompte intégral).
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Échéancier prévisionnel
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentPreview' }
+        "404": { description: Unité introuvable ou projet non publié }
+
+  /catalog/typologies:
+    get:
+      tags: [Catalog]
+      summary: Agrégats par typologie (compteurs, prix de départ, unités disponibles)
+      responses:
+        "200":
+          description: Groupes par typologie
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TypologyGroup' }
+
   /catalog/projects/{projectId}/site-plan:
     get:
       tags: [Catalog]
@@ -927,6 +959,53 @@ paths:
       responses:
         "200": { description: Unité mise à jour }
 
+  /admin/units/{unitId}/media:
+    post:
+      tags: [Admin]
+      summary: Ajouter un média à une unité (photo, plan, rendu 3D)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UnitId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnitMediaInput' }
+      responses:
+        "201":
+          description: Média créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnitMedia' }
+
+  /admin/media/{mediaId}:
+    patch:
+      tags: [Admin]
+      summary: Modifier un média d'unité
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/MediaId'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnitMediaInput' }
+      responses:
+        "200":
+          description: Média mis à jour
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UnitMedia' }
+
+    delete:
+      tags: [Admin]
+      summary: Supprimer un média d'unité
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/MediaId'
+      responses:
+        "200": { description: Média supprimé }
+        "404": { description: Média introuvable }
+
   /admin/reservations:
     get:
       tags: [Admin]
@@ -1124,6 +1203,11 @@ components:
       in: path
       required: true
       schema: { type: string }
+    MediaId:
+      name: mediaId
+      in: path
+      required: true
+      schema: { type: string }
     ReservationId:
       name: reservationId
       in: path
@@ -1250,6 +1334,66 @@ components:
               type: array
               items: { type: string }
             constructionProgress: { type: integer }
+
+    UnitMediaInput:
+      type: object
+      required: [type, url]
+      properties:
+        type: { type: string, enum: [photo, plan, rendu_3d] }
+        url: { type: string, format: uri }
+        altText: { type: string }
+        sortOrder: { type: integer, minimum: 0, default: 0 }
+
+    UnitMedia:
+      type: object
+      required: [id, unitId, type, url, sortOrder]
+      properties:
+        id: { type: string }
+        unitId: { type: string }
+        type: { type: string, enum: [photo, plan, rendu_3d] }
+        url: { type: string, format: uri }
+        altText: { type: string, nullable: true }
+        sortOrder: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    TypologyGroup:
+      type: object
+      properties:
+        type: { type: string, enum: [studio, t2, t3, t4, t5, commerce] }
+        totalUnits: { type: integer }
+        availableUnits: { type: integer }
+        minPrice: { type: number }
+        units:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              blockName: { type: string }
+              blockFrontage: { type: string }
+              floor: { type: integer }
+              surface: { type: number }
+              price: { type: number }
+              status: { type: string }
+              hasRendu3D: { type: boolean }
+
+    PaymentPreview:
+      type: object
+      properties:
+        unitId: { type: string }
+        unitType: { type: string }
+        totalAmount: { type: number }
+        currency: { type: string, example: "XOF" }
+        downPaymentPercent: { type: integer }
+        installments:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string, example: "Acompte réservation" }
+              amount: { type: number }
+              dueDate: { type: string, format: date-time }
+              percent: { type: number }
 
     Reservation:
       type: object

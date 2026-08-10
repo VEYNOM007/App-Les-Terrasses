@@ -3,8 +3,9 @@ import { ReservationService } from './reservation.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisLockService } from '../../common/redis/redis-lock.service';
 import { LaunchService } from '../launch/launch.service';
-import { ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
+import { Decimal } from '@prisma/client/runtime/library';
 
 /**
  * Tests unitaires — ReservationService
@@ -29,6 +30,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 const createMockPrisma = () => ({
   $transaction: jest.fn(),
   unit: {
+    findUnique: jest.fn(),
     findUniqueOrThrow: jest.fn(),
     updateMany: jest.fn(),
     update: jest.fn(),
@@ -179,6 +181,99 @@ describe('ReservationService', () => {
 
       // Le lock DOIT être libéré dans le finally
       expect(redisLock.release).toHaveBeenCalledWith('lock:unit:unit-001', 'token-ghi');
+    });
+  });
+
+  // ──────────────────────────────────────────────────
+  // adminCreateReservation — vente manuelle back-office (R6)
+  // ──────────────────────────────────────────────────
+
+  describe('adminCreateReservation', () => {
+    it('devrait créer une réservation avec offre (offerPrice/offerLabel) via le même verrou anti-double-vente', async () => {
+      prisma.unit.findUnique.mockResolvedValue({
+        id: 'unit-001',
+        price: new Decimal(35_000_000),
+      });
+      redisLock.acquire.mockResolvedValue('token-offre');
+
+      const mockReservation = {
+        id: 'res-offre',
+        unitId: 'unit-001',
+        userId: 'user-001',
+        offerPrice: new Decimal(28_000_000),
+        offerLabel: 'Offre de lancement',
+      };
+
+      prisma.$transaction.mockImplementation(async (callback: any) => {
+        const tx = {
+          unit: {
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          },
+          reservation: {
+            create: jest.fn().mockResolvedValue(mockReservation),
+          },
+        };
+        return callback(tx);
+      });
+
+      const result = await service.adminCreateReservation({
+        unitId: 'unit-001',
+        userId: 'user-001',
+        offerPrice: 28_000_000,
+        offerLabel: 'Offre de lancement',
+      });
+
+      expect(prisma.unit.findUnique).toHaveBeenCalledWith({ where: { id: 'unit-001' } });
+      expect(redisLock.acquire).toHaveBeenCalledWith('lock:unit:unit-001', 10_000);
+      expect(expirationQueue.add).toHaveBeenCalledWith(
+        'expire-reservation',
+        { reservationId: 'res-offre' },
+        expect.objectContaining({ jobId: 'res-offre' }),
+      );
+      expect(result).toEqual(mockReservation);
+    });
+
+    it('devrait rejeter une offre supérieure au prix catalogue (BadRequest)', async () => {
+      prisma.unit.findUnique.mockResolvedValue({
+        id: 'unit-001',
+        price: new Decimal(35_000_000),
+      });
+
+      await expect(
+        service.adminCreateReservation({
+          unitId: 'unit-001',
+          userId: 'user-001',
+          offerPrice: 36_000_000,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(redisLock.acquire).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('devrait rejeter une offre inférieure ou égale à zéro (BadRequest)', async () => {
+      prisma.unit.findUnique.mockResolvedValue({
+        id: 'unit-001',
+        price: new Decimal(35_000_000),
+      });
+
+      await expect(
+        service.adminCreateReservation({
+          unitId: 'unit-001',
+          userId: 'user-001',
+          offerPrice: 0,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('devrait lever NotFoundException si l\'unité n\'existe pas', async () => {
+      prisma.unit.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.adminCreateReservation({ unitId: 'unit-x', userId: 'user-001' }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(redisLock.acquire).not.toHaveBeenCalled();
     });
   });
 

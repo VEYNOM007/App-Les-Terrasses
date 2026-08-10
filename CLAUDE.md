@@ -115,6 +115,14 @@ Voir `.env.example` à la racine. Ne jamais commit de `.env` réel (déjà
 dans `.gitignore`). Toute nouvelle variable ajoutée doit être documentée
 dans `.env.example` dans le même commit.
 
+### Base de test — synchronisation automatique (ne PAS créer/migrer à la main)
+`residence_catalog_test` est créée et migrée automatiquement à chaque
+invocation de Jest par `apps/api/src/jest.global-setup.ts` (globalSetup) :
+création idempotente via `prisma db execute` + `prisma migrate deploy`.
+Ni `docker compose`, ni la CI, ni un script manuel ne doivent provisionner
+cette base — c'est la seule source de vérité. En local, il suffit d'avoir
+les conteneurs `docker compose up -d` (Postgres + Redis) puis `pnpm test`.
+
 ## Ordre de priorité pour la suite du MVP
 
 1. ~~Migration Prisma initiale + seed de démo~~ — **fait** (2 migrations versionnées).

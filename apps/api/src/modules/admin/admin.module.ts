@@ -7,9 +7,10 @@ import { AdminClientController } from './admin-client.controller';
 import { AdminClientService } from './admin-client.service';
 import { ArtisanModule } from '../artisan/artisan.module';
 import { ReservationModule } from '../reservation/reservation.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
-  imports: [ArtisanModule, ReservationModule],
+  imports: [ArtisanModule, ReservationModule, PaymentModule],
   providers: [AdminService, AdminClientService],
   controllers: [
     AdminController,

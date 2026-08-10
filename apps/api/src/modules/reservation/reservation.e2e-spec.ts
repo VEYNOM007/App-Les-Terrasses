@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { AuthModule } from '../auth/auth.module';
 import { ReservationController } from './reservation.controller';
 import { ReservationService } from './reservation.service';
 import { LaunchService } from '../launch/launch.service';
+import { PaymentService } from '../payment/payment.service';
+import { AdminReservationController } from '../admin/admin-reservation.controller';
 import { RedisModule } from '../../common/redis/redis.module';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -43,9 +45,11 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
   let app: INestApplication;
   const testPrisma = getTestPrisma();
   let queueAdd: jest.Mock;
+  let generateSchedule: jest.Mock;
 
   beforeAll(async () => {
     queueAdd = jest.fn().mockResolvedValue({ id: 'job-e2e' });
+    generateSchedule = jest.fn().mockResolvedValue({ id: 'schedule-e2e' });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -57,8 +61,12 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
         RedisModule,
         AuthModule,
       ],
-      controllers: [ReservationController],
-      providers: [ReservationService, LaunchService],
+      controllers: [ReservationController, AdminReservationController],
+      providers: [
+        ReservationService,
+        LaunchService,
+        { provide: PaymentService, useValue: { generateSchedule } },
+      ],
     })
       .overrideProvider(PrismaService)
       .useValue(testPrisma)
@@ -70,6 +78,14 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix(API_PREFIX);
+    // Même pipe que main.ts : whitelist + rejet des champs inconnus + transform.
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
   });
 
@@ -81,6 +97,7 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
   beforeEach(async () => {
     await cleanupTestDatabase();
     queueAdd.mockClear();
+    generateSchedule.mockClear();
   });
 
   // ──────────────────────────────────────────────────
@@ -237,5 +254,89 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body).toHaveLength(2);
     expect(res.body.every((r: any) => r.unit)).toBe(true);
+  });
+
+  // ──────────────────────────────────────────────────
+  // POST /v1/admin/reservations — vente manuelle back-office (R6)
+  // ──────────────────────────────────────────────────
+
+  describe('POST /admin/reservations (vente commerciale admin, R6)', () => {
+    it('sans JWT -> 401 Unauthorized', async () => {
+      const { units } = await createProjectWithBlockAndUnits(1);
+
+      const res = await request(app.getHttpServer())
+        .post(`/${API_PREFIX}/admin/reservations`)
+        .send({ unitId: units[0].id, userId: 'user-any' });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('par un ACHETEUR -> 403 Forbidden', async () => {
+      await createUserFixture({ email: 'acheteur@test.tg', phone: '+22832000001', password: 'Secret123!' });
+      const { units } = await createProjectWithBlockAndUnits(1);
+      const token = await loginAndGetToken('acheteur@test.tg', 'Secret123!');
+
+      const res = await request(app.getHttpServer())
+        .post(`/${API_PREFIX}/admin/reservations`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ unitId: units[0].id, userId: 'user-any' });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('par un ADMIN avec offre <= prix catalogue -> 201, réservation + échéancier, unité RESERVE', async () => {
+      const adminUser = await createUserFixture({ email: 'admin@test.tg', phone: '+22831000001', password: 'Secret123!', role: 'ADMIN' });
+      const { units } = await createProjectWithBlockAndUnits(1);
+      const token = await loginAndGetToken('admin@test.tg', 'Secret123!');
+
+      const res = await request(app.getHttpServer())
+        .post(`/${API_PREFIX}/admin/reservations`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ unitId: units[0].id, userId: adminUser.id, offerPrice: 20_000_000, offerLabel: 'Offre commerciale e2e' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.reservation).toMatchObject({
+        unitId: units[0].id,
+        userId: adminUser.id,
+        status: 'EN_ATTENTE',
+        offerPrice: '20000000',
+        offerLabel: 'Offre commerciale e2e',
+      });
+      // L'échéancier est généré sur le montant réellement engagé (offerPrice)
+      expect(res.body.schedule).toEqual({ id: 'schedule-e2e' });
+      expect(generateSchedule).toHaveBeenCalledWith(res.body.reservation.id);
+
+      // L'unité est passée à RESERVE (même verrou que le parcours acheteur)
+      const unit = await testPrisma.unit.findUniqueOrThrow({ where: { id: units[0].id } });
+      expect(unit.status).toBe('RESERVE');
+    });
+
+    it('par un ADMIN avec offre > prix catalogue -> 400, aucun échéancier généré', async () => {
+      await createUserFixture({ email: 'admin2@test.tg', phone: '+22831000002', password: 'Secret123!', role: 'ADMIN' });
+      const { units } = await createProjectWithBlockAndUnits(1);
+      const token = await loginAndGetToken('admin2@test.tg', 'Secret123!');
+
+      const res = await request(app.getHttpServer())
+        .post(`/${API_PREFIX}/admin/reservations`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ unitId: units[0].id, userId: 'user-any', offerPrice: 25_000_000 });
+
+      expect(res.status).toBe(400);
+      expect(generateSchedule).not.toHaveBeenCalled();
+    });
+
+    it('par un ADMIN avec offerPrice négatif -> 400 (validation DTO @Min(0))', async () => {
+      await createUserFixture({ email: 'admin3@test.tg', phone: '+22831000003', password: 'Secret123!', role: 'ADMIN' });
+      const { units } = await createProjectWithBlockAndUnits(1);
+      const token = await loginAndGetToken('admin3@test.tg', 'Secret123!');
+
+      const res = await request(app.getHttpServer())
+        .post(`/${API_PREFIX}/admin/reservations`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ unitId: units[0].id, userId: 'user-any', offerPrice: -5 });
+
+      expect(res.status).toBe(400);
+      expect(generateSchedule).not.toHaveBeenCalled();
+    });
   });
 });

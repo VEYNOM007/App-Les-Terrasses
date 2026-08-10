@@ -31,17 +31,14 @@ export function getTestPrisma(): PrismaClient {
 }
 
 /**
- * TRUNCATE toutes les tables metier. Préserve la structure et les enums.
- * Appelé typiquement dans afterEach de chaque suite d'integration.
+ * Liste exhaustive des tables metier à purger. Source unique partagée par
+ * `cleanupTestDatabase()` (isolation entre tests) et `jest.global-setup.ts`
+ * (base vierge à chaque invocation de Jest).
  *
- * Ordre peu important car on CASCADE, mais on explicit les noms pour
- * être sûr de ne pas oublier une table si une nouvelle est ajoutée.
+ * TRUNCATE avec CASCADE pour bypasser les FK. RESTART IDENTITY reset les
+ * sequences auto-increment. Préserve la structure et les enums.
  */
-export async function cleanupTestDatabase(): Promise<void> {
-  const prisma = getTestPrisma();
-  // TRUNCATE avec CASCADE pour bypasser les FK. RESTART IDENTITY reset
-  // les sequences auto-increment.
-  await prisma.$executeRawUnsafe(`
+export const TRUNCATE_METIER_SQL = `
     TRUNCATE TABLE
       "refresh_tokens",
       "password_reset_tokens",
@@ -61,7 +58,15 @@ export async function cleanupTestDatabase(): Promise<void> {
       "projects",
       "users"
     RESTART IDENTITY CASCADE;
-  `);
+  `;
+
+/**
+ * TRUNCATE toutes les tables metier. Préserve la structure et les enums.
+ * Appelé typiquement dans afterEach de chaque suite d'integration.
+ */
+export async function cleanupTestDatabase(): Promise<void> {
+  const prisma = getTestPrisma();
+  await prisma.$executeRawUnsafe(TRUNCATE_METIER_SQL);
 }
 
 /**

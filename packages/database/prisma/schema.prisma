@@ -46,23 +46,31 @@ enum UnitType {
 }
 
 enum Frontage {
-  FACADE_PRINCIPALE   // rue la plus passante / vitrine (ex: façade nord ici)
-  FACADE_SECONDAIRE   // autre rue, moins passante
-  INTERIEUR_ILOT       // cœur de résidence, pas de vue rue
-  MITOYEN               // côté aveugle, mitoyenneté (technique/moins valorisé)
+  FACADE_PRINCIPALE // rue la plus passante / vitrine (ex: façade nord ici)
+  FACADE_SECONDAIRE // autre rue, moins passante
+  INTERIEUR_ILOT // cœur de résidence, pas de vue rue
+  MITOYEN // côté aveugle, mitoyenneté (technique/moins valorisé)
 }
 
 enum UnitStatus {
   DISPONIBLE
-  RESERVE   // verrou actif, en attente d'acompte
-  VENDU     // acompte payé, échéancier en cours
+  RESERVE // verrou actif, en attente d'acompte
+  VENDU // acompte payé, échéancier en cours
   LIVRE
 }
 
+// Type de média d'une unité (UnitMedia). RENDU_3D déclenche le badge
+// "Vue d'artiste" côté catalogue sans aucun toggle admin.
+enum MediaType {
+  PHOTO
+  PLAN
+  RENDU_3D
+}
+
 enum ReservationStatus {
-  EN_ATTENTE   // verrou actif, acompte pas encore reçu
-  CONFIRMEE    // acompte payé
-  ANNULEE      // expirée ou annulée manuellement
+  EN_ATTENTE // verrou actif, acompte pas encore reçu
+  CONFIRMEE // acompte payé
+  ANNULEE // expirée ou annulée manuellement
   LIVREE
 }
 
@@ -127,7 +135,7 @@ enum ArtisanStatus {
 }
 
 enum AssignmentStatus {
-  PROPOSEE     // proposée à l'artisan, pas encore acceptée
+  PROPOSEE // proposée à l'artisan, pas encore acceptée
   ACCEPTEE
   EN_COURS
   TERMINEE
@@ -142,17 +150,17 @@ enum QuoteStatus {
 }
 
 enum LaunchStatus {
-  EN_COMMERCIALISATION  // ventes ouvertes, construction pas encore actée
-  SEUIL_ATTEINT         // % minimum de ventes atteint, dossier financement généré
-  FINANCEMENT_EN_COURS  // dossier présenté à la banque, en attente de décision
-  EN_CONSTRUCTION       // financement obtenu, chantier démarré
+  EN_COMMERCIALISATION // ventes ouvertes, construction pas encore actée
+  SEUIL_ATTEINT // % minimum de ventes atteint, dossier financement généré
+  FINANCEMENT_EN_COURS // dossier présenté à la banque, en attente de décision
+  EN_CONSTRUCTION // financement obtenu, chantier démarré
   LIVRE
 }
 
 enum ParkingType {
-  SOUS_PILOTIS      // RDC des blocs résidentiels (R+3), réservé résidents
-  AUVENT_SOLAIRE    // périphérie, visiteurs/clients commerces, panneaux solaires
-  AUVENT_CLASSIQUE  // parking d'appoint, toile tendue
+  SOUS_PILOTIS // RDC des blocs résidentiels (R+3), réservé résidents
+  AUVENT_SOLAIRE // périphérie, visiteurs/clients commerces, panneaux solaires
+  AUVENT_CLASSIQUE // parking d'appoint, toile tendue
 }
 
 enum ParkingSpotStatus {
@@ -166,24 +174,24 @@ enum ParkingSpotStatus {
 // ---------------------------------------------------
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  phone         String    @unique
-  passwordHash  String
-  fullName      String
-  country       String    @default("TG")
-  role          UserRole  @default(ACHETEUR)
-  kycStatus     KycStatus @default(NON_SOUMIS)
-  kycDocuments  Document[] @relation("KycDocuments")
+  id           String     @id @default(cuid())
+  email        String     @unique
+  phone        String     @unique
+  passwordHash String
+  fullName     String
+  country      String     @default("TG")
+  role         UserRole   @default(ACHETEUR)
+  kycStatus    KycStatus  @default(NON_SOUMIS)
+  kycDocuments Document[] @relation("KycDocuments")
 
-  reservations       Reservation[]
-  notifications       Notification[]
-  notificationPrefs   NotificationPreference?
-  constructionUpdatesPublished ConstructionUpdate[] @relation("PublishedBy")
-  artisanProfile     Artisan?
-  refreshTokens      RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  contractSignatures ContractSignature[]
+  reservations                 Reservation[]
+  notifications                Notification[]
+  notificationPrefs            NotificationPreference?
+  constructionUpdatesPublished ConstructionUpdate[]    @relation("PublishedBy")
+  artisanProfile               Artisan?
+  refreshTokens                RefreshToken[]
+  passwordResetTokens          PasswordResetToken[]
+  contractSignatures           ContractSignature[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -202,12 +210,12 @@ model User {
 // ---------------------------------------------------
 
 model RefreshToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
   expiresAt DateTime
-  revokedAt DateTime?  // null = actif ; non-null = révoqué (manuel, expiration, ou rotation)
+  revokedAt DateTime? // null = actif ; non-null = révoqué (manuel, expiration, ou rotation)
 
   // Reference au token que celui-ci remplace (rotation). Pas une
   // relation Prisma formelle pour eviter la complexite de self-relation
@@ -237,12 +245,12 @@ model RefreshToken {
 // ---------------------------------------------------
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
   expiresAt DateTime
-  usedAt    DateTime?  // null = actif ; non-null = déjà consommé
+  usedAt    DateTime? // null = actif ; non-null = déjà consommé
 
   createdAt DateTime @default(now())
 
@@ -260,7 +268,7 @@ model Project {
   name        String
   description String?
   location    String
-  amenities   String[]      // ["gardiennage", "aire_de_jeux", "parking"]
+  amenities   String[] // ["gardiennage", "aire_de_jeux", "parking"]
   coverImage  String?
   status      ProjectStatus @default(BROUILLON)
 
@@ -268,6 +276,13 @@ model Project {
   // rendu 3D vue de dessus) sur laquelle les polygones de Block sont
   // positionnés en overlay pour le plan interactif.
   siteMapImageUrl String?
+
+  // Contenu marketing du projet (accroches, arguments de vente) et
+  // configuration des vues du catalogue (galerie, plan masse, etc.) —
+  // stockés en base pour que le frontend n'embarque plus de données
+  // statiques (catalogData.ts).
+  marketingInfo Json?
+  views         Json?
 
   blocks Block[]
 
@@ -279,17 +294,17 @@ model Project {
 }
 
 model Block {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  name   String   // "Bloc A"
+  name   String // "Bloc A"
   floors Int
 
   // Position dans la résidence — sert à la fois à la différenciation prix
   // (façade principale = plus cher) et au plan de masse interactif.
-  frontage                Frontage @default(INTERIEUR_ILOT)
-  distanceFromEntranceM   Int?     // distance approximative à l'entrée principale, en mètres
+  frontage              Frontage @default(INTERIEUR_ILOT)
+  distanceFromEntranceM Int? // distance approximative à l'entrée principale, en mètres
 
   // Polygone du bloc sur le plan de masse, en coordonnées relatives à
   // Project.siteMapImageUrl (ex: [{"x":120,"y":80},{"x":180,"y":80},...]
@@ -298,8 +313,8 @@ model Block {
   sitePlanPolygon Json?
 
   // Avancement chantier consolidé (dénormalisé, mis à jour à chaque ConstructionUpdate)
-  constructionPhase   ConstructionPhase @default(FONDATIONS)
-  progressPercent     Int               @default(0)
+  constructionPhase ConstructionPhase @default(FONDATIONS)
+  progressPercent   Int               @default(0)
 
   // Cycle de pré-commercialisation -> financement -> construction.
   // Tant que launchStatus != EN_CONSTRUCTION, ConstructionModule refuse
@@ -310,11 +325,11 @@ model Block {
   financingSecuredAt      DateTime?
   constructionStartedAt   DateTime?
 
-  units              Unit[]
+  units               Unit[]
   constructionUpdates ConstructionUpdate[]
-  artisanAssignments ArtisanAssignment[]
-  quotes             Quote[]
-  parkingSpots       ParkingSpot[]
+  artisanAssignments  ArtisanAssignment[]
+  quotes              Quote[]
+  parkingSpots        ParkingSpot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -325,18 +340,34 @@ model Block {
 }
 
 model Unit {
-  id      String   @id @default(cuid())
+  id      String @id @default(cuid())
   blockId String
-  block   Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  block   Block  @relation(fields: [blockId], references: [id], onDelete: Cascade)
 
-  type       UnitType
-  surface    Float
-  floor      Int
-  price      Decimal    @db.Decimal(14, 2)
-  currency   String     @default("XOF")
-  planImage  String?
-  photos     String[]
-  status     UnitStatus @default(DISPONIBLE)
+  type      UnitType
+  surface   Float
+  floor     Int
+  price     Decimal    @db.Decimal(14, 2)
+  currency  String     @default("XOF")
+  planImage String?
+  /// @deprecated Remplacé par UnitMedia (relation `media`). Gardé transitoirement
+  /// pour la compatibilité des données existantes ; toute nouvelle écriture doit
+  /// passer par UnitMedia.
+  photos    String[]
+  status    UnitStatus @default(DISPONIBLE)
+
+  // URL de visite virtuelle 360° (vue immersive de l'unité).
+  virtualTourUrl String?
+
+  // Colonnes marketing — le prix public immuable reste `price` ; ces champs
+  // décrivent l'unité côté vente (texte vendeur + points forts) et sont
+  // éditables via l'admin.
+  marketingDescription String?
+  highlights           String[] @default([])
+
+  // Médias structurés de l'unité (photos, plans, rendus 3D). RENDU_3D
+  // alimente automatiquement le badge "Vue d'artiste".
+  media UnitMedia[]
 
   // Pertinent uniquement pour type = COMMERCE — vitrine sur rue et accès
   // direct depuis la voie publique (par opposition à un local en cœur
@@ -355,6 +386,23 @@ model Unit {
   @@index([blockId, status])
   @@index([type, status])
   @@map("units")
+}
+
+model UnitMedia {
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  type      MediaType
+  url       String
+  altText   String?
+  sortOrder Int       @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([unitId, type])
+  @@index([unitId, sortOrder])
+  @@map("unit_media")
 }
 
 // ---------------------------------------------------
@@ -383,7 +431,15 @@ model Reservation {
   user   User   @relation(fields: [userId], references: [id])
 
   status        ReservationStatus @default(EN_ATTENTE)
-  lockExpiresAt DateTime          // 48h après création, tant que status = EN_ATTENTE
+  lockExpiresAt DateTime // 48h après création, tant que status = EN_ATTENTE
+
+  // Offre personnalisée accordée par un admin au moment de la réservation.
+  // offerPrice est le montant RÉELLEMENT ENGAGÉ par l'acheteur ; unit.price
+  // reste le prix public immuable (jamais modifié par une offre). Le dossier
+  // de financement (generateFundingDossier) somme offerPrice ?? unit.price et
+  // l'échéancier de paiement est généré sur offerPrice quand il est présent.
+  offerPrice Decimal? @db.Decimal(14, 2)
+  offerLabel String?
 
   paymentSchedule PaymentSchedule?
   documents       Document[]
@@ -402,8 +458,8 @@ model Reservation {
 // ---------------------------------------------------
 
 model PaymentSchedule {
-  id            String @id @default(cuid())
-  reservationId String @unique
+  id            String      @id @default(cuid())
+  reservationId String      @unique
   reservation   Reservation @relation(fields: [reservationId], references: [id])
 
   totalAmount Decimal @db.Decimal(14, 2)
@@ -417,18 +473,18 @@ model PaymentSchedule {
 }
 
 model PaymentInstallment {
-  id               String          @id @default(cuid())
-  scheduleId       String
-  schedule         PaymentSchedule @relation(fields: [scheduleId], references: [id])
+  id         String          @id @default(cuid())
+  scheduleId String
+  schedule   PaymentSchedule @relation(fields: [scheduleId], references: [id])
 
-  label    String  // "Acompte réservation", "Tranche gros œuvre", "Solde livraison"
-  amount   Decimal @db.Decimal(14, 2)
-  dueDate  DateTime
-  status   InstallmentStatus @default(EN_ATTENTE)
+  label   String // "Acompte réservation", "Tranche gros œuvre", "Solde livraison"
+  amount  Decimal           @db.Decimal(14, 2)
+  dueDate DateTime
+  status  InstallmentStatus @default(EN_ATTENTE)
 
-  provider      PaymentProvider?
-  providerRef   String?  // ID transaction CinetPay/Stripe pour rapprochement
-  paidAt        DateTime?
+  provider    PaymentProvider?
+  providerRef String? // ID transaction CinetPay/Stripe pour rapprochement
+  paidAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -466,9 +522,9 @@ model ConstructionUpdate {
 // ---------------------------------------------------
 
 model Document {
-  id     String       @id @default(cuid())
-  type   DocumentType
-  name   String
+  id      String       @id @default(cuid())
+  type    DocumentType
+  name    String
   fileUrl String
 
   // Un document peut être lié à une réservation (contrat, quittance)
@@ -477,7 +533,7 @@ model Document {
   reservation   Reservation? @relation(fields: [reservationId], references: [id])
 
   kycOwnerId String?
-  kycOwner   User?  @relation("KycDocuments", fields: [kycOwnerId], references: [id])
+  kycOwner   User?   @relation("KycDocuments", fields: [kycOwnerId], references: [id])
 
   artisanAssignmentId String?
   artisanAssignment   ArtisanAssignment? @relation(fields: [artisanAssignmentId], references: [id], onDelete: Cascade)
@@ -499,13 +555,13 @@ model Document {
 // rend la double signature PROPRIETAIRE puis ADMIN immuable en base : un
 // doublon lève P2002, traduit en 409 Conflict par ContractService.
 model ContractSignature {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   documentId String
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   signerType        ContractSignerType
   signerUserId      String
-  signerUser        User @relation(fields: [signerUserId], references: [id])
+  signerUser        User               @relation(fields: [signerUserId], references: [id])
   signatureImageUrl String
 
   signedAt DateTime @default(now())
@@ -564,7 +620,7 @@ model Artisan {
   companyName     String
   trade           ArtisanTrade
   status          ArtisanStatus @default(ACTIF)
-  tradeLicenseUrl String?       // registre de commerce / attestation métier
+  tradeLicenseUrl String? // registre de commerce / attestation métier
 
   assignments ArtisanAssignment[]
   quotes      Quote[]
@@ -583,13 +639,15 @@ model ArtisanAssignment {
   blockId   String
   block     Block   @relation(fields: [blockId], references: [id])
 
-  status     AssignmentStatus @default(PROPOSEE)
-  scope      String?          // ex: "Second œuvre — plomberie, niveaux 1 à 3"
-  startDate  DateTime?
-  endDate    DateTime?
+  status    AssignmentStatus @default(PROPOSEE)
+  scope     String? // ex: "Second œuvre — plomberie, niveaux 1 à 3"
+  startDate DateTime?
+  endDate   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  documents Document[]
 
   // Un artisan n'a normalement qu'une affectation active par bloc/métier,
   // appliqué au niveau service plutôt qu'en contrainte DB stricte (permet
@@ -597,8 +655,6 @@ model ArtisanAssignment {
   @@index([blockId, status])
   @@index([artisanId, status])
   @@map("artisan_assignments")
-
-  documents Document[]
 }
 
 model Quote {
@@ -612,7 +668,7 @@ model Quote {
   currency    String      @default("XOF")
   description String
   status      QuoteStatus @default(BROUILLON)
-  documentUrl String?     // PDF du devis une fois généré/uploadé
+  documentUrl String? // PDF du devis une fois généré/uploadé
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -632,13 +688,13 @@ model Quote {
 // option, plutôt que d'avoir une place générique non identifiée.
 
 model ParkingSpot {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   blockId String?
-  block   Block? @relation(fields: [blockId], references: [id])
+  block   Block?  @relation(fields: [blockId], references: [id])
   // blockId nul pour les auvents solaires/classiques en zone commune,
   // non rattachés à un bloc précis (contrairement au pilotis).
 
-  numero String      @unique // ex: "PK-A-01", "PK-SOL-12"
+  numero String            @unique // ex: "PK-A-01", "PK-SOL-12"
   type   ParkingType
   status ParkingSpotStatus @default(LIBRE)
 

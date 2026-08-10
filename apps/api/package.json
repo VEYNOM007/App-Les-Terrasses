@@ -61,6 +61,7 @@
     "setupFiles": [
       "<rootDir>/jest.setup.ts"
     ],
+    "globalSetup": "<rootDir>/jest.global-setup.ts",
     "maxWorkers": 1,
     "collectCoverageFrom": [
       "**/*.ts",

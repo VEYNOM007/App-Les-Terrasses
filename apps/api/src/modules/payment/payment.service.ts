@@ -5,18 +5,11 @@ import { NotificationService } from '../notification/notification.service';
 import { InstallmentStatus, PaymentProvider } from '@prisma/client';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
-
-/**
- * Découpage d'échéancier par défaut pour un logement entrée de gamme.
- * Pourcentages appliqués au prix total de l'unité.
- */
-const DEFAULT_INSTALLMENT_PLAN = [
-  { label: 'Acompte réservation', percent: 0.1, daysFromNow: 0 },
-  { label: 'Tranche fondations', percent: 0.2, daysFromNow: 60 },
-  { label: 'Tranche gros œuvre', percent: 0.3, daysFromNow: 150 },
-  { label: 'Tranche finitions', percent: 0.25, daysFromNow: 270 },
-  { label: 'Solde livraison', percent: 0.15, daysFromNow: 365 },
-];
+import {
+  buildInstallmentPlan,
+  DEFAULT_INSTALLMENT_PLAN,
+  DEFAULT_DOWN_PAYMENT_PERCENT,
+} from '../../common/payment/installment-plan';
 
 /**
  * Contract minimal d'un webhook CinetPay — seuls les champs lus par le
@@ -43,6 +36,10 @@ export class PaymentService {
 
   /**
    * Génère l'échéancier au moment de la création de la réservation.
+   * Le montant de référence est le montant RÉELLEMENT ENGAGÉ :
+   * `offerPrice` si une offre a été accordée, sinon le prix public `unit.price`.
+   * Le découpage en tranches vient de la fonction pure partagée
+   * (common/payment/installment-plan.ts) — seule source de vérité.
    */
   async generateSchedule(reservationId: string) {
     const reservation = await this.prisma.reservation.findUnique({
@@ -52,7 +49,11 @@ export class PaymentService {
 
     if (!reservation) throw new NotFoundException('Réservation introuvable.');
 
-    const totalAmount = reservation.unit.price;
+    const totalAmount = (reservation.offerPrice ?? reservation.unit.price).toNumber();
+    const plan = buildInstallmentPlan({
+      totalAmount,
+      downPaymentPercent: DEFAULT_DOWN_PAYMENT_PERCENT,
+    });
 
     const schedule = await this.prisma.paymentSchedule.create({
       data: {
@@ -60,10 +61,10 @@ export class PaymentService {
         totalAmount,
         currency: reservation.unit.currency,
         installments: {
-          create: DEFAULT_INSTALLMENT_PLAN.map((item) => ({
+          create: plan.map((item) => ({
             label: item.label,
-            amount: totalAmount.toNumber() * item.percent,
-            dueDate: new Date(Date.now() + item.daysFromNow * 24 * 60 * 60 * 1000),
+            amount: item.amount,
+            dueDate: item.dueDate,
             status: InstallmentStatus.EN_ATTENTE,
           })),
         },

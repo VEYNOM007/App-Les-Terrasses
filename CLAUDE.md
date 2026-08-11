@@ -5,6 +5,14 @@ repo. Il est complémentaire au CLAUDE.md générique déjà utilisé sur AGIR �
 les règles R0-R8 s'appliquent ici à l'identique, avec les précisions
 spécifiques à ce projet ci-dessous.
 
+## Repo Git
+
+Le repo Git réel se trouve dans `residence-catalog/`, pas à la racine du
+dossier parent `App-Les Terrasse`. Toute commande git (status, commit, log...)
+doit être lancée depuis `residence-catalog/`. Les fichiers à la racine du
+dossier parent (Caddyfile, checklists, openapi de référence) sont volontairement
+hors versioning — ne pas essayer de les commit.
+
 ## Contexte projet
 
 Plateforme de vente de logements en résidence fermée (studios/T2/T3),

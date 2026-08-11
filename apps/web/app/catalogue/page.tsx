@@ -1,76 +1,79 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import ReservationModal from '../../components/ReservationModal';
 import ComplexOverviewViewer from '../../components/catalogue/ComplexOverviewViewer';
 import Apartment3DModal from '../../components/catalogue/Apartment3DModal';
+import CatalogueGrid from '../../components/catalogue/CatalogueGrid';
 import { getCatalogData, DEFAULT_COMPLEX_DATA, ComplexInfo, Unit3DDetails } from '../../lib/catalogData';
-import { UnitTypology } from '../../components/CatalogGrid';
+import { fetchTypologies, fetchUnit, TypologyGroup } from '../../lib/api';
+import { buildUnitDetailView, UnitDetailView } from '../../lib/catalog/unit-detail';
+import { resolveOverviewUnitId } from '../../lib/catalog/overview-bridge';
 import {
   Building,
-  Sparkles,
-  Filter,
-  Eye,
   ArrowRight,
   ShieldCheck,
-  CheckCircle,
   PhoneCall,
-  MapPin,
-  Download,
   Clock,
-  Layers,
-  Settings
+  Settings,
 } from 'lucide-react';
 
 export default function CataloguePage() {
   // Toujours initialiser avec DEFAULT_COMPLEX_DATA (identique SSR/client)
-  // puis charger le localStorage uniquement dans useEffect pour éviter l'erreur d'hydratation
+  // puis charger le localStorage uniquement dans useEffect pour éviter l'erreur d'hydratation.
+  // CHANTIER 4 (dédié) : piloter ComplexOverviewViewer par project.views et supprimer ce mock.
   const [catalogData, setCatalogData] = useState<ComplexInfo>(DEFAULT_COMPLEX_DATA);
-  const [selectedUnitFor3D, setSelectedUnitFor3D] = useState<Unit3DDetails | null>(null);
-  const [is3DModalOpen, setIs3DModalOpen] = useState<boolean>(false);
+  const [groups, setGroups] = useState<TypologyGroup[]>([]);
 
-  // Reservation Modal state
-  const [isReservationOpen, setIsReservationOpen] = useState<boolean>(false);
-  const [reservationTypology, setReservationTypology] = useState<UnitTypology | null>(null);
+  // Unité réelle ouverte dans la fiche 3D (source de vérité : GET /catalog/units/:id).
+  const [selectedUnit, setSelectedUnit] = useState<UnitDetailView | null>(null);
+  const [unitLoading, setUnitLoading] = useState(false);
+  const [unitError, setUnitError] = useState<string | null>(null);
+  const [is3DModalOpen, setIs3DModalOpen] = useState(false);
 
-  // Filters state
-  const [filterType, setFilterType] = useState<string>('ALL');
-  const [filterMaxPrice, setFilterMaxPrice] = useState<number>(100000000);
+  // Réservation : unité réelle (cuid), plus jamais d'id factice.
+  const [reservationUnitId, setReservationUnitId] = useState<string | null>(null);
+  const [isReservationOpen, setIsReservationOpen] = useState(false);
 
   useEffect(() => {
     // Chargement après hydratation uniquement
     setCatalogData(getCatalogData());
   }, []);
 
-  const handleOpen3D = (unit: Unit3DDetails) => {
-    setSelectedUnitFor3D(unit);
+  useEffect(() => {
+    // Groupes réels de l'API : nécessaires au pont overview → unité réelle.
+    fetchTypologies()
+      .then(setGroups)
+      .catch((e) => console.warn('[catalogue] typologies indisponibles pour l\'overview :', e));
+  }, []);
+
+  const openUnitDetail = useCallback((unitId: string) => {
+    setSelectedUnit(null);
+    setUnitError(null);
+    setUnitLoading(true);
+    fetchUnit(unitId)
+      .then((unit) => setSelectedUnit(buildUnitDetailView(unit)))
+      .catch((e) => setUnitError(e instanceof Error ? e.message : 'Impossible de charger l\'unité.'))
+      .finally(() => setUnitLoading(false));
     setIs3DModalOpen(true);
+  }, []);
+
+  // Pont chantier 2 : un clic sur l'overview (mock) résout l'unité réelle (cuid).
+  const handleOverviewSelect = (mockUnit: Unit3DDetails) => {
+    const resolvedId = resolveOverviewUnitId(mockUnit.blockName, mockUnit.type, groups);
+    if (resolvedId === null) {
+      console.warn(`[catalogue] aucun bloc réel pour « ${mockUnit.blockName} » — hotspot inerte.`);
+      return;
+    }
+    openUnitDetail(resolvedId);
   };
 
-  const handleOpenReservationFromUnit = (unit: Unit3DDetails) => {
-    const convertedTypology: UnitTypology = {
-      id: unit.id,
-      name: unit.name,
-      type: unit.type,
-      surface: `${unit.surfaceTotaleM2} m²`,
-      description: unit.description,
-      features: unit.keyFeatures,
-      startingPrice: unit.startingPriceFormatted,
-      availableCount: unit.availableUnitsCount,
-      badge: unit.badge,
-    };
-    setReservationTypology(convertedTypology);
+  const handleOpenReservation = useCallback((unitId: string) => {
+    setReservationUnitId(unitId);
     setIsReservationOpen(true);
-  };
-
-  // Filtered units
-  const filteredUnits = catalogData.units.filter((unit) => {
-    if (filterType !== 'ALL' && unit.type !== filterType) return false;
-    if (unit.startingPriceXOF > filterMaxPrice) return false;
-    return true;
-  });
+  }, []);
 
   return (
     <main className="min-h-screen bg-ink text-paper selection:bg-laterite selection:text-paper font-sans">
@@ -94,7 +97,7 @@ export default function CataloguePage() {
               </h1>
 
               <p className="text-sm sm:text-base text-paper/80 leading-relaxed">
-                Explorez le complexe {catalogData.name} en 3D photoréaliste. Cliquez sur les blocs et appartements pour afficher les plans cotés, finitions personnalisables et descriptifs techniques VEFA.
+                Explorez le complexe {catalogData.name} en 3D photoréaliste. Cliquez sur les blocs et appartements pour afficher les plans cotés, visuels 3D et l'échéancier de paiement.
               </p>
             </div>
 
@@ -122,7 +125,7 @@ export default function CataloguePage() {
           <ComplexOverviewViewer
             views={catalogData.views}
             units={catalogData.units}
-            onSelectUnit={handleOpen3D}
+            onSelectUnit={handleOverviewSelect}
           />
         </div>
       </section>
@@ -130,165 +133,10 @@ export default function CataloguePage() {
       {/* Catalog Filter & Unit Grid Section */}
       <section id="grille-biens" className="py-16 bg-ink-dark/50 border-b border-paper/10 scroll-mt-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-paper/15">
-            <div>
-              <span className="text-xs font-mono text-sand uppercase">Vente en l'État Futur d'Achèvement (VEFA)</span>
-              <h2 className="font-serif text-2xl sm:text-3xl font-semibold text-paper">
-                Découvrez les Typologies Disponibles
-              </h2>
-            </div>
-
-            {/* Filter Pills */}
-            <div className="flex flex-wrap gap-2 text-xs font-mono">
-              <button
-                onClick={() => setFilterType('ALL')}
-                className={`px-3 py-2 rounded-lg border transition-all ${
-                  filterType === 'ALL'
-                    ? 'bg-laterite text-paper border-laterite font-bold'
-                    : 'bg-ink border-paper/15 text-paper/70 hover:border-paper/40'
-                }`}
-              >
-                Tous ({catalogData.units.length})
-              </button>
-              <button
-                onClick={() => setFilterType('STUDIO')}
-                className={`px-3 py-2 rounded-lg border transition-all ${
-                  filterType === 'STUDIO'
-                    ? 'bg-laterite text-paper border-laterite font-bold'
-                    : 'bg-ink border-paper/15 text-paper/70 hover:border-paper/40'
-                }`}
-              >
-                Studios
-              </button>
-              <button
-                onClick={() => setFilterType('T2')}
-                className={`px-3 py-2 rounded-lg border transition-all ${
-                  filterType === 'T2'
-                    ? 'bg-laterite text-paper border-laterite font-bold'
-                    : 'bg-ink border-paper/15 text-paper/70 hover:border-paper/40'
-                }`}
-              >
-                T2
-              </button>
-              <button
-                onClick={() => setFilterType('T3')}
-                className={`px-3 py-2 rounded-lg border transition-all ${
-                  filterType === 'T3'
-                    ? 'bg-laterite text-paper border-laterite font-bold'
-                    : 'bg-ink border-paper/15 text-paper/70 hover:border-paper/40'
-                }`}
-              >
-                T3
-              </button>
-              <button
-                onClick={() => setFilterType('T5')}
-                className={`px-3 py-2 rounded-lg border transition-all ${
-                  filterType === 'T5'
-                    ? 'bg-laterite text-paper border-laterite font-bold'
-                    : 'bg-ink border-paper/15 text-paper/70 hover:border-paper/40'
-                }`}
-              >
-                T5 Penthouse
-              </button>
-              <button
-                onClick={() => setFilterType('COMMERCE')}
-                className={`px-3 py-2 rounded-lg border transition-all ${
-                  filterType === 'COMMERCE'
-                    ? 'bg-laterite text-paper border-laterite font-bold'
-                    : 'bg-ink border-paper/15 text-paper/70 hover:border-paper/40'
-                }`}
-              >
-                Commerces
-              </button>
-            </div>
-          </div>
-
-          {/* Unit Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredUnits.map((item) => (
-              <div
-                key={item.id}
-                className="bg-ink-card border border-paper/20 rounded-xl overflow-hidden hover:border-sand transition-all flex flex-col justify-between group relative shadow-xl"
-              >
-                {item.badge && (
-                  <span className="absolute top-4 right-4 z-10 text-[10px] font-mono bg-laterite/80 backdrop-blur-md text-paper border border-paper/30 px-2.5 py-1 rounded-md shadow-md">
-                    {item.badge}
-                  </span>
-                )}
-
-                <div>
-                  {/* Photo thumbnail */}
-                  <div
-                    onClick={() => handleOpen3D(item)}
-                    className="relative h-52 bg-ink-dark cursor-pointer overflow-hidden group/img"
-                  >
-                    <img
-                      src={item.renderPhotos[0]?.url || item.floorPlan2DUrl}
-                      alt={item.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-transparent opacity-80" />
-
-                    <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
-                      <span className="inline-flex items-center gap-1 bg-ink/90 backdrop-blur-md border border-paper/20 px-2.5 py-1 rounded text-[11px] font-mono text-sand">
-                        <Eye className="w-3.5 h-3.5" /> Explorer en 3D
-                      </span>
-                      <span className="text-[11px] font-mono bg-lagoon/20 text-lagoon-light border border-lagoon/40 px-2 py-0.5 rounded">
-                        {item.availableUnitsCount} dispo / {item.totalUnitsCount}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-5 space-y-4">
-                    <div>
-                      <div className="text-[11px] font-mono text-sand uppercase mb-1">{item.blockName}</div>
-                      <h3 className="font-serif text-xl font-semibold text-paper">{item.name}</h3>
-                      <div className="text-xs font-mono text-paper/60 mt-1">
-                        Surface utile : <strong className="text-paper">{item.surfaceTotaleM2} m²</strong> ({item.surfaceHabitableM2}m² hab + {item.surfaceTerrasseM2}m² terr.)
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-paper/70 leading-relaxed line-clamp-2">
-                      {item.description}
-                    </p>
-
-                    <ul className="space-y-1.5 pt-3 border-t border-paper/10 text-xs font-mono text-paper/80">
-                      {item.keyFeatures.slice(0, 3).map((feat, fIdx) => (
-                        <li key={fIdx} className="flex items-center gap-2">
-                          <CheckCircle className="w-3.5 h-3.5 text-lagoon-light shrink-0" />
-                          <span>{feat}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="p-5 pt-0 border-t border-paper/15 mt-4 space-y-3">
-                  <div className="flex justify-between items-baseline pt-3">
-                    <span className="text-[10px] font-mono text-paper/50 uppercase">À PARTIR DE</span>
-                    <span className="font-mono text-base text-laterite-light font-bold">
-                      {item.startingPriceFormatted}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => handleOpen3D(item)}
-                      className="bg-paper/10 hover:bg-paper/20 text-paper font-mono text-xs py-2.5 rounded-lg transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-sand" /> Vue 3D & Plans
-                    </button>
-                    <button
-                      onClick={() => handleOpenReservationFromUnit(item)}
-                      className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-md"
-                    >
-                      Réserver →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <CatalogueGrid
+            onOpenUnit={openUnitDetail}
+            onOpenReservation={handleOpenReservation}
+          />
         </div>
       </section>
 
@@ -331,17 +179,33 @@ export default function CataloguePage() {
 
       {/* 3D & VEFA Details Modal */}
       <Apartment3DModal
-        unit={selectedUnitFor3D}
+        unit={selectedUnit}
         isOpen={is3DModalOpen}
         onClose={() => setIs3DModalOpen(false)}
-        onOpenReservation={handleOpenReservationFromUnit}
+        onOpenReservation={(unitId) => {
+          setIs3DModalOpen(false);
+          handleOpenReservation(unitId);
+        }}
       />
+      {unitError && is3DModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm">
+          <div className="bg-ink-card border border-paper/30 rounded-lg max-w-md w-full p-8 text-center space-y-4">
+            <p className="font-mono text-xs text-paper/80">{unitError}</p>
+            <button
+              onClick={() => setIs3DModalOpen(false)}
+              className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-6 py-2.5 rounded transition-all"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Reservation Modal */}
       <ReservationModal
         isOpen={isReservationOpen}
+        unitId={reservationUnitId}
         onClose={() => setIsReservationOpen(false)}
-        selectedTypology={reservationTypology}
       />
     </main>
   );

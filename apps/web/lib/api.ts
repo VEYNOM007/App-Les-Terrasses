@@ -140,7 +140,7 @@ export async function fetchSitePlan(projectId: string): Promise<SitePlanResponse
 
 export type UnitType = 'STUDIO' | 'T2' | 'T3' | 'T4' | 'T5' | 'COMMERCE';
 export type UnitStatus = 'DISPONIBLE' | 'RESERVE' | 'VENDU' | 'LIVRE';
-export type UnitMediaType = 'PHOTO' | 'PLAN' | 'RENDU_3D';
+export type UnitMediaType = 'PHOTO' | 'PHOTO_REELLE' | 'PLAN' | 'RENDU_3D';
 
 export interface TypologyUnit {
   id: string;

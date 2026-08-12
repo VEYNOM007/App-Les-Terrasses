@@ -56,11 +56,18 @@ export function selectRepresentativeUnit(units: TypologyUnit[]): TypologyUnit | 
 }
 
 /**
- * Vignette de la carte : premier média non-PLAN (ordre sortOrder). Le badge
- * "Vue d'artiste" suit le type réel de CE média, jamais le booléen du groupe.
+ * Vignette de la carte, par ordre de confiance : PHOTO_REELLE (photo réelle
+ * post-livraison) > RENDU_3D (vue d'artiste) > premier autre non-PLAN.
+ * Une PHOTO_REELLE désactive donc le badge "Vue d'artiste" même si un rendu
+ * traîne encore dans la galerie.
  */
 export function thumbnailMedia(media: UnitMedia[]): UnitMedia | null {
-  return media.find((m) => m.type !== 'PLAN') ?? null;
+  return (
+    media.find((m) => m.type === 'PHOTO_REELLE') ??
+    media.find((m) => m.type === 'RENDU_3D') ??
+    media.find((m) => m.type !== 'PLAN') ??
+    null
+  );
 }
 
 export function mapTypologyToCard(group: TypologyGroup, unit: CatalogUnit): UnitCard {

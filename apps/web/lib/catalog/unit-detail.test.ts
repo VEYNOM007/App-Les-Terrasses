@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogUnit } from '../api';
 import { toNumber } from './catalogue-grid';
-import { buildUnitDetailView, unitStatusLabel } from './unit-detail';
+import { buildUnitDetailView, unitMediaLabel, unitStatusLabel } from './unit-detail';
 
 function makeUnit(overrides: Partial<CatalogUnit> = {}): CatalogUnit {
   return {
@@ -32,6 +32,25 @@ describe('buildUnitDetailView', () => {
     expect(view.gallery.map((m) => m.type)).toEqual(['RENDU_3D', 'PLAN', 'PHOTO']);
     expect(view.gallery[0].isRendu3D).toBe(true);
     expect(view.gallery[1].isRendu3D).toBe(false);
+  });
+
+  it('étiquette chaque média selon sa nature réelle (jamais "Photo" pour un visuel marketing)', () => {
+    const view = buildUnitDetailView(
+      makeUnit({
+        media: [
+          { id: 'm-photo', type: 'PHOTO', url: '/photo.jpg', altText: 'Visuel', sortOrder: 0 },
+          { id: 'm-photo-reelle', type: 'PHOTO_REELLE', url: '/reelle.jpg', altText: 'Réelle', sortOrder: 1 },
+          { id: 'm-plan', type: 'PLAN', url: '/plan.png', altText: 'Plan', sortOrder: 2 },
+          { id: 'm-rendu', type: 'RENDU_3D', url: '/rendu.jpg', altText: 'Rendu', sortOrder: 3 },
+        ],
+      }),
+    );
+    expect(view.gallery.map((m) => m.mediaLabel)).toEqual([
+      'Image d’illustration',
+      'Photo réelle',
+      'Plan',
+      'Rendu 3D VEFA',
+    ]);
   });
 
   it('reprend planImage avant de retomber sur le média PLAN', () => {
@@ -77,6 +96,15 @@ describe('unitStatusLabel', () => {
     expect(unitStatusLabel('RESERVE')).toBe('Réservé');
     expect(unitStatusLabel('VENDU')).toBe('Vendu');
     expect(unitStatusLabel('LIVRE')).toBe('Livré');
+  });
+});
+
+describe('unitMediaLabel', () => {
+  it('distingue illustration, photo réelle et rendu sans ambiguïté', () => {
+    expect(unitMediaLabel('PHOTO')).toBe('Image d’illustration');
+    expect(unitMediaLabel('PHOTO_REELLE')).toBe('Photo réelle');
+    expect(unitMediaLabel('RENDU_3D')).toBe('Rendu 3D VEFA');
+    expect(unitMediaLabel('PLAN')).toBe('Plan');
   });
 });
 

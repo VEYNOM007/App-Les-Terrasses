@@ -42,7 +42,9 @@ export default function Apartment3DModal({
 
   if (!isOpen || !unit) return null;
 
-  const photos = unit.gallery.filter((m) => m.type === 'RENDU_3D' || m.type === 'PHOTO');
+  const photos = unit.gallery.filter(
+    (m) => m.type === 'RENDU_3D' || m.type === 'PHOTO' || m.type === 'PHOTO_REELLE',
+  );
   const safeIdx = photos.length > 0 ? activePhotoIdx % photos.length : 0;
   const currentPhoto = photos[safeIdx];
   const planUrl = unit.planUrl;
@@ -147,7 +149,7 @@ export default function Apartment3DModal({
                     <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center bg-ink/80 backdrop-blur-md border border-paper/20 p-3 rounded-lg">
                       <div>
                         <span className="text-[10px] font-mono uppercase bg-laterite/30 text-sand px-2 py-0.5 rounded border border-laterite/40">
-                          {currentPhoto.isRendu3D ? 'Rendu 3D VEFA' : 'Photo'}
+                          {currentPhoto.mediaLabel}
                         </span>
                         <h4 className="font-serif text-sm font-semibold text-paper mt-1">{currentPhoto.altText}</h4>
                       </div>

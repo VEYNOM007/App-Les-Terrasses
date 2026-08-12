@@ -11,6 +11,7 @@ export interface UnitGalleryItem {
   url: string;
   altText: string;
   isRendu3D: boolean;
+  mediaLabel: string;
 }
 
 export interface UnitDetailView {
@@ -46,6 +47,24 @@ export function unitStatusLabel(status: UnitStatus): string {
 }
 
 /**
+ * Libellé honnête d'un média, aligné sur la hiérarchie de confiance :
+ * un visuel marketing (PHOTO) est une illustration, jamais une photo réelle ;
+ * seules les PHOTO_REELLE post-livraison méritent le terme "Photo".
+ */
+export function unitMediaLabel(type: UnitMediaType): string {
+  switch (type) {
+    case 'RENDU_3D':
+      return 'Rendu 3D VEFA';
+    case 'PHOTO_REELLE':
+      return 'Photo réelle';
+    case 'PHOTO':
+      return 'Image d’illustration';
+    case 'PLAN':
+      return 'Plan';
+  }
+}
+
+/**
  * Construit la vue fiche depuis le payload réel de GET /catalog/units/:id.
  * Règle de présence : aucun champ affiché n'est inventé. Les données
  * absentes de l'API (finitions, specs, loyer, rendement) n'existent pas dans
@@ -60,6 +79,7 @@ export function buildUnitDetailView(unit: CatalogUnit): UnitDetailView {
       url: m.url,
       altText: m.altText,
       isRendu3D: m.type === 'RENDU_3D',
+      mediaLabel: unitMediaLabel(m.type),
     }));
 
   const planMedia = gallery.find((m) => m.type === 'PLAN');

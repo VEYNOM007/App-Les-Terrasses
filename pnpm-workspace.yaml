@@ -1,3 +1,23 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Sécurité chaîne d'approvisionnement (pnpm >= 10).
+# 1) minimumReleaseAge : bloque l'installation de toute version publiée
+#    depuis moins de 7 jours (fenêtre de détection/retrait des paquets
+#    malveillants). Strict = échec de résolution, jamais de repli silencieux.
+minimumReleaseAge: 10080 # 7 jours en minutes
+minimumReleaseAgeStrict: true
+
+# 2) allowBuilds : seuls les paquets listés ici peuvent exécuter leurs
+#    scripts de build (postinstall/install/preinstall). Tout autre paquet
+#    est bloqué par défaut (strictDepBuilds=true → install en erreur).
+#    Whitelist minimale vérifiée — jamais "dangerouslyAllowAllBuilds".
+allowBuilds:
+  bcrypt: true            # compilation native (authentification)
+  esbuild: true           # binaire de plateforme (vitest / Next)
+  msgpackr-extract: true  # addon natif optionnel (msgpackr)
+  prisma: true            # preinstall du CLI Prisma
+  '@prisma/client': true  # postinstall = prisma generate (obligatoire)
+  '@prisma/engines': true # postinstall = téléchargement des engines Prisma
+  '@nestjs/core': false   # postinstall OpenCollective (opencollective || exit 0) : télémétrie inutile, refusé explicitement

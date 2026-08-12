@@ -13,6 +13,17 @@ import {
   InstallmentStatus,
 } from '@prisma/client';
 
+// Garde-fou : le seed est un jeu de démo rejouable (URLs Unsplash, prix
+// factices). Il ne doit JAMAIS s'exécuter contre une base de production,
+// même invoqué manuellement par erreur — en prod, les données réelles
+// entrent uniquement par les endpoints admin.
+if (process.env.NODE_ENV === 'production') {
+  throw new Error(
+    'Seed refusé en production : le jeu de démo écraserait les données réelles. ' +
+      'En prod, alimentez la base via les endpoints admin uniquement.',
+  );
+}
+
 const prisma = new PrismaClient();
 
 // Prix catalogue de départ (point de départ éditable via l'admin — décision Temps 2).
@@ -348,12 +359,17 @@ async function main() {
       altText: `Plan 2D ${unit.type} · Étage ${unit.floor}`,
       sortOrder: mediaData.length,
     });
-    if (unit.type === UnitType.T5) {
+    // Chaque unité vitrine reçoit un rendu 3D (visuel héro intérieur). Le
+    // badge "Vue d'artiste" s'affiche alors côté catalogue : la miniature
+    // privilégie le RENDU_3D quel que soit son sortOrder (voir
+    // `apps/web/lib/catalog/catalogue-grid.ts`).
+    const renderUrl = photos[0]?.url;
+    if (renderUrl) {
       mediaData.push({
         unitId: unit.id,
         type: MediaType.RENDU_3D,
-        url: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
-        altText: "Rendu 3D Penthouse T5 — vue d'artiste",
+        url: renderUrl,
+        altText: `Rendu 3D ${unit.type} — vue d'artiste`,
         sortOrder: mediaData.length,
       });
     }

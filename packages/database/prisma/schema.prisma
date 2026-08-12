@@ -60,9 +60,12 @@ enum UnitStatus {
 }
 
 // Type de média d'une unité (UnitMedia). RENDU_3D déclenche le badge
-// "Vue d'artiste" côté catalogue sans aucun toggle admin.
+// "Vue d'artiste" côté catalogue sans aucun toggle admin. PHOTO_REELLE
+// désigne une photo réelle post-livraison : elle prime sur le rendu dans
+// le choix de la miniature (hiérarchie de confiance).
 enum MediaType {
   PHOTO
+  PHOTO_REELLE
   PLAN
   RENDU_3D
 }

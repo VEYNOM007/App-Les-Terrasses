@@ -123,6 +123,33 @@ Voir `.env.example` à la racine. Ne jamais commit de `.env` réel (déjà
 dans `.gitignore`). Toute nouvelle variable ajoutée doit être documentée
 dans `.env.example` dans le même commit.
 
+### Sécurité chaîne d'approvisionnement (pnpm exclusif, renforcée)
+- pnpm est le seul gestionnaire de paquets autorisé (pas de npm/yarn, pas de
+  mélange). `packageManager` dans `package.json` = `pnpm@11.1.1` (pnpm >= 10
+  requis : les protections `minimumReleaseAge` et `allowBuilds` n'existent
+  pas avant). Si corepack réinstalle une 9.x, c'est une régression à corriger.
+- `minimumReleaseAge: 10080` (7 jours) dans `pnpm-workspace.yaml` : toute
+  version publiée depuis moins de 7 jours est bloquée à l'installation.
+  Ne jamais baisser ce délai ni ajouter de paquet à `minimumReleaseAgeExclude`
+  pour installer une dépendance "urgente" — si le paquet est légitime, il
+  suffit d'attendre qu'il vieillisse.
+- `allowBuilds` : whitelist stricte des seuls paquets autorisés à exécuter
+  leurs scripts de build (`bcrypt`, `esbuild`, `msgpackr-extract`, `prisma`,
+  `@prisma/client`, `@prisma/engines`) ; `@nestjs/core` y figure explicitement
+  à `false` (postinstall OpenCollective, télémétrie inutile). Toute nouvelle
+  dépendance avec un script de build (postinstall/install/preinstall) DOIT
+  être examinée manuellement puis ajoutée à cette whitelist dans le même
+  commit que la dépendance. Jamais `dangerouslyAllowAllBuilds`.
+- Install frais : le postinstall de `@prisma/client` ne trouve pas le schéma
+  (chemin custom `packages/database/prisma/schema.prisma`), donc après
+  `pnpm install` lancer obligatoirement `pnpm --filter @residence-catalog/database generate`
+  (régénère le client dans `.pnpm/.../node_modules/@prisma/client`) avant
+  tout `tsc --noEmit` sur `apps/api`.
+- Avant d'ajouter une dépendance : vérifier son âge (le blocage
+  `minimumReleaseAge` est volontaire), l'existence de scripts de build
+  (`pnpm view <pkg> scripts`), et que le commit qui l'introduit passe
+  `pnpm install` (strict) + lint + typecheck (R8).
+
 ### Base de test — synchronisation automatique (ne PAS créer/migrer à la main)
 `residence_catalog_test` est créée et migrée automatiquement à chaque
 invocation de Jest par `apps/api/src/jest.global-setup.ts` (globalSetup) :

@@ -161,7 +161,7 @@ export class CatalogService {
       downPaymentPercent: percent,
       installments: plan.map(({ label, amount, dueDate, percent: pct }) => ({
         label,
-        amount,
+        amount: amount.toString(),
         dueDate,
         percent: pct,
       })),

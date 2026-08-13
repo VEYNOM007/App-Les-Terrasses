@@ -232,6 +232,80 @@ export function fetchPaymentPreview(
 }
 
 // ────────────────────────────────────────────────────────────
+// Administration (catalogue) — cookie admin requis (RolesGuard)
+// ────────────────────────────────────────────────────────────
+
+export interface AdminUnitUpdate {
+  type?: UnitType;
+  surface?: number;
+  floor?: number;
+  price?: number;
+  currency?: string;
+  planImage?: string;
+  marketingDescription?: string;
+  highlights?: string[];
+  virtualTourUrl?: string;
+  status?: UnitStatus;
+  hasStorefront?: boolean;
+  streetFacing?: boolean;
+}
+
+export interface AdminUnitMediaCreate {
+  type: UnitMediaType;
+  url: string;
+  altText?: string;
+  sortOrder?: number;
+}
+
+export interface AdminUnitMediaUpdate {
+  type?: UnitMediaType;
+  url?: string;
+  altText?: string;
+  sortOrder?: number;
+}
+
+/**
+ * Édition d'une unité existante (prix, statut, surfaces…).
+ * Corps aligné sur `UpdateUnitDto` (PartialType de CreateUnitDto) — toutes
+ * les propriétés sont optionnelles, `price` en number (Decimal en base).
+ */
+export function adminUpdateUnit(id: string, body: AdminUnitUpdate): Promise<CatalogUnit> {
+  return apiFetch<CatalogUnit>(`/v1/admin/units/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Ajout d'un média à une unité (rendu 3D, plan, photo).
+ * Corps aligné sur `CreateUnitMediaDto` — `type` parmi RENDU_3D, PHOTO,
+ * PHOTO_REELLE, PLAN.
+ */
+export function adminAddUnitMedia(unitId: string, body: AdminUnitMediaCreate): Promise<UnitMedia> {
+  return apiFetch<UnitMedia>(`/v1/admin/units/${unitId}/media`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Édition d'un média (type, ordre d'affichage, URL).
+ * Corps aligné sur `UpdateUnitMediaDto` (PartialType de CreateUnitMediaDto).
+ */
+export function adminUpdateMedia(mediaId: string, body: AdminUnitMediaUpdate): Promise<UnitMedia> {
+  return apiFetch<UnitMedia>(`/v1/admin/media/${mediaId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export function adminDeleteMedia(mediaId: string): Promise<{ message?: string }> {
+  return apiFetch<{ message?: string }>(`/v1/admin/media/${mediaId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ────────────────────────────────────────────────────────────
 // Réservation
 // ────────────────────────────────────────────────────────────
 

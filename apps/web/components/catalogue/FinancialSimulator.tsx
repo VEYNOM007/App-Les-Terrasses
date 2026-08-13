@@ -1,44 +1,70 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Calculator, TrendingUp, ShieldCheck, DollarSign, Calendar } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Calculator, Calendar, Loader2, RefreshCw } from 'lucide-react';
+import { fetchPaymentPreview, PaymentPreview } from '../../lib/api';
+import { formatXOF, toNumber } from '../../lib/catalog/catalogue-grid';
 
 interface FinancialSimulatorProps {
-  unitPriceXOF: number;
-  estimatedMonthlyRentXOF: number;
-  estimatedNetYieldAnnual: number;
+  unitId: string;
 }
 
-export default function FinancialSimulator({
-  unitPriceXOF,
-  estimatedMonthlyRentXOF,
-  estimatedNetYieldAnnual,
-}: FinancialSimulatorProps) {
-  const [mode, setMode] = useState<'schedule' | 'investor'>('schedule');
-  const [downPaymentPercent, setDownPaymentPercent] = useState<number>(20); // 20%
-  const [holdingYears, setHoldingYears] = useState<number>(5);
+const DEBOUNCE_MS = 400;
 
-  // Financial calculations
-  const downPaymentAmount = (unitPriceXOF * downPaymentPercent) / 100;
-  const remainingAmount = unitPriceXOF - downPaymentAmount;
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
-  // VEFA Payment Milestones
-  const milestoneFondations = unitPriceXOF * 0.3; // 30%
-  const milestoneHorsDEau = unitPriceXOF * 0.3; // 30%
-  const milestoneLivraison = unitPriceXOF * 0.2; // 20%
+/**
+ * Échéancier piloté par GET /catalog/units/:id/payment-preview (source de
+ * vérité : buildInstallmentPlan côté API). Aucun pourcentage hardcodé ici.
+ * Le mode investisseur (loyer/rendement) est absent tant que le modèle de
+ * données n'expose pas ces champs.
+ */
+export default function FinancialSimulator({ unitId }: FinancialSimulatorProps) {
+  const [preview, setPreview] = useState<PaymentPreview | null>(null);
+  const [downPaymentPercent, setDownPaymentPercent] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Investor Yield calculations
-  const annualRentTotal = estimatedMonthlyRentXOF * 12;
-  const netYieldPercent = ((annualRentTotal * 0.85) / unitPriceXOF) * 100; // 15% charges/management reserve
-  const cumulativeRent5Years = annualRentTotal * 5;
+  const load = useCallback(
+    async (percent?: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await fetchPaymentPreview(unitId, percent);
+        setPreview(result);
+        setDownPaymentPercent((current) => current ?? result.downPaymentPercent);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Impossible de calculer l\'échéancier.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [unitId],
+  );
 
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('fr-FR').format(Math.round(val)) + ' FCFA';
+  // Chargement initial : l'API applique l'acompte par défaut du projet.
+  useEffect(() => {
+    setDownPaymentPercent(null);
+    void load();
+    return () => {
+      if (debounceRef.current !== null) clearTimeout(debounceRef.current);
+    };
+  }, [load]);
+
+  const handlePercentChange = (value: number) => {
+    setDownPaymentPercent(value);
+    if (debounceRef.current !== null) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => void load(value), DEBOUNCE_MS);
   };
+
+  const totalAmount = preview ? toNumber(preview.totalAmount) : 0;
+  const downPaymentAmount = preview ? Math.round(totalAmount * (downPaymentPercent ?? 0) / 100) : 0;
 
   return (
     <div className="bg-ink/80 border border-paper/20 rounded-xl p-5 font-sans space-y-5">
-      {/* Header & Mode Switcher */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-paper/15">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-lg bg-laterite/20 text-laterite-light border border-laterite/40">
@@ -46,106 +72,88 @@ export default function FinancialSimulator({
           </div>
           <div>
             <h4 className="font-serif text-lg font-semibold text-paper">Simulateur Financier VEFA</h4>
-            <p className="text-xs font-mono text-paper/60">Transparence totale sur votre investissement</p>
+            <p className="text-xs font-mono text-paper/60">Échéancier réel du projet — acompte + tranches de chantier</p>
           </div>
-        </div>
-
-        <div className="flex bg-ink-dark p-1 rounded-lg border border-paper/15 font-mono text-xs">
-          <button
-            onClick={() => setMode('schedule')}
-            className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-              mode === 'schedule' ? 'bg-laterite text-paper font-bold' : 'text-paper/70 hover:text-paper'
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5" /> Échéancier Chantier
-          </button>
-          <button
-            onClick={() => setMode('investor')}
-            className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-              mode === 'investor' ? 'bg-lagoon text-paper font-bold' : 'text-paper/70 hover:text-paper'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5" /> Rendement Locatif
-          </button>
         </div>
       </div>
 
-      {mode === 'schedule' ? (
+      {error && (
+        <div className="bg-laterite/10 border border-laterite/30 p-4 rounded-lg flex items-center justify-between gap-3 font-mono text-xs">
+          <span className="text-paper/80">{error}</span>
+          <button
+            onClick={() => void load(downPaymentPercent ?? undefined)}
+            className="bg-paper/10 hover:bg-paper/20 text-paper px-3 py-1.5 rounded flex items-center gap-1.5 shrink-0 transition-all"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Réessayer
+          </button>
+        </div>
+      )}
+
+      {loading && !preview && (
+        <div className="flex items-center justify-center gap-2 py-8 text-paper/60 font-mono text-xs">
+          <Loader2 className="w-4 h-4 animate-spin" /> Calcul de l'échéancier…
+        </div>
+      )}
+
+      {preview && (
         <div className="space-y-4 font-mono text-xs">
           <div className="space-y-2">
             <div className="flex justify-between items-center text-paper/80">
-              <span>Apport à la réservation : <strong>{downPaymentPercent}%</strong></span>
-              <span className="text-laterite-light font-bold">{formatCurrency(downPaymentAmount)}</span>
+              <span>Apport à la réservation : <strong>{downPaymentPercent ?? preview.downPaymentPercent}%</strong></span>
+              <span className="text-laterite-light font-bold">{formatXOF(downPaymentAmount)}</span>
             </div>
             <input
               type="range"
-              min="10"
-              max="50"
-              step="5"
-              value={downPaymentPercent}
-              onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
+              min="1"
+              max="100"
+              step="1"
+              value={downPaymentPercent ?? preview.downPaymentPercent}
+              onChange={(e) => handlePercentChange(Number(e.target.value))}
               className="w-full accent-laterite bg-ink-card h-2 rounded-lg cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-paper/50">
-              <span>10% min</span>
-              <span>30% recommandé</span>
-              <span>50% max</span>
+              <span>1%</span>
+              <span>10% par défaut</span>
+              <span>100%</span>
             </div>
           </div>
 
-          <div className="bg-ink-card p-4 rounded-lg border border-paper/15 space-y-3">
-            <h5 className="font-serif text-sm font-semibold text-sand">Échéancier de Financement par Jalons</h5>
-
-            <div className="space-y-2">
-              <div className="flex justify-between items-center p-2 rounded bg-ink/60 border border-paper/10">
-                <span className="text-paper/80">1. Réservation (Acompte)</span>
-                <span className="font-bold text-laterite-light">{formatCurrency(downPaymentAmount)}</span>
-              </div>
-              <div className="flex justify-between items-center p-2 rounded bg-ink/60 border border-paper/10">
-                <span className="text-paper/80">2. Fin Fondations (30%)</span>
-                <span className="font-bold text-paper">{formatCurrency(milestoneFondations)}</span>
-              </div>
-              <div className="flex justify-between items-center p-2 rounded bg-ink/60 border border-paper/10">
-                <span className="text-paper/80">3. Hors d'Eau / Hors d'Air (30%)</span>
-                <span className="font-bold text-paper">{formatCurrency(milestoneHorsDEau)}</span>
-              </div>
-              <div className="flex justify-between items-center p-2 rounded bg-ink/60 border border-paper/10">
-                <span className="text-paper/80">4. Remise des clés & Titre (20%)</span>
-                <span className="font-bold text-lagoon-light">{formatCurrency(milestoneLivraison)}</span>
-              </div>
+          <div className="bg-ink-card p-4 rounded-lg border border-paper/15 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h5 className="font-serif text-sm font-semibold text-sand flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Échéancier de Financement
+              </h5>
+              {loading && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-mono text-laterite-light">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Recalcul en cours…
+                </span>
+              )}
             </div>
 
-            <p className="text-[11px] text-paper/60 italic pt-1">
-              * Aucun intérêt bancaire. Paiement direct échelonné selon l'avancement réel certifié du chantier.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4 font-mono text-xs">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-ink-card p-3 rounded-lg border border-paper/15 text-center">
-              <span className="text-paper/60 text-[11px] block">Loyer Mensuel Estimé</span>
-              <span className="text-base font-bold text-sand">{formatCurrency(estimatedMonthlyRentXOF)}</span>
-              <span className="text-[10px] text-paper/50 block mt-0.5">Baguida / Littoral</span>
+            <div className={`space-y-1.5 transition-opacity duration-200 ${loading ? 'opacity-50' : 'opacity-100'}`}>
+              {preview.installments.map((inst, i) => (
+                <div key={i} className="flex justify-between items-center p-2 rounded bg-ink/60 border border-paper/10">
+                  <div>
+                    <span className="text-paper/80">{inst.label}</span>
+                    <span className="block text-[10px] text-paper/50">{formatDate(inst.dueDate)}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-paper">{formatXOF(toNumber(inst.amount))}</span>
+                    <span className="block text-[10px] text-paper/50">{Math.round(inst.percent * 100)}%</span>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="bg-ink-card p-3 rounded-lg border border-paper/15 text-center">
-              <span className="text-paper/60 text-[11px] block">Rendement Net Estimé</span>
-              <span className="text-base font-bold text-lagoon-light">{netYieldPercent.toFixed(1)} % / an</span>
-              <span className="text-[10px] text-paper/50 block mt-0.5">Après charges</span>
-            </div>
-            <div className="bg-ink-card p-3 rounded-lg border border-paper/15 text-center">
-              <span className="text-paper/60 text-[11px] block">Revenus Locatifs sur 5 ans</span>
-              <span className="text-base font-bold text-laterite-light">{formatCurrency(cumulativeRent5Years)}</span>
-              <span className="text-[10px] text-paper/50 block mt-0.5">Hors plus-value immobilière</span>
+
+            <div className="flex justify-between items-center pt-2 border-t border-paper/10 font-bold">
+              <span className="text-paper">Total du bien</span>
+              <span className="text-laterite-light text-sm">{formatXOF(totalAmount)}</span>
             </div>
           </div>
 
-          <div className="bg-lagoon/10 border border-lagoon/30 p-3.5 rounded-lg flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-lagoon-light shrink-0 mt-0.5" />
-            <p className="text-xs text-paper/90 leading-relaxed">
-              <strong>Atout Diaspora & Investisseur :</strong> Baguida bénéficie d'une forte demande locative d'expatriés et de cadres en raison de sa proximité avec les plages et le port de Lomé.
-            </p>
-          </div>
+          <p className="text-[11px] text-paper/60 italic pt-1">
+            * Aucun intérêt bancaire. Paiement direct échelonné selon l'avancement réel certifié du chantier.
+          </p>
         </div>
       )}
     </div>

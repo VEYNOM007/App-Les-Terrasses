@@ -1,68 +1,73 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, Clock, CreditCard, Smartphone, CheckCircle, Car, Loader2, AlertTriangle } from 'lucide-react';
-import { UnitTypology } from './CatalogGrid';
-import { createReservation, ReservationResponse } from '../lib/api';
+import React, { useEffect, useState } from 'react';
+import { X, ShieldCheck, CheckCircle, Loader2, AlertTriangle, LogIn, ArrowRight } from 'lucide-react';
+import { createReservation, fetchUnit, ReservationResponse } from '../lib/api';
+import { buildUnitDetailView, UnitDetailView } from '../lib/catalog/unit-detail';
 import { useAuth } from './AuthProvider';
 
 interface ReservationModalProps {
   isOpen: boolean;
+  unitId: string | null;
   onClose: () => void;
-  selectedTypology?: UnitTypology | null;
 }
 
-export default function ReservationModal({ isOpen, onClose, selectedTypology }: ReservationModalProps) {
+export default function ReservationModal({ isOpen, unitId, onClose }: ReservationModalProps) {
   const { user } = useAuth();
-  const [selectedBlock, setSelectedBlock] = useState<string>('Bloc A');
-  const [selectedType, setSelectedType] = useState<string>('T2');
-  const [parkingOption, setParkingOption] = useState<string>('SOUS_PILOTIS');
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [paymentProvider, setPaymentProvider] = useState<'CINETPAY' | 'STRIPE'>('CINETPAY');
+  const [unit, setUnit] = useState<UnitDetailView | null>(null);
+  const [unitLoading, setUnitLoading] = useState(false);
+  const [unitError, setUnitError] = useState<string | null>(null);
   const [step, setStep] = useState<'FORM' | 'LOADING' | 'CONFIRMED' | 'ERROR'>('FORM');
-  const [timerSeconds, setTimerSeconds] = useState(172800); // 48h in seconds
   const [reservation, setReservation] = useState<ReservationResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Chargement de l'unité réelle sélectionnée (source de vérité : API).
   useEffect(() => {
-    if (selectedTypology) {
-      setSelectedType(selectedTypology.type);
-    }
-  }, [selectedTypology]);
+    if (!isOpen || !unitId) return;
+    let cancelled = false;
+    setUnitLoading(true);
+    setUnitError(null);
+    fetchUnit(unitId)
+      .then((data) => {
+        if (!cancelled) setUnit(buildUnitDetailView(data));
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setUnitError(e instanceof Error ? e.message : 'Impossible de charger l\'unité.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setUnitLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, unitId]);
 
-  // Timer basé sur lockExpiresAt réel ou fallback 48h
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (reservation?.lockExpiresAt) {
-      const updateTimer = () => {
-        const remaining = Math.max(0, Math.floor(
-          (new Date(reservation.lockExpiresAt).getTime() - Date.now()) / 1000
-        ));
-        setTimerSeconds(remaining);
-      };
-      updateTimer();
-      const interval = setInterval(updateTimer, 1000);
-      return () => clearInterval(interval);
-    }
-
-    const interval = setInterval(() => {
-      setTimerSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isOpen, reservation]);
-
-  // Reset à la fermeture
+  // Reset à la fermeture / changement d'unité
   useEffect(() => {
     if (!isOpen) {
       setStep('FORM');
       setReservation(null);
       setErrorMessage('');
-      setTimerSeconds(172800);
     }
   }, [isOpen]);
+
+  // Timer réel basé sur le lockExpiresAt renvoyé par l'API
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  useEffect(() => {
+    if (!isOpen || step !== 'CONFIRMED' || !reservation?.lockExpiresAt) return;
+
+    const updateTimer = () => {
+      const remaining = Math.max(0, Math.floor(
+        (new Date(reservation.lockExpiresAt).getTime() - Date.now()) / 1000
+      ));
+      setTimerSeconds(remaining);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, step, reservation]);
 
   if (!isOpen) return null;
 
@@ -75,28 +80,13 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!unitId || !user) return;
     setStep('LOADING');
     setErrorMessage('');
 
     try {
-      if (user) {
-        // Mode connecté : appel API réel, auth via cookie httpOnly
-        const unitId = `unit-${selectedBlock.replace(/\s/g, '-').toLowerCase()}-${selectedType.toLowerCase()}`;
-        const result = await createReservation(unitId);
-        setReservation(result);
-      } else {
-        // Mode démo : simulation de réservation (pas de backend)
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-        setReservation({
-          id: `demo-res-${Date.now()}`,
-          unitId: 'demo-unit',
-          userId: 'demo-user',
-          status: 'EN_ATTENTE',
-          lockExpiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
-          createdAt: new Date().toISOString(),
-        });
-      }
-
+      const result = await createReservation(unitId);
+      setReservation(result);
       setStep('CONFIRMED');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Une erreur est survenue lors de la réservation.';
@@ -115,148 +105,109 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
           <X className="w-5 h-5" />
         </button>
 
-        {step === 'FORM' ? (
+        {step === 'FORM' && !unitId ? (
+          <div className="text-center py-8 space-y-4">
+            <div className="w-12 h-12 bg-laterite/20 text-laterite-light rounded-full flex items-center justify-center mx-auto border border-laterite/40">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <h2 className="font-serif text-2xl font-semibold text-paper">
+              Unité requise
+            </h2>
+            <p className="text-sm text-paper/80 font-mono">
+              La réservation verrouille une unité précise. Sélectionnez un bien
+              dans le catalogue pour démarrer la réservation.
+            </p>
+            <a
+              href="/catalogue"
+              className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-6 py-3 rounded-lg transition-all"
+            >
+              Voir le catalogue <ArrowRight className="w-4 h-4" />
+            </a>
+          </div>
+        ) : step === 'FORM' && !user ? (
+          <div className="text-center py-8 space-y-4">
+            <div className="w-12 h-12 bg-laterite/20 text-laterite-light rounded-full flex items-center justify-center mx-auto border border-laterite/40">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <h2 className="font-serif text-2xl font-semibold text-paper">
+              Connexion requise
+            </h2>
+            <p className="text-sm text-paper/80 font-mono">
+              Le verrouillage d'une unité nécessite un compte acheteur vérifié.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+              <a
+                href="/login"
+                className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-6 py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
+              >
+                <LogIn className="w-4 h-4" /> Se connecter
+              </a>
+              <a
+                href="/register"
+                className="border border-paper/20 hover:border-sand text-paper font-mono text-xs px-6 py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
+              >
+                Créer un compte
+              </a>
+            </div>
+          </div>
+        ) : step === 'FORM' ? (
           <div>
             <div className="flex items-center gap-2 text-xs font-mono text-sand mb-1">
-              <Clock className="w-4 h-4 text-laterite-light" />
-              <span>GARANTIE DE VERROUILLAGE REDIS (48h)</span>
+              <ShieldCheck className="w-4 h-4 text-laterite-light" />
+              <span>VERROU REDIS 48H — RÉSERVATION AUTHENTIFIÉE</span>
             </div>
 
             <h2 className="font-serif text-2xl font-semibold text-paper mb-2">
               Réserver votre logement sur plan
             </h2>
             <p className="text-xs text-paper/70 font-mono mb-6">
-              Votre réservation bloque l'unité pendant 48 heures sans risque d'annulation durant la fenêtre.
+              La confirmation crée le verrou 48h via l'API (POST /v1/reservations).
             </p>
 
-            {/* Hold Timer Banner */}
-            <div className="bg-laterite/15 border border-laterite/40 rounded p-3 mb-6 flex justify-between items-center font-mono text-xs">
-              <span className="text-paper/80">Temps de blocage restant :</span>
-              <span className="text-laterite-light font-bold text-sm">{formatTimer(timerSeconds)}</span>
-            </div>
+            {unitLoading && (
+              <div className="flex items-center justify-center gap-2 py-6 text-paper/60 font-mono text-xs">
+                <Loader2 className="w-4 h-4 animate-spin" /> Chargement de l'unité…
+              </div>
+            )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Bloc désiré</label>
-                  <select
-                    value={selectedBlock}
-                    onChange={(e) => setSelectedBlock(e.target.value)}
-                    className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-                  >
-                    <option value="Bloc A">Bloc A (Sud-Ouest)</option>
-                    <option value="Bloc B">Bloc B (Sud-Est)</option>
-                    <option value="Bloc C">Bloc C (Nord-Ouest)</option>
-                    <option value="Bloc D">Bloc D (Nord-Est)</option>
-                  </select>
+            {unitError && (
+              <div className="bg-laterite/10 border border-laterite/30 text-paper/80 p-4 rounded font-mono text-xs mb-4">
+                {unitError}
+              </div>
+            )}
+
+            {!unitLoading && unit && (
+              <>
+                <div className="bg-paper/5 border border-paper/20 rounded p-4 mb-6 font-mono text-xs space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-paper/60">Bien</span>
+                    <span className="text-paper font-bold">{unit.typeLabel} · Étage {unit.floor}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-paper/60">Bloc</span>
+                    <span className="text-sand font-bold">{unit.blockName} · {unit.blockFrontage}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-paper/60">Surface</span>
+                    <span className="text-paper font-bold">{unit.surfaceM2} m²</span>
+                  </div>
+                  <div className="flex justify-between border-t border-paper/15 pt-2">
+                    <span className="text-paper/60">Prix du bien</span>
+                    <span className="text-laterite-light font-bold">{unit.priceFormatted}</span>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Typologie</label>
-                  <select
-                    value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value)}
-                    className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-                  >
-                    <option value="STUDIO">Studio (≈25 m²)</option>
-                    <option value="T2">Appartement T2 (≈45 m²)</option>
-                    <option value="T3">Appartement T3 (≈65 m²)</option>
-                    <option value="T5">Appartement T5 (≈100 m²)</option>
-                    <option value="COMMERCE">Local Commercial</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Parking Option Selector */}
-              <div>
-                <label className="block font-mono text-xs text-paper/60 uppercase mb-1 flex items-center gap-1">
-                  <Car className="w-3.5 h-3.5 text-sand" /> Option Parking
-                </label>
-                <select
-                  value={parkingOption}
-                  onChange={(e) => setParkingOption(e.target.value)}
-                  className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-                >
-                  <option value="SOUS_PILOTIS">Parking Sous Pilotis (Résident RDC - Inclus)</option>
-                  <option value="AUVENT_SOLAIRE">Auvent Solaire ☀ (Ombrage + Panneaux solaires)</option>
-                  <option value="AUVENT_CLASSIQUE">Auvent Classique (Appoint)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Nom complet *</label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Ex: Akossiwa Mensah"
-                  className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Numéro WhatsApp *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+228 90 00 00 00"
-                    className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="vous@exemple.com"
-                    className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Payment Provider Selection */}
-              <div>
-                <label className="block font-mono text-xs text-paper/60 uppercase mb-2">Mode d'acompte préféré</label>
-                <div className="grid grid-cols-2 gap-3 font-mono text-xs">
+                <form onSubmit={handleSubmit} className="space-y-4">
                   <button
-                    type="button"
-                    onClick={() => setPaymentProvider('CINETPAY')}
-                    className={`p-3 border rounded flex items-center gap-2 justify-center transition-all ${
-                      paymentProvider === 'CINETPAY'
-                        ? 'border-laterite bg-laterite/20 text-paper font-bold'
-                        : 'border-paper/20 text-paper/70 hover:border-paper/40'
-                    }`}
+                    type="submit"
+                    disabled={!unit.canReserve}
+                    className="w-full bg-laterite hover:bg-laterite-light disabled:opacity-40 disabled:cursor-not-allowed text-paper font-mono text-xs py-3.5 rounded transition-all mt-4 font-semibold"
                   >
-                    <Smartphone className="w-4 h-4 text-lagoon-light" /> Mobile Money (CinetPay)
+                    {unit.canReserve ? 'Confirmer le verrouillage 48h →' : `${unit.statusLabel} — indisponible à la réservation`}
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentProvider('STRIPE')}
-                    className={`p-3 border rounded flex items-center gap-2 justify-center transition-all ${
-                      paymentProvider === 'STRIPE'
-                        ? 'border-laterite bg-laterite/20 text-paper font-bold'
-                        : 'border-paper/20 text-paper/70 hover:border-paper/40'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4 text-sand" /> Carte Bancaire (Stripe)
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-laterite hover:bg-laterite-light text-paper font-mono text-xs py-3.5 rounded transition-all mt-4 font-semibold"
-              >
-                Confirmer le verrouillage 48h →
-              </button>
-            </form>
+                </form>
+              </>
+            )}
           </div>
         ) : step === 'LOADING' ? (
           <div className="text-center py-12 space-y-4">
@@ -299,9 +250,11 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
               Réservation Verrouillée avec Succès !
             </h3>
 
-            <p className="text-sm text-paper/80 font-mono">
-              Un verrou Redis a été créé sur l'unité <b className="text-sand">{selectedType}</b> du <b className="text-sand">{selectedBlock}</b>.
-            </p>
+            {unit && (
+              <p className="text-sm text-paper/80 font-mono">
+                Un verrou a été créé sur le <b className="text-sand">{unit.typeLabel}</b> du <b className="text-sand">{unit.blockName}</b> (étage {unit.floor}).
+              </p>
+            )}
 
             <div className="bg-paper/5 border border-paper/20 p-4 rounded text-left font-mono text-xs space-y-2">
               {reservation?.id && (
@@ -311,29 +264,23 @@ export default function ReservationModal({ isOpen, onClose, selectedTypology }: 
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-paper/60">Réservant :</span>
-                <span className="text-paper font-bold">{fullName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-paper/60">WhatsApp :</span>
-                <span className="text-paper font-bold">{phone}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-paper/60">Mode de paiement :</span>
-                <span className="text-sand font-bold">{paymentProvider === 'CINETPAY' ? 'CinetPay Mobile Money' : 'Stripe Card'}</span>
+                <span className="text-paper/60">Statut :</span>
+                <span className="text-lagoon-light font-bold">{reservation?.status ?? '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-paper/60">Expiration du verrou :</span>
                 <span className="text-laterite-light font-bold">
                   {reservation?.lockExpiresAt
                     ? new Date(reservation.lockExpiresAt).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
-                    : 'Dans 48 heures'}
+                    : '—'}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-paper/60">Statut :</span>
-                <span className="text-lagoon-light font-bold">{reservation?.status || 'EN_ATTENTE'}</span>
-              </div>
+              {step === 'CONFIRMED' && reservation?.lockExpiresAt && (
+                <div className="flex justify-between">
+                  <span className="text-paper/60">Compte à rebours :</span>
+                  <span className="text-laterite-light font-bold">{formatTimer(timerSeconds)}</span>
+                </div>
+              )}
             </div>
 
             <p className="text-xs text-paper/60">

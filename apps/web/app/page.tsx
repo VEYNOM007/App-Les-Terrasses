@@ -33,10 +33,13 @@ export default function Home() {
       <LeadForm />
       <Footer />
 
+      {/* Réservation : l'unité doit être réelle (cuid). Le parcours d'accueil
+          reste typologie-based (chantier dédié) — unitId null → l'invite
+          redirige vers le catalogue, aucun verrou n'est créé sans unité. */}
       <ReservationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        selectedTypology={selectedTypology}
+        unitId={null}
       />
     </main>
   );

@@ -1382,7 +1382,7 @@ components:
       properties:
         unitId: { type: string }
         unitType: { type: string }
-        totalAmount: { type: number }
+        totalAmount: { type: string }
         currency: { type: string, example: "XOF" }
         downPaymentPercent: { type: integer }
         installments:
@@ -1391,7 +1391,7 @@ components:
             type: object
             properties:
               label: { type: string, example: "Acompte réservation" }
-              amount: { type: number }
+              amount: { type: string }
               dueDate: { type: string, format: date-time }
               percent: { type: number }
 

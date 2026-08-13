@@ -135,6 +135,177 @@ export async function fetchSitePlan(projectId: string): Promise<SitePlanResponse
 }
 
 // ────────────────────────────────────────────────────────────
+// Catalogue (public)
+// ────────────────────────────────────────────────────────────
+
+export type UnitType = 'STUDIO' | 'T2' | 'T3' | 'T4' | 'T5' | 'COMMERCE';
+export type UnitStatus = 'DISPONIBLE' | 'RESERVE' | 'VENDU' | 'LIVRE';
+export type UnitMediaType = 'PHOTO' | 'PHOTO_REELLE' | 'PLAN' | 'RENDU_3D';
+
+export interface TypologyUnit {
+  id: string;
+  blockName: string;
+  blockFrontage: string;
+  floor: number;
+  surface: number;
+  price: string;
+  status: UnitStatus;
+  hasRendu3D: boolean;
+}
+
+export interface TypologyGroup {
+  type: UnitType;
+  totalUnits: number;
+  availableUnits: number;
+  minPrice: string;
+  units: TypologyUnit[];
+}
+
+export interface UnitMedia {
+  id: string;
+  type: UnitMediaType;
+  url: string;
+  altText: string;
+  sortOrder: number;
+}
+
+export interface CatalogUnit {
+  id: string;
+  type: UnitType;
+  surface: number;
+  floor: number;
+  price: string;
+  status: UnitStatus;
+  currency: string;
+  planImage: string | null;
+  virtualTourUrl: string | null;
+  marketingDescription: string | null;
+  highlights: string[];
+  block: { name: string; frontage: string };
+  media: UnitMedia[];
+}
+
+/**
+ * Agrégats par typologie (compteurs, prix mini, unités) pour la grille du
+ * catalogue. Endpoint public — les prix Prisma Decimal arrivent en string.
+ */
+export function fetchTypologies(): Promise<TypologyGroup[]> {
+  return apiFetch<TypologyGroup[]>('/v1/catalog/typologies');
+}
+
+/**
+ * Fiche unité individuelle (médias ordonnés) pour l'unité représentative.
+ * Endpoint public — fonctionne aussi sur une unité vendue.
+ */
+export function fetchUnit(id: string): Promise<CatalogUnit> {
+  return apiFetch<CatalogUnit>(`/v1/catalog/units/${id}`);
+}
+
+export interface PaymentInstallment {
+  label: string;
+  amount: string;
+  dueDate: string;
+  percent: number;
+}
+
+export interface PaymentPreview {
+  unitId: string;
+  unitType: UnitType;
+  totalAmount: string;
+  currency: string;
+  downPaymentPercent: number;
+  installments: PaymentInstallment[];
+}
+
+/**
+ * Aperçu public de l'échéancier VEFA (acompte + tranches d'équilibre).
+ * `downPaymentPercent` facultatif : l'API applique l'acompte par défaut du
+ * projet si absent. Les montants Prisma Decimal arrivent en string.
+ */
+export function fetchPaymentPreview(
+  unitId: string,
+  downPaymentPercent?: number,
+): Promise<PaymentPreview> {
+  const query =
+    downPaymentPercent === undefined ? '' : `?downPaymentPercent=${downPaymentPercent}`;
+  return apiFetch<PaymentPreview>(`/v1/catalog/units/${unitId}/payment-preview${query}`);
+}
+
+// ────────────────────────────────────────────────────────────
+// Administration (catalogue) — cookie admin requis (RolesGuard)
+// ────────────────────────────────────────────────────────────
+
+export interface AdminUnitUpdate {
+  type?: UnitType;
+  surface?: number;
+  floor?: number;
+  price?: number;
+  currency?: string;
+  planImage?: string;
+  marketingDescription?: string;
+  highlights?: string[];
+  virtualTourUrl?: string;
+  status?: UnitStatus;
+  hasStorefront?: boolean;
+  streetFacing?: boolean;
+}
+
+export interface AdminUnitMediaCreate {
+  type: UnitMediaType;
+  url: string;
+  altText?: string;
+  sortOrder?: number;
+}
+
+export interface AdminUnitMediaUpdate {
+  type?: UnitMediaType;
+  url?: string;
+  altText?: string;
+  sortOrder?: number;
+}
+
+/**
+ * Édition d'une unité existante (prix, statut, surfaces…).
+ * Corps aligné sur `UpdateUnitDto` (PartialType de CreateUnitDto) — toutes
+ * les propriétés sont optionnelles, `price` en number (Decimal en base).
+ */
+export function adminUpdateUnit(id: string, body: AdminUnitUpdate): Promise<CatalogUnit> {
+  return apiFetch<CatalogUnit>(`/v1/admin/units/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Ajout d'un média à une unité (rendu 3D, plan, photo).
+ * Corps aligné sur `CreateUnitMediaDto` — `type` parmi RENDU_3D, PHOTO,
+ * PHOTO_REELLE, PLAN.
+ */
+export function adminAddUnitMedia(unitId: string, body: AdminUnitMediaCreate): Promise<UnitMedia> {
+  return apiFetch<UnitMedia>(`/v1/admin/units/${unitId}/media`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Édition d'un média (type, ordre d'affichage, URL).
+ * Corps aligné sur `UpdateUnitMediaDto` (PartialType de CreateUnitMediaDto).
+ */
+export function adminUpdateMedia(mediaId: string, body: AdminUnitMediaUpdate): Promise<UnitMedia> {
+  return apiFetch<UnitMedia>(`/v1/admin/media/${mediaId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+export function adminDeleteMedia(mediaId: string): Promise<{ message?: string }> {
+  return apiFetch<{ message?: string }>(`/v1/admin/media/${mediaId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ────────────────────────────────────────────────────────────
 // Réservation
 // ────────────────────────────────────────────────────────────
 

@@ -5,6 +5,14 @@ repo. Il est complémentaire au CLAUDE.md générique déjà utilisé sur AGIR �
 les règles R0-R8 s'appliquent ici à l'identique, avec les précisions
 spécifiques à ce projet ci-dessous.
 
+## Repo Git
+
+Le repo Git réel se trouve dans `residence-catalog/`, pas à la racine du
+dossier parent `App-Les Terrasse`. Toute commande git (status, commit, log...)
+doit être lancée depuis `residence-catalog/`. Les fichiers à la racine du
+dossier parent (Caddyfile, checklists, openapi de référence) sont volontairement
+hors versioning — ne pas essayer de les commit.
+
 ## Contexte projet
 
 Plateforme de vente de logements en résidence fermée (studios/T2/T3),
@@ -114,6 +122,33 @@ Avant de coder une feature qui dépend d'un de ces modules, vérifier son
 Voir `.env.example` à la racine. Ne jamais commit de `.env` réel (déjà
 dans `.gitignore`). Toute nouvelle variable ajoutée doit être documentée
 dans `.env.example` dans le même commit.
+
+### Sécurité chaîne d'approvisionnement (pnpm exclusif, renforcée)
+- pnpm est le seul gestionnaire de paquets autorisé (pas de npm/yarn, pas de
+  mélange). `packageManager` dans `package.json` = `pnpm@11.1.1` (pnpm >= 10
+  requis : les protections `minimumReleaseAge` et `allowBuilds` n'existent
+  pas avant). Si corepack réinstalle une 9.x, c'est une régression à corriger.
+- `minimumReleaseAge: 10080` (7 jours) dans `pnpm-workspace.yaml` : toute
+  version publiée depuis moins de 7 jours est bloquée à l'installation.
+  Ne jamais baisser ce délai ni ajouter de paquet à `minimumReleaseAgeExclude`
+  pour installer une dépendance "urgente" — si le paquet est légitime, il
+  suffit d'attendre qu'il vieillisse.
+- `allowBuilds` : whitelist stricte des seuls paquets autorisés à exécuter
+  leurs scripts de build (`bcrypt`, `esbuild`, `msgpackr-extract`, `prisma`,
+  `@prisma/client`, `@prisma/engines`) ; `@nestjs/core` y figure explicitement
+  à `false` (postinstall OpenCollective, télémétrie inutile). Toute nouvelle
+  dépendance avec un script de build (postinstall/install/preinstall) DOIT
+  être examinée manuellement puis ajoutée à cette whitelist dans le même
+  commit que la dépendance. Jamais `dangerouslyAllowAllBuilds`.
+- Install frais : le postinstall de `@prisma/client` ne trouve pas le schéma
+  (chemin custom `packages/database/prisma/schema.prisma`), donc après
+  `pnpm install` lancer obligatoirement `pnpm --filter @residence-catalog/database generate`
+  (régénère le client dans `.pnpm/.../node_modules/@prisma/client`) avant
+  tout `tsc --noEmit` sur `apps/api`.
+- Avant d'ajouter une dépendance : vérifier son âge (le blocage
+  `minimumReleaseAge` est volontaire), l'existence de scripts de build
+  (`pnpm view <pkg> scripts`), et que le commit qui l'introduit passe
+  `pnpm install` (strict) + lint + typecheck (R8).
 
 ### Base de test — synchronisation automatique (ne PAS créer/migrer à la main)
 `residence_catalog_test` est créée et migrée automatiquement à chaque

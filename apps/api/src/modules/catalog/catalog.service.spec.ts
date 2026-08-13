@@ -248,10 +248,10 @@ describe('CatalogService', () => {
       expect(result.installments[0]).toMatchObject({
         label: 'Acompte réservation',
         percent: 0.1,
-        amount: 5_000_000,
+        amount: '5000000',
       });
       expect(result.installments[0].dueDate).toBeInstanceOf(Date);
-      const total = result.installments.reduce((sum, i) => sum + i.amount, 0);
+      const total = result.installments.reduce((sum, i) => sum + Number(i.amount), 0);
       expect(total).toBe(50_000_000);
     });
 
@@ -262,8 +262,8 @@ describe('CatalogService', () => {
 
       expect(result.downPaymentPercent).toBe(1);
       expect(result.installments).toHaveLength(5);
-      expect(result.installments[0].amount).toBe(500_000);
-      const total = result.installments.reduce((sum, i) => sum + i.amount, 0);
+      expect(result.installments[0].amount).toBe('500000');
+      const total = result.installments.reduce((sum, i) => sum + Number(i.amount), 0);
       expect(total).toBe(50_000_000);
     });
 
@@ -276,10 +276,10 @@ describe('CatalogService', () => {
       expect(result.installments).toHaveLength(1);
       expect(result.installments[0]).toMatchObject({
         label: 'Acompte réservation',
-        amount: 50_000_000,
+        amount: '50000000',
         percent: 1,
       });
-      const total = result.installments.reduce((sum, i) => sum + i.amount, 0);
+      const total = result.installments.reduce((sum, i) => sum + Number(i.amount), 0);
       expect(total).toBe(50_000_000);
     });
   });

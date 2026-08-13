@@ -1,9 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '../../../components/Navbar';
 import Footer from '../../../components/Footer';
 import { getCatalogData, saveCatalogData, ComplexInfo, Unit3DDetails, ComplexView } from '../../../lib/catalogData';
+import {
+  adminAddUnitMedia,
+  adminDeleteMedia,
+  adminUpdateMedia,
+  adminUpdateUnit,
+  fetchTypologies,
+  fetchUnit,
+  CatalogUnit,
+  UnitMedia,
+  UnitMediaType,
+  UnitStatus,
+} from '../../../lib/api';
 import {
   Save,
   Plus,
@@ -18,7 +30,10 @@ import {
   Image,
   DollarSign,
   Layers,
-  MapPin
+  MapPin,
+  Loader2,
+  AlertCircle,
+  Database
 } from 'lucide-react';
 
 export default function AdminCataloguePage() {
@@ -31,12 +46,145 @@ export default function AdminCataloguePage() {
     setData(getCatalogData());
   }, []);
 
+  // ── Section « Unités de la base (API) » — persistance réelle ──
+  const [units, setUnits] = useState<CatalogUnit[]>([]);
+  const [loadingUnits, setLoadingUnits] = useState(true);
+  const [unitsError, setUnitsError] = useState('');
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [priceInput, setPriceInput] = useState<string>('');
+  const [statusInput, setStatusInput] = useState<UnitStatus>('DISPONIBLE');
+  const [savingUnit, setSavingUnit] = useState(false);
+  const [unitActionError, setUnitActionError] = useState('');
+  const [unitActionSuccess, setUnitActionSuccess] = useState('');
+  const [mediaTypeInput, setMediaTypeInput] = useState<UnitMediaType>('RENDU_3D');
+  const [mediaUrlInput, setMediaUrlInput] = useState('');
+  const [savingMedia, setSavingMedia] = useState(false);
+  const [mediaActionError, setMediaActionError] = useState('');
+  const [mediaActionSuccess, setMediaActionSuccess] = useState('');
+
+  const loadApiUnits = useCallback(async () => {
+    setLoadingUnits(true);
+    setUnitsError('');
+    try {
+      const groups = await fetchTypologies();
+      const fetched: CatalogUnit[] = [];
+      for (const group of groups) {
+        for (const u of group.units) {
+          fetched.push(await fetchUnit(u.id));
+        }
+      }
+      setUnits(fetched);
+    } catch (e) {
+      setUnitsError(e instanceof Error ? e.message : 'Impossible de charger les unités.');
+    } finally {
+      setLoadingUnits(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadApiUnits();
+  }, [loadApiUnits]);
+
+  const refreshSelectedUnit = useCallback(async (unitId: string) => {
+    const refreshed = await fetchUnit(unitId);
+    setUnits((prev) => {
+      const idx = prev.findIndex((u) => u.id === unitId);
+      if (idx === -1) return prev;
+      const next = [...prev];
+      next[idx] = refreshed;
+      return next;
+    });
+    return refreshed;
+  }, []);
+
   if (!data) return null;
 
   const handleSaveAll = () => {
     saveCatalogData(data);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
+  const UNIT_STATUS_OPTIONS: UnitStatus[] = ['DISPONIBLE', 'RESERVE', 'VENDU', 'LIVRE'];
+  const MEDIA_TYPE_OPTIONS: UnitMediaType[] = ['RENDU_3D', 'PHOTO', 'PHOTO_REELLE', 'PLAN'];
+
+  const selectedUnit = units.find((u) => u.id === selectedUnitId) ?? null;
+
+  const selectUnit = (unit: CatalogUnit) => {
+    setSelectedUnitId(unit.id);
+    setPriceInput(unit.price);
+    setStatusInput(unit.status);
+    setUnitActionError('');
+    setUnitActionSuccess('');
+    setMediaActionError('');
+    setMediaActionSuccess('');
+  };
+
+  const handleSaveUnit = async () => {
+    if (!selectedUnit) return;
+    setSavingUnit(true);
+    setUnitActionError('');
+    setUnitActionSuccess('');
+    try {
+      const price = Number(priceInput);
+      if (!Number.isFinite(price) || price < 0) {
+        throw new Error('Le prix doit être un montant positif.');
+      }
+      await adminUpdateUnit(selectedUnit.id, { price, status: statusInput });
+      const refreshed = await refreshSelectedUnit(selectedUnit.id);
+      setPriceInput(refreshed.price);
+      setStatusInput(refreshed.status);
+      setUnitActionSuccess('Prix et statut enregistrés (base de données).');
+    } catch (e) {
+      setUnitActionError(e instanceof Error ? e.message : 'Échec de la sauvegarde.');
+    } finally {
+      setSavingUnit(false);
+    }
+  };
+
+  const handleAddMedia = async () => {
+    if (!selectedUnit) return;
+    setSavingMedia(true);
+    setMediaActionError('');
+    setMediaActionSuccess('');
+    try {
+      const url = mediaUrlInput.trim();
+      if (!url) throw new Error('L’URL du média est requise.');
+      await adminAddUnitMedia(selectedUnit.id, { type: mediaTypeInput, url });
+      await refreshSelectedUnit(selectedUnit.id);
+      setMediaUrlInput('');
+      setMediaActionSuccess('Média ajouté.');
+    } catch (e) {
+      setMediaActionError(e instanceof Error ? e.message : 'Impossible d’ajouter le média.');
+    } finally {
+      setSavingMedia(false);
+    }
+  };
+
+  const handleUpdateMedia = async (media: UnitMedia, patch: { type?: UnitMediaType; sortOrder?: number; url?: string }) => {
+    if (!selectedUnit) return;
+    setMediaActionError('');
+    setMediaActionSuccess('');
+    try {
+      await adminUpdateMedia(media.id, patch);
+      await refreshSelectedUnit(selectedUnit.id);
+      setMediaActionSuccess('Média mis à jour.');
+    } catch (e) {
+      setMediaActionError(e instanceof Error ? e.message : 'Impossible de modifier le média.');
+    }
+  };
+
+  const handleDeleteMedia = async (media: UnitMedia) => {
+    if (!selectedUnit) return;
+    setMediaActionError('');
+    setMediaActionSuccess('');
+    try {
+      await adminDeleteMedia(media.id);
+      await refreshSelectedUnit(selectedUnit.id);
+      setMediaActionSuccess('Média supprimé.');
+    } catch (e) {
+      setMediaActionError(e instanceof Error ? e.message : 'Impossible de supprimer le média.');
+    }
   };
 
   const handleUpdateComplexField = (field: keyof ComplexInfo, value: string) => {
@@ -161,6 +309,7 @@ export default function AdminCataloguePage() {
 
             <button
               onClick={handleSaveAll}
+              title="Sauvegarde locale (aperçu) — utilisez la section « Unités de la base (API) » pour persister en base."
               className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs font-bold px-5 py-2.5 rounded-lg inline-flex items-center gap-2 transition-all shadow-lg"
             >
               <Save className="w-4 h-4" /> Enregistrer les Modifications
@@ -179,6 +328,271 @@ export default function AdminCataloguePage() {
 
       {/* Admin Body */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
+        {/* Real Units Editor (API) */}
+        <div className="bg-ink-card border border-sand/40 rounded-xl p-6 space-y-5 shadow-xl">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-paper/15 pb-3">
+            <div>
+              <h3 className="font-serif text-xl font-semibold text-paper flex items-center gap-2">
+                <Database className="w-5 h-5 text-sand" /> Unités de la base (API)
+              </h3>
+              <p className="text-xs font-mono text-paper/60 mt-1">
+                Prix, statut et médias persistés en base via l'API — visibles par les visiteurs immédiatement.
+              </p>
+            </div>
+            <button
+              onClick={() => void loadApiUnits()}
+              className="bg-paper/10 hover:bg-paper/20 text-paper font-mono text-xs px-4 py-2.5 rounded-lg inline-flex items-center gap-2 transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Recharger
+            </button>
+          </div>
+
+          {loadingUnits && (
+            <div className="flex items-center justify-center gap-3 font-mono text-xs text-paper/60 py-10">
+              <Loader2 className="w-5 h-5 animate-spin text-laterite-light" /> Chargement des unités…
+            </div>
+          )}
+
+          {!loadingUnits && unitsError && (
+            <div className="bg-laterite/15 border border-laterite/40 rounded-md p-6 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-laterite-light shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-paper font-mono">{unitsError}</p>
+                <button
+                  onClick={() => void loadApiUnits()}
+                  className="mt-3 bg-paper/10 hover:bg-paper/20 text-paper font-mono text-xs px-4 py-2 rounded transition-all"
+                >
+                  Réessayer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!loadingUnits && !unitsError && units.length === 0 && (
+            <div className="bg-ink border border-paper/20 rounded-md p-10 text-center font-mono text-xs text-paper/70">
+              Aucune unité publiée trouvée dans la base.
+            </div>
+          )}
+
+          {!loadingUnits && !unitsError && units.length > 0 && (
+            <div className="space-y-4">
+              <div className="max-h-56 overflow-y-auto rounded-md border border-paper/15">
+                <table className="w-full text-left font-mono text-xs">
+                  <thead className="bg-ink sticky top-0">
+                    <tr className="text-paper/50 border-b border-paper/15">
+                      <th className="px-3 py-2">Type</th>
+                      <th className="px-3 py-2">Bloc</th>
+                      <th className="px-3 py-2">Étage</th>
+                      <th className="px-3 py-2">Prix (XOF)</th>
+                      <th className="px-3 py-2">Statut</th>
+                      <th className="px-3 py-2">Médias</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {units.map((u) => (
+                      <tr
+                        key={u.id}
+                        onClick={() => selectUnit(u)}
+                        className={`border-b border-paper/10 cursor-pointer transition-all ${
+                          selectedUnitId === u.id ? 'bg-sand/15' : 'hover:bg-paper/5'
+                        }`}
+                      >
+                        <td className="px-3 py-2 text-paper font-bold">{u.type}</td>
+                        <td className="px-3 py-2 text-paper/80">{u.block.name}</td>
+                        <td className="px-3 py-2 text-paper/80">{u.floor}</td>
+                        <td className="px-3 py-2 text-laterite-light font-bold">
+                          {Number(u.price).toLocaleString('fr-FR')}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="bg-paper/10 text-paper/80 border border-paper/20 px-2 py-0.5 rounded">
+                            {u.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-paper/80">{u.media.length}</td>
+                        <td className="px-3 py-2 text-sand font-mono">Éditer →</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {selectedUnit && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Prix & statut */}
+                  <div className="bg-ink border border-paper/20 rounded-lg p-5 space-y-4">
+                    <h4 className="font-serif text-base font-semibold text-paper border-b border-paper/15 pb-2">
+                      Prix & Statut — {selectedUnit.type} · {selectedUnit.block.name} (Étage {selectedUnit.floor})
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4 font-mono text-xs">
+                      <div>
+                        <label className="block text-paper/70 mb-1">Prix (XOF)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={priceInput}
+                          onChange={(e) => setPriceInput(e.target.value)}
+                          className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-paper/70 mb-1">Statut</label>
+                        <select
+                          value={statusInput}
+                          onChange={(e) => setStatusInput(e.target.value as UnitStatus)}
+                          className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                        >
+                          {UNIT_STATUS_OPTIONS.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {unitActionError && (
+                      <div className="bg-laterite/15 border border-laterite/40 rounded p-3 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-laterite-light shrink-0" />
+                        <p className="text-xs text-paper font-mono">{unitActionError}</p>
+                      </div>
+                    )}
+                    {unitActionSuccess && (
+                      <div className="bg-lagoon/15 border border-lagoon/40 rounded p-3 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-lagoon-light shrink-0" />
+                        <p className="text-xs text-paper font-mono">{unitActionSuccess}</p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => void handleSaveUnit()}
+                      disabled={savingUnit}
+                      className="w-full bg-laterite hover:bg-laterite-light text-paper font-mono text-xs font-bold py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                    >
+                      {savingUnit ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Enregistrement…
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" /> Enregistrer (prix & statut)
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Médias */}
+                  <div className="bg-ink border border-paper/20 rounded-lg p-5 space-y-4">
+                    <h4 className="font-serif text-base font-semibold text-paper border-b border-paper/15 pb-2">
+                      Médias ({selectedUnit.media.length})
+                    </h4>
+
+                    {mediaActionError && (
+                      <div className="bg-laterite/15 border border-laterite/40 rounded p-3 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-laterite-light shrink-0" />
+                        <p className="text-xs text-paper font-mono">{mediaActionError}</p>
+                      </div>
+                    )}
+                    {mediaActionSuccess && (
+                      <div className="bg-lagoon/15 border border-lagoon/40 rounded p-3 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-lagoon-light shrink-0" />
+                        <p className="text-xs text-paper font-mono">{mediaActionSuccess}</p>
+                      </div>
+                    )}
+
+                    {selectedUnit.media.length === 0 ? (
+                      <p className="text-xs text-paper/60 font-mono">
+                        Aucun média sur cette unité pour le moment.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {selectedUnit.media.map((m) => (
+                          <li
+                            key={m.id}
+                            className="bg-ink-card border border-paper/15 rounded-lg p-3 font-mono text-xs space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sand font-bold">{m.type}</span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => void handleUpdateMedia(m, { type: m.type === 'RENDU_3D' ? 'PHOTO' : 'RENDU_3D' })}
+                                  className="text-lagoon-light hover:underline"
+                                  title="Basculer le type"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => void handleDeleteMedia(m)}
+                                  className="text-laterite hover:text-laterite-light"
+                                  title="Supprimer ce média"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-paper/60 break-all">{m.url}</p>
+                            <div className="flex items-center gap-2">
+                              <label className="text-paper/50">Ordre</label>
+                              <input
+                                type="number"
+                                min={0}
+                                defaultValue={m.sortOrder}
+                                onBlur={(e) => void handleUpdateMedia(m, { sortOrder: Number(e.target.value) })}
+                                className="w-20 bg-ink border border-paper/20 rounded p-1.5 text-paper"
+                              />
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="pt-3 border-t border-paper/15 space-y-3">
+                      <div className="grid grid-cols-2 gap-4 font-mono text-xs">
+                        <div>
+                          <label className="block text-paper/70 mb-1">Type</label>
+                          <select
+                            value={mediaTypeInput}
+                            onChange={(e) => setMediaTypeInput(e.target.value as UnitMediaType)}
+                            className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                          >
+                            {MEDIA_TYPE_OPTIONS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-paper/70 mb-1">URL</label>
+                          <input
+                            type="text"
+                            value={mediaUrlInput}
+                            onChange={(e) => setMediaUrlInput(e.target.value)}
+                            placeholder="https://…"
+                            className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => void handleAddMedia()}
+                        disabled={savingMedia}
+                        className="w-full bg-lagoon hover:bg-lagoon-light text-paper font-mono text-xs font-bold py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                      >
+                        {savingMedia ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" /> Ajout…
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" /> Ajouter le média
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* General Complex Info Editor Card */}
         <div className="bg-ink-card border border-paper/20 rounded-xl p-6 space-y-4 shadow-xl">
           <h3 className="font-serif text-xl font-semibold text-paper border-b border-paper/15 pb-3 flex items-center gap-2">
@@ -231,6 +645,9 @@ export default function AdminCataloguePage() {
             <div>
               <h3 className="font-serif text-2xl font-semibold text-paper flex items-center gap-2">
                 <Layers className="w-6 h-6 text-sand" /> Vues du Complexe & Boutons Interactifs ({data.views.length})
+                <span className="text-[10px] font-mono bg-paper/10 text-paper/60 border border-paper/20 px-2 py-0.5 rounded uppercase">
+                  Aperçu local (non persistant)
+                </span>
               </h3>
               <p className="text-xs font-mono text-paper/60">
                 Ajoutez ou éditez les vues (Plan de masse, Vue aérienne, Jardins) et leurs boutons d'accès.
@@ -290,6 +707,9 @@ export default function AdminCataloguePage() {
             <div>
               <h3 className="font-serif text-2xl font-semibold text-paper flex items-center gap-2">
                 <Building className="w-6 h-6 text-sand" /> Grille des Appartements ({data.units.length})
+                <span className="text-[10px] font-mono bg-paper/10 text-paper/60 border border-paper/20 px-2 py-0.5 rounded uppercase">
+                  Aperçu local (non persistant)
+                </span>
               </h3>
               <p className="text-xs font-mono text-paper/60">
                 Gérez les prix, surfaces, photos 3D et descriptifs des logements.

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Unit3DDetails, UnitFinishingOption } from '../../lib/catalogData';
+import type { UnitDetailView } from '../../lib/catalog/unit-detail';
 import FinancialSimulator from './FinancialSimulator';
 import {
   X,
@@ -10,57 +10,47 @@ import {
   CheckCircle,
   Download,
   Calendar,
-  PhoneCall,
   MessageSquare,
-  Shield,
   Layers,
   Sparkles,
   ChevronLeft,
   ChevronRight,
   Clock,
-  ArrowRight
+  ArrowRight,
+  ImageOff,
 } from 'lucide-react';
 
 interface Apartment3DModalProps {
-  unit: Unit3DDetails | null;
+  unit: UnitDetailView | null;
   isOpen: boolean;
   onClose: () => void;
-  onOpenReservation: (unit: Unit3DDetails) => void;
+  onOpenReservation: (unitId: string) => void;
 }
+
+type ModalTab = '3d' | 'plan' | 'finance';
 
 export default function Apartment3DModal({
   unit,
   isOpen,
   onClose,
-  onOpenReservation
+  onOpenReservation,
 }: Apartment3DModalProps) {
   const [activePhotoIdx, setActivePhotoIdx] = useState<number>(0);
-  const [activeTab, setActiveTab] = useState<'3d' | 'plan' | 'finitions' | 'specs' | 'finance'>('3d');
-  const [selectedFinishes, setSelectedFinishes] = useState<Record<string, UnitFinishingOption>>({});
+  const [activeTab, setActiveTab] = useState<ModalTab>('3d');
   const [showOptionModal, setShowOptionModal] = useState<boolean>(false);
   const [optionHeld, setOptionHeld] = useState<boolean>(false);
 
   if (!isOpen || !unit) return null;
 
-  const currentPhoto = unit.renderPhotos[activePhotoIdx] || unit.renderPhotos[0];
-
-  // Calculate extra cost from options
-  const extraOptionsCost = Object.values(selectedFinishes).reduce((sum, opt) => sum + opt.priceDeltaXOF, 0);
-  const totalPriceWithFinishes = unit.startingPriceXOF + extraOptionsCost;
-
-  const handleSelectFinishingOption = (option: UnitFinishingOption) => {
-    setSelectedFinishes((prev) => ({
-      ...prev,
-      [option.category]: option,
-    }));
-  };
-
-  const formatPrice = (val: number) => {
-    return new Intl.NumberFormat('fr-FR').format(val) + ' FCFA';
-  };
+  const photos = unit.gallery.filter(
+    (m) => m.type === 'RENDU_3D' || m.type === 'PHOTO' || m.type === 'PHOTO_REELLE',
+  );
+  const safeIdx = photos.length > 0 ? activePhotoIdx % photos.length : 0;
+  const currentPhoto = photos[safeIdx];
+  const planUrl = unit.planUrl;
 
   const handleDownloadPdf = () => {
-    alert(`Téléchargement de la Plaquette Commerciale PDF & Fiche Technique : ${unit.name}`);
+    alert(`Téléchargement de la Plaquette Commerciale PDF & Fiche Technique : ${unit.typeLabel} ${unit.blockName}`);
   };
 
   const handleHoldOption = (e: React.FormEvent) => {
@@ -83,13 +73,15 @@ export default function Apartment3DModal({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs text-sand uppercase tracking-wider">{unit.blockName}</span>
-                {unit.badge && (
+                {unit.statusLabel && (
                   <span className="text-[10px] font-mono bg-laterite/20 text-laterite-light border border-laterite/40 px-2 py-0.5 rounded">
-                    {unit.badge}
+                    {unit.statusLabel}
                   </span>
                 )}
               </div>
-              <h3 className="font-serif text-xl sm:text-2xl font-semibold text-paper">{unit.name}</h3>
+              <h3 className="font-serif text-xl sm:text-2xl font-semibold text-paper">
+                {unit.typeLabel} · Étage {unit.floor}
+              </h3>
             </div>
           </div>
 
@@ -111,37 +103,20 @@ export default function Apartment3DModal({
                 : 'text-paper/70 hover:text-paper hover:bg-paper/10'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-sand" /> Vue & Photo 3D ({unit.renderPhotos.length})
+            <Sparkles className="w-4 h-4 text-sand" /> Vue & Photos ({photos.length})
           </button>
           <button
             onClick={() => setActiveTab('plan')}
+            disabled={!planUrl}
             className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
               activeTab === 'plan'
                 ? 'bg-laterite text-paper font-bold shadow-md'
-                : 'text-paper/70 hover:text-paper hover:bg-paper/10'
+                : planUrl
+                  ? 'text-paper/70 hover:text-paper hover:bg-paper/10'
+                  : 'text-paper/30 cursor-not-allowed'
             }`}
           >
-            <Maximize2 className="w-4 h-4" /> Plan Coté (2D/3D)
-          </button>
-          <button
-            onClick={() => setActiveTab('finitions')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-              activeTab === 'finitions'
-                ? 'bg-laterite text-paper font-bold shadow-md'
-                : 'text-paper/70 hover:text-paper hover:bg-paper/10'
-            }`}
-          >
-            <Layers className="w-4 h-4" /> Configurateur Finitions
-          </button>
-          <button
-            onClick={() => setActiveTab('specs')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-              activeTab === 'specs'
-                ? 'bg-laterite text-paper font-bold shadow-md'
-                : 'text-paper/70 hover:text-paper hover:bg-paper/10'
-            }`}
-          >
-            <Shield className="w-4 h-4" /> Descriptif Technique VEFA
+            <Maximize2 className="w-4 h-4" /> Plan Coté
           </button>
           <button
             onClick={() => setActiveTab('finance')}
@@ -151,7 +126,7 @@ export default function Apartment3DModal({
                 : 'text-paper/70 hover:text-paper hover:bg-paper/10'
             }`}
           >
-            <Calendar className="w-4 h-4 text-lagoon-light" /> Échéancier & Rentabilité
+            <Calendar className="w-4 h-4 text-lagoon-light" /> Échéancier de Paiement
           </button>
         </div>
 
@@ -160,77 +135,86 @@ export default function Apartment3DModal({
           {/* TAB 1: 3D PHOTO & RENDER GALLERY */}
           {activeTab === '3d' && (
             <div className="space-y-4">
-              <div className="relative rounded-xl overflow-hidden bg-ink-dark border border-paper/15 aspect-video flex items-center justify-center group shadow-xl">
-                <img
-                  src={currentPhoto.url}
-                  alt={currentPhoto.title}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-transparent to-transparent pointer-events-none" />
+              {currentPhoto ? (
+                <>
+                  <div className="relative rounded-xl overflow-hidden bg-ink-dark border border-paper/15 aspect-video flex items-center justify-center group shadow-xl">
+                    <img
+                      src={currentPhoto.url}
+                      alt={currentPhoto.altText}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-transparent to-transparent pointer-events-none" />
 
-                {/* Photo Caption & Angle Tag */}
-                <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center bg-ink/80 backdrop-blur-md border border-paper/20 p-3 rounded-lg">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase bg-laterite/30 text-sand px-2 py-0.5 rounded border border-laterite/40">
-                      Rendu 3D VEFA · Angle {currentPhoto.angle}
-                    </span>
-                    <h4 className="font-serif text-sm font-semibold text-paper mt-1">{currentPhoto.title}</h4>
+                    {/* Photo Caption & Media Tag */}
+                    <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center bg-ink/80 backdrop-blur-md border border-paper/20 p-3 rounded-lg">
+                      <div>
+                        <span className="text-[10px] font-mono uppercase bg-laterite/30 text-sand px-2 py-0.5 rounded border border-laterite/40">
+                          {currentPhoto.mediaLabel}
+                        </span>
+                        <h4 className="font-serif text-sm font-semibold text-paper mt-1">{currentPhoto.altText}</h4>
+                      </div>
+                      <span className="text-xs font-mono text-paper/60">
+                        {safeIdx + 1} / {photos.length}
+                      </span>
+                    </div>
+
+                    {/* Left/Right Carousel Controls */}
+                    {photos.length > 1 && (
+                      <>
+                        <button
+                          onClick={() =>
+                            setActivePhotoIdx((prev) => (prev === 0 ? photos.length - 1 : prev - 1))
+                          }
+                          className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-ink/80 hover:bg-laterite text-paper transition-all"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            setActivePhotoIdx((prev) => (prev === photos.length - 1 ? 0 : prev + 1))
+                          }
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-ink/80 hover:bg-laterite text-paper transition-all"
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </button>
+                      </>
+                    )}
                   </div>
-                  <span className="text-xs font-mono text-paper/60">
-                    {activePhotoIdx + 1} / {unit.renderPhotos.length}
-                  </span>
+
+                  {/* Thumbnails row */}
+                  <div className="flex gap-3 overflow-x-auto pb-2">
+                    {photos.map((photo, pIdx) => (
+                      <button
+                        key={photo.id}
+                        onClick={() => setActivePhotoIdx(pIdx)}
+                        className={`relative w-24 h-16 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
+                          safeIdx === pIdx ? 'border-laterite scale-105' : 'border-paper/20 opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={photo.url} alt={photo.altText} className="w-full h-full object-cover" />
+                        <span className="absolute bottom-1 right-1 text-[9px] font-mono bg-ink/80 px-1 rounded text-paper">
+                          {photo.isRendu3D ? '3D' : 'PH'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="p-10 text-center bg-ink-card rounded-xl border border-paper/10 text-paper/60 font-mono text-xs space-y-2">
+                  <ImageOff className="w-8 h-8 mx-auto text-paper/40" />
+                  <p>Aucun visuel disponible pour cette unité.</p>
                 </div>
-
-                {/* Left/Right Carousel Controls */}
-                {unit.renderPhotos.length > 1 && (
-                  <>
-                    <button
-                      onClick={() =>
-                        setActivePhotoIdx((prev) => (prev === 0 ? unit.renderPhotos.length - 1 : prev - 1))
-                      }
-                      className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-ink/80 hover:bg-laterite text-paper transition-all"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() =>
-                        setActivePhotoIdx((prev) => (prev === unit.renderPhotos.length - 1 ? 0 : prev + 1))
-                      }
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-ink/80 hover:bg-laterite text-paper transition-all"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {/* Thumbnails row */}
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {unit.renderPhotos.map((photo, pIdx) => (
-                  <button
-                    key={pIdx}
-                    onClick={() => setActivePhotoIdx(pIdx)}
-                    className={`relative w-24 h-16 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
-                      activePhotoIdx === pIdx ? 'border-laterite scale-105' : 'border-paper/20 opacity-70 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={photo.url} alt={photo.title} className="w-full h-full object-cover" />
-                    <span className="absolute bottom-1 right-1 text-[9px] font-mono bg-ink/80 px-1 rounded text-paper">
-                      {photo.angle}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
           )}
 
-          {/* TAB 2: FLOOR PLAN 2D/3D */}
-          {activeTab === 'plan' && (
+          {/* TAB 2: FLOOR PLAN */}
+          {activeTab === 'plan' && planUrl && (
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
               <div className="md:col-span-8 bg-ink-dark border border-paper/15 rounded-xl p-4 flex flex-col items-center">
                 <span className="text-xs font-mono text-sand mb-2 uppercase">Plan d'Architecture Coté · Échelle 1/50</span>
                 <img
-                  src={unit.floorPlan2DUrl}
+                  src={planUrl}
                   alt="Plan d'architecture"
                   className="w-full max-h-[400px] object-contain rounded-lg border border-paper/10"
                 />
@@ -238,165 +222,77 @@ export default function Apartment3DModal({
 
               <div className="md:col-span-4 space-y-4 font-mono text-xs">
                 <div className="bg-ink-card border border-paper/15 p-4 rounded-xl space-y-3">
-                  <h4 className="font-serif text-sm font-semibold text-paper">Surfaces & Hauteurs</h4>
+                  <h4 className="font-serif text-sm font-semibold text-paper">Surfaces & Localisation</h4>
 
                   <div className="space-y-2 border-t border-paper/10 pt-3">
                     <div className="flex justify-between">
                       <span className="text-paper/60">Surface Habitable</span>
-                      <span className="font-bold text-paper">{unit.surfaceHabitableM2} m²</span>
+                      <span className="font-bold text-paper">{unit.surfaceM2} m²</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-paper/60">Terrasse / Balcon</span>
-                      <span className="font-bold text-sand">{unit.surfaceTerrasseM2} m²</span>
-                    </div>
-                    <div className="flex justify-between pt-2 border-t border-paper/10 font-bold">
-                      <span className="text-paper">Surface Utile Totale</span>
-                      <span className="text-laterite-light text-sm">{unit.surfaceTotaleM2} m²</span>
-                    </div>
-                    <div className="flex justify-between pt-2">
-                      <span className="text-paper/60">Hauteur sous plafond</span>
-                      <span className="font-bold text-paper">{unit.ceilingHeightM} m</span>
+                      <span className="text-paper/60">Étage</span>
+                      <span className="font-bold text-paper">{unit.floor}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-paper/60">Orientation</span>
-                      <span className="font-bold text-lagoon-light">{unit.orientation}</span>
+                      <span className="text-paper/60">Bloc</span>
+                      <span className="font-bold text-lagoon-light">{unit.blockName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-paper/60">Façade</span>
+                      <span className="font-bold text-paper">{unit.blockFrontage}</span>
                     </div>
                   </div>
                 </div>
+
+                {unit.virtualTourUrl && (
+                  <a
+                    href={unit.virtualTourUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block bg-paper/10 hover:bg-paper/20 border border-paper/20 text-paper px-4 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Layers className="w-4 h-4 text-sand" /> Visite Virtuelle 360°
+                  </a>
+                )}
               </div>
             </div>
           )}
 
-          {/* TAB 3: FINISHING CONFIGURATOR */}
-          {activeTab === 'finitions' && (
-            <div className="space-y-6 font-sans">
-              <div className="bg-ink-card border border-paper/15 p-4 rounded-xl">
-                <h4 className="font-serif text-base font-semibold text-paper mb-1">
-                  Personnalisez vos matériaux & options de finitions
-                </h4>
-                <p className="text-xs font-mono text-paper/70">
-                  Sélectionnez vos finitions pour générer votre devis sur-mesure avant réservation.
-                </p>
-              </div>
+          {/* TAB 3: FINANCIAL SIMULATOR */}
+          {activeTab === 'finance' && <FinancialSimulator unitId={unit.id} />}
 
-              {unit.finishingOptions.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {unit.finishingOptions.map((opt) => {
-                    const isSelected = selectedFinishes[opt.category]?.id === opt.id || (opt.isDefault && !selectedFinishes[opt.category]);
-                    return (
-                      <div
-                        key={opt.id}
-                        onClick={() => handleSelectFinishingOption(opt)}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
-                          isSelected
-                            ? 'bg-laterite/15 border-laterite text-paper shadow-lg'
-                            : 'bg-ink-card border-paper/15 text-paper/80 hover:border-sand'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            {opt.previewColor && (
-                              <span
-                                className="w-5 h-5 rounded-full border border-paper/30 shadow-sm"
-                                style={{ backgroundColor: opt.previewColor }}
-                              />
-                            )}
-                            <span className="font-serif text-sm font-semibold text-paper">{opt.name}</span>
-                          </div>
-                          {isSelected && <CheckCircle className="w-5 h-5 text-laterite-light shrink-0" />}
-                        </div>
-
-                        <p className="text-xs text-paper/70 mb-3">{opt.description}</p>
-
-                        <div className="pt-2 border-t border-paper/10 flex justify-between items-center font-mono text-xs">
-                          <span className="text-paper/50 uppercase text-[10px]">Supplément</span>
-                          <span className={opt.priceDeltaXOF > 0 ? 'text-laterite-light font-bold' : 'text-lagoon-light font-bold'}>
-                            {opt.priceDeltaXOF === 0 ? 'Inclus (Inclus)' : `+ ${formatPrice(opt.priceDeltaXOF)}`}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-8 text-center bg-ink-card rounded-xl border border-paper/10 text-paper/60 font-mono text-xs">
-                  Aucune option supplémentaire requise pour cette typologie.
-                </div>
-              )}
+          {/* Description & Key Features overview bar */}
+          {unit.description && (
+            <div className="bg-ink-card border border-paper/15 p-4 rounded-xl space-y-3">
+              <p className="text-xs sm:text-sm text-paper/80 leading-relaxed">{unit.description}</p>
             </div>
           )}
 
-          {/* TAB 4: TECHNICAL SPECS SHEET */}
-          {activeTab === 'specs' && (
-            <div className="space-y-6 font-sans">
-              <div className="bg-ink-card border border-paper/15 p-4 rounded-xl flex items-center justify-between">
-                <div>
-                  <h4 className="font-serif text-base font-semibold text-paper">Notice Descriptive Technique VEFA</h4>
-                  <p className="text-xs font-mono text-paper/60">Spécifications garanties au contrat de réservation</p>
-                </div>
-                <button
-                  onClick={handleDownloadPdf}
-                  className="bg-paper/10 hover:bg-paper/20 border border-paper/20 text-paper px-3.5 py-2 rounded-lg text-xs font-mono flex items-center gap-2 transition-all"
-                >
-                  <Download className="w-4 h-4 text-sand" /> Télécharger PDF
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {unit.technicalSpecs.map((spec, sIdx) => (
-                  <div key={sIdx} className="bg-ink-card border border-paper/15 p-4 rounded-xl space-y-3">
-                    <h5 className="font-serif text-sm font-semibold text-sand pb-2 border-b border-paper/15">
-                      {spec.category}
-                    </h5>
-                    <ul className="space-y-2 font-mono text-xs text-paper/80">
-                      {spec.items.map((item, iIdx) => (
-                        <li key={iIdx} className="space-y-0.5">
-                          <span className="text-paper/50 block text-[10px] uppercase">{item.label}</span>
-                          <span className="text-paper font-sans text-xs block">{item.detail}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+          {unit.highlights.length > 0 && (
+            <div className="bg-ink-card border border-paper/15 p-4 rounded-xl">
+              <div className="flex flex-wrap gap-2">
+                {unit.highlights.map((feat, fIdx) => (
+                  <span
+                    key={fIdx}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-paper/5 border border-paper/15 text-xs font-mono text-paper/80"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5 text-lagoon-light" />
+                    {feat}
+                  </span>
                 ))}
               </div>
             </div>
           )}
-
-          {/* TAB 5: FINANCIAL SIMULATOR */}
-          {activeTab === 'finance' && (
-            <FinancialSimulator
-              unitPriceXOF={totalPriceWithFinishes}
-              estimatedMonthlyRentXOF={unit.estimatedMonthlyRentXOF}
-              estimatedNetYieldAnnual={unit.estimatedNetYieldAnnual}
-            />
-          )}
-
-          {/* Description & Key Features overview bar */}
-          <div className="bg-ink-card border border-paper/15 p-4 rounded-xl space-y-3">
-            <p className="text-xs sm:text-sm text-paper/80 leading-relaxed">{unit.description}</p>
-
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-paper/10">
-              {unit.keyFeatures.map((feat, fIdx) => (
-                <span
-                  key={fIdx}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-paper/5 border border-paper/15 text-xs font-mono text-paper/80"
-                >
-                  <CheckCircle className="w-3.5 h-3.5 text-lagoon-light" />
-                  {feat}
-                </span>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Modal Footer / Price & Call to Actions */}
         <div className="bg-ink/95 border-t border-paper/15 p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 shrink-0">
           <div>
             <div className="text-[11px] font-mono text-paper/50 uppercase">
-              PRIX DU BIEN {extraOptionsCost > 0 ? '(FINITIONS INCLUSES)' : ''}
+              PRIX DU BIEN {unit.statusLabel ? `· ${unit.statusLabel.toUpperCase()}` : ''}
             </div>
             <div className="font-mono text-xl sm:text-2xl font-bold text-laterite-light">
-              {formatPrice(totalPriceWithFinishes)}
+              {unit.priceFormatted}
             </div>
           </div>
 
@@ -412,14 +308,15 @@ export default function Apartment3DModal({
             {/* Hold Option 48h button */}
             <button
               onClick={() => setShowOptionModal(true)}
-              className="border border-laterite/40 bg-laterite/10 hover:bg-laterite/20 text-laterite-light px-4 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all"
+              disabled={!unit.canReserve}
+              className="border border-laterite/40 bg-laterite/10 hover:bg-laterite/20 text-laterite-light px-4 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Clock className="w-4 h-4" /> Option Prioritaire 48h
             </button>
 
             {/* Direct WhatsApp button */}
             <a
-              href={`https://wa.me/22890000000?text=Bonjour,%20je%20suis%20intéressé(e)%20par%20le%20${encodeURIComponent(unit.name)}%20à%20Baguida.`}
+              href={`https://wa.me/22890000000?text=Bonjour,%20je%20suis%20intéressé(e)%20par%20le%20${encodeURIComponent(`${unit.typeLabel} - ${unit.blockName} Étage ${unit.floor}`)}%20à%20Baguida.`}
               target="_blank"
               rel="noopener noreferrer"
               className="bg-lagoon hover:bg-lagoon-light text-paper px-4 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all shadow-lg"
@@ -431,11 +328,12 @@ export default function Apartment3DModal({
             <button
               onClick={() => {
                 onClose();
-                onOpenReservation(unit);
+                onOpenReservation(unit.id);
               }}
-              className="bg-laterite hover:bg-laterite-light text-paper font-bold px-6 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all shadow-lg hover:scale-105"
+              disabled={!unit.canReserve}
+              className="bg-laterite hover:bg-laterite-light text-paper font-bold px-6 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all shadow-lg hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-              Réserver en ligne <ArrowRight className="w-4 h-4" />
+              {unit.statusLabel ? unit.statusLabel : 'Réserver en ligne'} <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>

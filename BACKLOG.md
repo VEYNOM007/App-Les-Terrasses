@@ -37,3 +37,11 @@ pas en passant.
 ## 5. Commit d'infra en attente — `CLAUDE.md` racine
 - 8 lignes ajoutées non commitées (hors chantier catalogue). À valider par le
   dev avant d'être commité ou écarté.
+
+## 6. Mise à jour pnpm (actuellement 9.0.0, avril 2024)
+- Écartée volontairement du cycle catalogue actif : ne pas introduire de
+  variable de plus en plein chantier. À faire dans un cycle dédié.
+- Justification : plusieurs bugs Windows du store virtuel (extractions
+  `.pnpm` incomplètes) corrigés dans les versions 9.x récentes / 10.x.
+- Garde-fou en attendant : `scripts/verify-install.cjs` branché sur `dev`
+  (détecte un package critique vide avant de lancer les serveurs).

@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "turbo run dev",
+    "verify:install": "node scripts/verify-install.cjs",
+    "dev": "node scripts/verify-install.cjs && turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint"
   },

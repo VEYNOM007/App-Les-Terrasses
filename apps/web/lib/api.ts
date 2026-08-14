@@ -139,7 +139,7 @@ export async function fetchSitePlan(projectId: string): Promise<SitePlanResponse
 // ────────────────────────────────────────────────────────────
 
 export type UnitType = 'STUDIO' | 'T2' | 'T3' | 'T4' | 'T5' | 'COMMERCE';
-export type UnitStatus = 'DISPONIBLE' | 'RESERVE' | 'VENDU' | 'LIVRE';
+export type UnitStatus = 'DISPONIBLE' | 'RESERVE' | 'VENDU' | 'LIVRE' | 'ARCHIVE';
 export type UnitMediaType = 'PHOTO' | 'PHOTO_REELLE' | 'PLAN' | 'RENDU_3D';
 
 export interface TypologyUnit {
@@ -301,6 +301,87 @@ export function adminUpdateMedia(mediaId: string, body: AdminUnitMediaUpdate): P
 
 export function adminDeleteMedia(mediaId: string): Promise<{ message?: string }> {
   return apiFetch<{ message?: string }>(`/v1/admin/media/${mediaId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+// Administration (blocs & création / suppression d'unités)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Unité telle que renvoyée par GET /admin/projects — tous statuts inclus
+ * (dont ARCHIVE), contrairement au catalogue public qui les exclut.
+ * `price` arrive en string (Decimal Prisma serialisé).
+ */
+export interface AdminProjectUnit {
+  id: string;
+  type: UnitType;
+  surface: number;
+  floor: number;
+  price: string;
+  currency: string;
+  planImage: string | null;
+  virtualTourUrl: string | null;
+  marketingDescription: string | null;
+  highlights: string[];
+  status: UnitStatus;
+  media: UnitMedia[];
+}
+
+export interface AdminBlock {
+  id: string;
+  name: string;
+  floors: number;
+  frontage: string;
+  units: AdminProjectUnit[];
+}
+
+export interface AdminProject {
+  id: string;
+  name: string;
+  status: string;
+  blocks: AdminBlock[];
+}
+
+/**
+ * Liste les projets admin (inclut les BROUILLON, contrairement au catalogue
+ * public) avec leurs blocs réels — alimente le dropdown de choix bloc à
+ * l'ajout d'une unité (les `id` font foi, pas les noms libres).
+ */
+export function fetchAdminProjects(): Promise<AdminProject[]> {
+  return apiFetch<AdminProject[]>('/v1/admin/projects');
+}
+
+export interface AdminUnitCreate {
+  blockId: string;
+  type: UnitType;
+  surface: number;
+  floor: number;
+  price: number;
+  currency?: string;
+  status?: UnitStatus;
+}
+
+/**
+ * Création d'une unité dans un bloc réel. Corps aligné sur `CreateUnitDto` :
+ * `blockId` requis — jamais de nom libre côté client. Le endpoint renvoie
+ * l'unité brute (pas le shape enrichi `CatalogUnit`) : seule `id` est garantie.
+ */
+export function adminCreateUnit(body: AdminUnitCreate): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>('/v1/admin/units', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Suppression SQL réelle d'une unité — filet de sécurité rare. L'API répond
+ * 409 si l'unité a le moindre historique de réservation (même annulée) :
+ * dans ce cas il faut archiver (`adminUpdateUnit(id, { status: 'ARCHIVE' })`).
+ */
+export function adminDeleteUnit(id: string): Promise<{ message?: string }> {
+  return apiFetch<{ message?: string }>(`/v1/admin/units/${id}`, {
     method: 'DELETE',
   });
 }

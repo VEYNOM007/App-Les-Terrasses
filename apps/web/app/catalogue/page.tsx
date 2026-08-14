@@ -1,16 +1,15 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import ReservationModal from '../../components/ReservationModal';
 import ComplexOverviewViewer from '../../components/catalogue/ComplexOverviewViewer';
 import Apartment3DModal from '../../components/catalogue/Apartment3DModal';
 import CatalogueGrid from '../../components/catalogue/CatalogueGrid';
-import { getCatalogData, DEFAULT_COMPLEX_DATA, ComplexInfo, Unit3DDetails } from '../../lib/catalogData';
-import { fetchTypologies, fetchUnit, TypologyGroup } from '../../lib/api';
+import { DEFAULT_COMPLEX_DATA, ComplexInfo } from '../../lib/catalogData';
+import { fetchCatalogProjects, fetchTypologies, fetchUnit, CatalogProject, TypologyGroup } from '../../lib/api';
 import { buildUnitDetailView, UnitDetailView } from '../../lib/catalog/unit-detail';
-import { resolveOverviewUnitId } from '../../lib/catalog/overview-bridge';
 import {
   Building,
   ArrowRight,
@@ -21,11 +20,10 @@ import {
 } from 'lucide-react';
 
 export default function CataloguePage() {
-  // Toujours initialiser avec DEFAULT_COMPLEX_DATA (identique SSR/client)
-  // puis charger le localStorage uniquement dans useEffect pour éviter l'erreur d'hydratation.
-  // CHANTIER 4 (dédié) : piloter ComplexOverviewViewer par project.views et supprimer ce mock.
+  // Le fallback statique garantit un rendu initial stable lorsque l'API est indisponible.
   const [catalogData, setCatalogData] = useState<ComplexInfo>(DEFAULT_COMPLEX_DATA);
   const [groups, setGroups] = useState<TypologyGroup[]>([]);
+  const [project, setProject] = useState<CatalogProject | null>(null);
 
   // Unité réelle ouverte dans la fiche 3D (source de vérité : GET /catalog/units/:id).
   const [selectedUnit, setSelectedUnit] = useState<UnitDetailView | null>(null);
@@ -38,18 +36,29 @@ export default function CataloguePage() {
   const [isReservationOpen, setIsReservationOpen] = useState(false);
 
   useEffect(() => {
-    // Chargement après hydratation uniquement
-    setCatalogData(getCatalogData());
+    Promise.all([fetchCatalogProjects(), fetchTypologies()])
+      .then(([projects, typologies]) => {
+        const publishedProject = projects[0];
+        if (!publishedProject) return;
+        setProject(publishedProject);
+        setGroups(typologies);
+        const marketing = publishedProject.marketingInfo;
+        setCatalogData((previous) => ({
+          ...previous,
+          name: marketing?.name ?? publishedProject.name,
+          location: marketing?.location ?? publishedProject.location,
+          titleDeed: marketing?.titleDeed ?? previous.titleDeed,
+          totalLandArea: marketing?.totalLandArea ?? previous.totalLandArea,
+          deliveryDate: marketing?.deliveryDate ?? previous.deliveryDate,
+          notaryName: marketing?.notaryName ?? previous.notaryName,
+          escrowBank: marketing?.escrowBank ?? previous.escrowBank,
+          views: publishedProject.views ?? [],
+        }));
+      })
+      .catch((e) => console.warn('[catalogue] données résidence indisponibles :', e));
   }, []);
 
-  useEffect(() => {
-    // Groupes réels de l'API : nécessaires au pont overview → unité réelle.
-    fetchTypologies()
-      .then(setGroups)
-      .catch((e) => console.warn('[catalogue] typologies indisponibles pour l\'overview :', e));
-  }, []);
-
-  const openUnitDetail = useCallback((unitId: string) => {
+  const openUnitDetail = (unitId: string) => {
     setSelectedUnit(null);
     setUnitError(null);
     setUnitLoading(true);
@@ -58,22 +67,20 @@ export default function CataloguePage() {
       .catch((e) => setUnitError(e instanceof Error ? e.message : 'Impossible de charger l\'unité.'))
       .finally(() => setUnitLoading(false));
     setIs3DModalOpen(true);
-  }, []);
-
-  // Pont chantier 2 : un clic sur l'overview (mock) résout l'unité réelle (cuid).
-  const handleOverviewSelect = (mockUnit: Unit3DDetails) => {
-    const resolvedId = resolveOverviewUnitId(mockUnit.blockName, mockUnit.type, groups);
-    if (resolvedId === null) {
-      console.warn(`[catalogue] aucun bloc réel pour « ${mockUnit.blockName} » — hotspot inerte.`);
-      return;
-    }
-    openUnitDetail(resolvedId);
   };
 
-  const handleOpenReservation = useCallback((unitId: string) => {
+  const handleOpenReservation = (unitId: string) => {
     setReservationUnitId(unitId);
     setIsReservationOpen(true);
-  }, []);
+  };
+
+  const blockTargets = project?.blocks.flatMap((block) => {
+    const candidates = groups.flatMap((group) =>
+      group.units.filter((unit) => unit.blockName === block.name),
+    );
+    const representative = candidates.find((unit) => unit.status === 'DISPONIBLE') ?? candidates[0];
+    return representative ? [{ id: block.id, unitId: representative.id }] : [];
+  }) ?? [];
 
   return (
     <main className="min-h-screen bg-ink text-paper selection:bg-laterite selection:text-paper font-sans">
@@ -125,7 +132,8 @@ export default function CataloguePage() {
           <ComplexOverviewViewer
             views={catalogData.views}
             units={catalogData.units}
-            onSelectUnit={handleOverviewSelect}
+            blockTargets={blockTargets}
+            onSelectUnit={openUnitDetail}
           />
         </div>
       </section>

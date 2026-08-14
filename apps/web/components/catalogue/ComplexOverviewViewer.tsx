@@ -18,13 +18,14 @@ import {
 interface ComplexOverviewViewerProps {
   views: ComplexView[];
   units: Unit3DDetails[];
-  onSelectUnit: (unit: Unit3DDetails) => void;
+  blockTargets: { id: string; unitId: string }[];
+  onSelectUnit: (unitId: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────
 // SVG PLAN DE MASSE ARCHITECTURAL (vue du dessus, style bureau d'études)
 // ─────────────────────────────────────────────────────────────
-function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSelectUnit: (u: Unit3DDetails) => void }) {
+function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSelectUnit: (unitId: string) => void }) {
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
 
   const getUnit = (id: string) => resolveHotspotTarget(id, units);
@@ -141,7 +142,7 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
           <g
             onClick={() => {
               const unit = getUnit('unit-studio');
-              if (unit) onSelectUnit(unit);
+              if (unit) onSelectUnit(unit.id);
             }}
             onMouseEnter={() => setHoveredBlock('bloc-nord-1')}
             onMouseLeave={() => setHoveredBlock(null)}
@@ -178,7 +179,7 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
           <g
             onClick={() => {
               const unit = getUnit('unit-t2');
-              if (unit) onSelectUnit(unit);
+              if (unit) onSelectUnit(unit.id);
             }}
             onMouseEnter={() => setHoveredBlock('bloc-nord-2')}
             onMouseLeave={() => setHoveredBlock(null)}
@@ -235,7 +236,7 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
           <g
             onClick={() => {
               const unit = getUnit('unit-t3');
-              if (unit) onSelectUnit(unit);
+              if (unit) onSelectUnit(unit.id);
             }}
             onMouseEnter={() => setHoveredBlock('bloc-sud-1')}
             onMouseLeave={() => setHoveredBlock(null)}
@@ -268,7 +269,7 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
           <g
             onClick={() => {
               const unit = getUnit('unit-t5');
-              if (unit) onSelectUnit(unit);
+              if (unit) onSelectUnit(unit.id);
             }}
             onMouseEnter={() => setHoveredBlock('bloc-sud-2')}
             onMouseLeave={() => setHoveredBlock(null)}
@@ -301,7 +302,7 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
           <g
             onClick={() => {
               const unit = getUnit('unit-commerce');
-              if (unit) onSelectUnit(unit);
+              if (unit) onSelectUnit(unit.id);
             }}
             onMouseEnter={() => setHoveredBlock('boutiques')}
             onMouseLeave={() => setHoveredBlock(null)}
@@ -379,12 +380,12 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 // ─────────────────────────────────────────────────────────────
 function AerialPhotoView({
   view,
-  units,
+  blockTargets,
   onSelectUnit,
 }: {
   view: ComplexView;
-  units: Unit3DDetails[];
-  onSelectUnit: (u: Unit3DDetails) => void;
+  blockTargets: { id: string; unitId: string }[];
+  onSelectUnit: (unitId: string) => void;
 }) {
   return (
     <div className="relative w-full bg-ink-dark flex flex-col items-center p-3 sm:p-6">
@@ -400,8 +401,8 @@ function AerialPhotoView({
         {view.hotspots && view.hotspots.length > 0 && (
           <div className="absolute inset-0">
             {view.hotspots.map((hs) => {
-              const matchedUnit = resolveHotspotTarget(hs.targetBlockId, units);
-              if (!matchedUnit) return null;
+              const matchedTarget = resolveHotspotTarget(hs.targetBlockId, blockTargets);
+              if (!matchedTarget) return null;
               return (
                 <div
                   key={hs.id}
@@ -409,7 +410,7 @@ function AerialPhotoView({
                   className="absolute -translate-x-1/2 -translate-y-1/2 z-20"
                 >
                   <button
-                    onClick={() => onSelectUnit(matchedUnit)}
+                    onClick={() => onSelectUnit(matchedTarget.unitId)}
                     className="relative group/hs flex items-center gap-2 bg-ink/90 hover:bg-laterite text-paper border-2 border-sand hover:border-paper px-3 py-1.5 rounded-full text-xs font-mono shadow-2xl transition-all hover:scale-110"
                   >
                     <span className="w-2.5 h-2.5 rounded-full bg-laterite-light animate-ping absolute -left-1 -top-1" />
@@ -419,9 +420,7 @@ function AerialPhotoView({
 
                     {/* Tooltip */}
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 hidden group-hover/hs:flex flex-col bg-ink border border-paper/30 p-3 rounded-lg w-56 text-left shadow-2xl pointer-events-none z-30">
-                      <div className="font-serif text-sm font-semibold text-paper mb-1">{matchedUnit.name}</div>
-                      <div className="text-[11px] font-mono text-sand mb-1">{matchedUnit.surfaceTotaleM2} m² · {matchedUnit.startingPriceFormatted}</div>
-                      <div className="text-[10px] text-paper/70 line-clamp-2">{matchedUnit.description}</div>
+                      <div className="font-serif text-sm font-semibold text-paper mb-1">{hs.label}</div>
                     </div>
                   </button>
                 </div>
@@ -447,7 +446,7 @@ function AerialPhotoView({
 // ─────────────────────────────────────────────────────────────
 // MAIN VIEWER COMPONENT
 // ─────────────────────────────────────────────────────────────
-export default function ComplexOverviewViewer({ views, units, onSelectUnit }: ComplexOverviewViewerProps) {
+export default function ComplexOverviewViewer({ views, units, blockTargets, onSelectUnit }: ComplexOverviewViewerProps) {
   const [activeViewId, setActiveViewId] = useState<string>('view-masterplan');
   const activeView = views.find((v) => v.id === activeViewId) || views[0];
 
@@ -484,10 +483,7 @@ export default function ComplexOverviewViewer({ views, units, onSelectUnit }: Co
       </div>
 
       {/* Render correct view */}
-      {activeView.id === 'view-masterplan'
-        ? <MasterPlanSVG units={units} onSelectUnit={onSelectUnit} />
-        : <AerialPhotoView view={activeView} units={units} onSelectUnit={onSelectUnit} />
-      }
+      <AerialPhotoView view={activeView} blockTargets={blockTargets} onSelectUnit={onSelectUnit} />
 
       {/* Metrics bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-paper/15 border-t border-paper/15 bg-ink/40 font-mono text-xs text-paper/80">

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ComplexView, Unit3DDetails } from '../../lib/catalogData';
+import { resolveHotspotTarget } from '../../lib/catalog/viewer-hotspots';
 import {
   Eye,
   Sparkles,
@@ -26,7 +27,7 @@ interface ComplexOverviewViewerProps {
 function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSelectUnit: (u: Unit3DDetails) => void }) {
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
 
-  const getUnit = (id: string) => units.find((u) => u.id === id) || units[0];
+  const getUnit = (id: string) => resolveHotspotTarget(id, units);
 
   return (
     <div className="relative w-full bg-[#0B1220] p-4 sm:p-8 flex flex-col items-center">
@@ -138,7 +139,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── BLOC NORD 1 (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-studio'))}
+            onClick={() => {
+              const unit = getUnit('unit-studio');
+              if (unit) onSelectUnit(unit);
+            }}
             onMouseEnter={() => setHoveredBlock('bloc-nord-1')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -172,7 +176,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── BLOC NORD 2 (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-t2'))}
+            onClick={() => {
+              const unit = getUnit('unit-t2');
+              if (unit) onSelectUnit(unit);
+            }}
             onMouseEnter={() => setHoveredBlock('bloc-nord-2')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -226,7 +233,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── BLOC SUD 1 (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-t3'))}
+            onClick={() => {
+              const unit = getUnit('unit-t3');
+              if (unit) onSelectUnit(unit);
+            }}
             onMouseEnter={() => setHoveredBlock('bloc-sud-1')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -256,7 +266,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── BLOC SUD 2 (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-t5'))}
+            onClick={() => {
+              const unit = getUnit('unit-t5');
+              if (unit) onSelectUnit(unit);
+            }}
             onMouseEnter={() => setHoveredBlock('bloc-sud-2')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -286,7 +299,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── FAÇADE BOUTIQUES (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-commerce'))}
+            onClick={() => {
+              const unit = getUnit('unit-commerce');
+              if (unit) onSelectUnit(unit);
+            }}
             onMouseEnter={() => setHoveredBlock('boutiques')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -384,7 +400,8 @@ function AerialPhotoView({
         {view.hotspots && view.hotspots.length > 0 && (
           <div className="absolute inset-0">
             {view.hotspots.map((hs) => {
-              const matchedUnit = units.find((u) => u.id === hs.targetBlockId) || units[0];
+              const matchedUnit = resolveHotspotTarget(hs.targetBlockId, units);
+              if (!matchedUnit) return null;
               return (
                 <div
                   key={hs.id}

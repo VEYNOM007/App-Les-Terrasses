@@ -395,6 +395,11 @@ export interface AdminBlock {
 export interface AdminProject {
   id: string;
   name: string;
+  location: string;
+  description: string | null;
+  siteMapImageUrl: string | null;
+  marketingInfo: CatalogProjectMarketingInfo | null;
+  views: CatalogProjectView[] | null;
   status: string;
   blocks: AdminBlock[];
 }
@@ -406,6 +411,22 @@ export interface AdminProject {
  */
 export function fetchAdminProjects(): Promise<AdminProject[]> {
   return apiFetch<AdminProject[]>('/v1/admin/projects');
+}
+
+export interface AdminProjectUpdate {
+  name?: string;
+  location?: string;
+  description?: string;
+  siteMapImageUrl?: string;
+  marketingInfo?: CatalogProjectMarketingInfo;
+  views?: CatalogProjectView[];
+}
+
+export function adminUpdateProject(id: string, body: AdminProjectUpdate): Promise<AdminProject> {
+  return apiFetch<AdminProject>(`/v1/admin/projects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 }
 
 export interface AdminUnitCreate {

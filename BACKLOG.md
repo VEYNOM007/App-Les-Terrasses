@@ -45,3 +45,9 @@ pas en passant.
   `.pnpm` incomplètes) corrigés dans les versions 9.x récentes / 10.x.
 - Garde-fou en attendant : `scripts/verify-install.cjs` branché sur `dev`
   (détecte un package critique vide avant de lancer les serveurs).
+
+## 7. Typage de l'éditeur admin catalogue
+- `apps/web/app/admin/catalogue/page.tsx` contient encore deux paramètres
+  `any` dans `handleUpdateUnitField` et `handleUpdateViewField`.
+- Hors SC3 : à corriger dans un cycle dédié avec des types de champs explicites,
+  sans cast de contournement ni régression de l'éditeur.

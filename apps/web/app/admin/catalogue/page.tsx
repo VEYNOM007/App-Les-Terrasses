@@ -3,12 +3,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '../../../components/Navbar';
 import Footer from '../../../components/Footer';
-import { getCatalogData, saveCatalogData, ComplexInfo, Unit3DDetails, ComplexView } from '../../../lib/catalogData';
+import { getCatalogData, ComplexInfo, Unit3DDetails, ComplexView } from '../../../lib/catalogData';
 import {
   adminAddUnitMedia,
   adminCreateUnit,
   adminDeleteMedia,
   adminDeleteUnit,
+  adminUpdateProject,
   adminUpdateMedia,
   adminUpdateUnit,
   fetchAdminProjects,
@@ -71,6 +72,7 @@ function flattenAdminUnits(projects: AdminProject[]): CatalogUnit[] {
 
 export default function AdminCataloguePage() {
   const [data, setData] = useState<ComplexInfo | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [editingUnit, setEditingUnit] = useState<Unit3DDetails | null>(null);
   const [editingView, setEditingView] = useState<ComplexView | null>(null);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -114,6 +116,25 @@ export default function AdminCataloguePage() {
     try {
       const projects = await fetchAdminProjects();
       setAdminProjects(projects);
+      const project = projects[0];
+      if (project) {
+        setProjectId(project.id);
+        setData((previous) => {
+          if (!previous) return previous;
+          const marketing = project.marketingInfo;
+          return {
+            ...previous,
+            name: marketing?.name ?? project.name,
+            location: marketing?.location ?? project.location,
+            titleDeed: marketing?.titleDeed ?? previous.titleDeed,
+            totalLandArea: marketing?.totalLandArea ?? previous.totalLandArea,
+            deliveryDate: marketing?.deliveryDate ?? previous.deliveryDate,
+            notaryName: marketing?.notaryName ?? previous.notaryName,
+            escrowBank: marketing?.escrowBank ?? previous.escrowBank,
+            views: project.views ?? previous.views,
+          };
+        });
+      }
       // Source admin uniquement (GET /admin/projects) : seule à montrer les
       // ARCHIVE (restauration en un clic) et les blocs réels du formulaire
       // d'ajout — le catalogue public exclut les deux.
@@ -142,8 +163,22 @@ export default function AdminCataloguePage() {
 
   if (!data) return null;
 
-  const handleSaveAll = () => {
-    saveCatalogData(data);
+  const handleSaveAll = async () => {
+    if (!projectId) return;
+    await adminUpdateProject(projectId, {
+      name: data.name,
+      location: data.location,
+      marketingInfo: {
+        name: data.name,
+        location: data.location,
+        titleDeed: data.titleDeed,
+        totalLandArea: data.totalLandArea,
+        deliveryDate: data.deliveryDate,
+        notaryName: data.notaryName,
+        escrowBank: data.escrowBank,
+      },
+      views: data.views,
+    });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ComplexView, Unit3DDetails } from '../../lib/catalogData';
+import { ComplexInfo, ComplexView, Unit3DDetails } from '../../lib/catalogData';
 import { resolveHotspotTarget } from '../../lib/catalog/viewer-hotspots';
 import {
   Eye,
@@ -19,6 +19,7 @@ interface ComplexOverviewViewerProps {
   views: ComplexView[];
   units: Unit3DDetails[];
   blockTargets: { id: string; unitId: string }[];
+  residenceInfo: Pick<ComplexInfo, 'titleDeed' | 'totalLandArea' | 'deliveryDate' | 'notaryName' | 'escrowBank'>;
   onSelectUnit: (unitId: string) => void;
 }
 
@@ -381,10 +382,12 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 function AerialPhotoView({
   view,
   blockTargets,
+  titleDeed,
   onSelectUnit,
 }: {
   view: ComplexView;
   blockTargets: { id: string; unitId: string }[];
+  titleDeed: string;
   onSelectUnit: (unitId: string) => void;
 }) {
   return (
@@ -436,7 +439,7 @@ function AerialPhotoView({
           <p className="text-xs text-paper/70">{view.description}</p>
         </div>
         <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-lagoon/20 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded shrink-0">
-          <ShieldCheck className="w-3.5 h-3.5" /> Titre Foncier RM 100/71
+           <ShieldCheck className="w-3.5 h-3.5" /> {titleDeed}
         </span>
       </div>
     </div>
@@ -446,7 +449,7 @@ function AerialPhotoView({
 // ─────────────────────────────────────────────────────────────
 // MAIN VIEWER COMPONENT
 // ─────────────────────────────────────────────────────────────
-export default function ComplexOverviewViewer({ views, units, blockTargets, onSelectUnit }: ComplexOverviewViewerProps) {
+export default function ComplexOverviewViewer({ views, units, blockTargets, residenceInfo, onSelectUnit }: ComplexOverviewViewerProps) {
   const [activeViewId, setActiveViewId] = useState<string>('view-masterplan');
   const activeView = views.find((v) => v.id === activeViewId) || views[0];
 
@@ -457,7 +460,7 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, onSe
         <div>
           <div className="inline-flex items-center gap-2 text-xs font-mono text-sand uppercase tracking-wider mb-1">
             <Sparkles className="w-4 h-4 text-laterite-light" />
-            Vue d'ensemble · Titre Foncier RM 100/71 · 6 593 m²
+            Vue d'ensemble · {residenceInfo.titleDeed} · {residenceInfo.totalLandArea}
           </div>
           <h2 className="font-serif text-xl sm:text-2xl font-semibold text-paper">
             {activeView.title}
@@ -483,25 +486,30 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, onSe
       </div>
 
       {/* Render correct view */}
-      <AerialPhotoView view={activeView} blockTargets={blockTargets} onSelectUnit={onSelectUnit} />
+      <AerialPhotoView
+        view={activeView}
+        blockTargets={blockTargets}
+        titleDeed={residenceInfo.titleDeed}
+        onSelectUnit={onSelectUnit}
+      />
 
       {/* Metrics bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-paper/15 border-t border-paper/15 bg-ink/40 font-mono text-xs text-paper/80">
         <div className="p-3.5 text-center">
           <span className="text-paper/50 block text-[10px] uppercase">Terrain Global</span>
-          <span className="font-bold text-paper text-sm">6 593 m²</span>
+          <span className="font-bold text-paper text-sm">{residenceInfo.totalLandArea}</span>
         </div>
         <div className="p-3.5 text-center">
           <span className="text-paper/50 block text-[10px] uppercase">Livraison Estimée</span>
-          <span className="font-bold text-sand text-sm">Trimestre 4 - 2026</span>
+          <span className="font-bold text-sand text-sm">{residenceInfo.deliveryDate}</span>
         </div>
         <div className="p-3.5 text-center">
           <span className="text-paper/50 block text-[10px] uppercase">Notaire Référant</span>
-          <span className="font-bold text-paper text-sm">Étude K. Lawson</span>
+          <span className="font-bold text-paper text-sm">{residenceInfo.notaryName}</span>
         </div>
         <div className="p-3.5 text-center">
           <span className="text-paper/50 block text-[10px] uppercase">Garantie Vente</span>
-          <span className="font-bold text-lagoon-light text-sm">Compte Séquestre</span>
+          <span className="font-bold text-lagoon-light text-sm">{residenceInfo.escrowBank}</span>
         </div>
       </div>
     </div>

@@ -133,6 +133,7 @@ export default function CataloguePage() {
             views={catalogData.views}
             units={catalogData.units}
             blockTargets={blockTargets}
+            residenceInfo={catalogData}
             onSelectUnit={openUnitDetail}
           />
         </div>

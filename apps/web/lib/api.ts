@@ -118,6 +118,61 @@ export interface SitePlanResponse {
   blocks: SitePlanBlock[];
 }
 
+export interface CatalogProjectHotspot {
+  id: string;
+  label: string;
+  targetBlockId: string;
+  top: string;
+  left: string;
+}
+
+export interface CatalogProjectView {
+  id: string;
+  title: string;
+  subtitle: string;
+  category: 'masterplan' | 'aerial' | 'facade' | 'garden' | 'amenities';
+  imageUrl: string;
+  description: string;
+  hotspots?: CatalogProjectHotspot[];
+}
+
+export interface CatalogProjectMarketingInfo {
+  name?: string;
+  location?: string;
+  titleDeed?: string;
+  totalLandArea?: string;
+  deliveryDate?: string;
+  notaryName?: string;
+  escrowBank?: string;
+}
+
+export interface CatalogProjectUnit {
+  id: string;
+  type: UnitType;
+  status: UnitStatus;
+}
+
+export interface CatalogProjectBlock {
+  id: string;
+  name: string;
+  units: CatalogProjectUnit[];
+}
+
+export interface CatalogProject {
+  id: string;
+  name: string;
+  location: string;
+  description: string | null;
+  siteMapImageUrl: string | null;
+  marketingInfo: CatalogProjectMarketingInfo | null;
+  views: CatalogProjectView[] | null;
+  blocks: CatalogProjectBlock[];
+}
+
+export function fetchCatalogProjects(): Promise<CatalogProject[]> {
+  return apiFetch<CatalogProject[]>('/v1/catalog/projects');
+}
+
 /**
  * Récupère le plan de masse interactif depuis l'API Catalog.
  */
@@ -340,6 +395,11 @@ export interface AdminBlock {
 export interface AdminProject {
   id: string;
   name: string;
+  location: string;
+  description: string | null;
+  siteMapImageUrl: string | null;
+  marketingInfo: CatalogProjectMarketingInfo | null;
+  views: CatalogProjectView[] | null;
   status: string;
   blocks: AdminBlock[];
 }
@@ -351,6 +411,22 @@ export interface AdminProject {
  */
 export function fetchAdminProjects(): Promise<AdminProject[]> {
   return apiFetch<AdminProject[]>('/v1/admin/projects');
+}
+
+export interface AdminProjectUpdate {
+  name?: string;
+  location?: string;
+  description?: string;
+  siteMapImageUrl?: string;
+  marketingInfo?: CatalogProjectMarketingInfo;
+  views?: CatalogProjectView[];
+}
+
+export function adminUpdateProject(id: string, body: AdminProjectUpdate): Promise<AdminProject> {
+  return apiFetch<AdminProject>(`/v1/admin/projects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 }
 
 export interface AdminUnitCreate {

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ComplexView, Unit3DDetails } from '../../lib/catalogData';
+import { ComplexInfo, ComplexView, Unit3DDetails } from '../../lib/catalogData';
+import { resolveHotspotTarget } from '../../lib/catalog/viewer-hotspots';
 import {
   Eye,
   Sparkles,
@@ -17,16 +18,18 @@ import {
 interface ComplexOverviewViewerProps {
   views: ComplexView[];
   units: Unit3DDetails[];
-  onSelectUnit: (unit: Unit3DDetails) => void;
+  blockTargets: { id: string; unitId: string }[];
+  residenceInfo: Pick<ComplexInfo, 'titleDeed' | 'totalLandArea' | 'deliveryDate' | 'notaryName' | 'escrowBank'>;
+  onSelectUnit: (unitId: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────
 // SVG PLAN DE MASSE ARCHITECTURAL (vue du dessus, style bureau d'études)
 // ─────────────────────────────────────────────────────────────
-function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSelectUnit: (u: Unit3DDetails) => void }) {
+function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSelectUnit: (unitId: string) => void }) {
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
 
-  const getUnit = (id: string) => units.find((u) => u.id === id) || units[0];
+  const getUnit = (id: string) => resolveHotspotTarget(id, units);
 
   return (
     <div className="relative w-full bg-[#0B1220] p-4 sm:p-8 flex flex-col items-center">
@@ -138,7 +141,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── BLOC NORD 1 (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-studio'))}
+            onClick={() => {
+              const unit = getUnit('unit-studio');
+              if (unit) onSelectUnit(unit.id);
+            }}
             onMouseEnter={() => setHoveredBlock('bloc-nord-1')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -172,7 +178,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── BLOC NORD 2 (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-t2'))}
+            onClick={() => {
+              const unit = getUnit('unit-t2');
+              if (unit) onSelectUnit(unit.id);
+            }}
             onMouseEnter={() => setHoveredBlock('bloc-nord-2')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -226,7 +235,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── BLOC SUD 1 (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-t3'))}
+            onClick={() => {
+              const unit = getUnit('unit-t3');
+              if (unit) onSelectUnit(unit.id);
+            }}
             onMouseEnter={() => setHoveredBlock('bloc-sud-1')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -256,7 +268,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── BLOC SUD 2 (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-t5'))}
+            onClick={() => {
+              const unit = getUnit('unit-t5');
+              if (unit) onSelectUnit(unit.id);
+            }}
             onMouseEnter={() => setHoveredBlock('bloc-sud-2')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -286,7 +301,10 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 
           {/* ── FAÇADE BOUTIQUES (clickable) ── */}
           <g
-            onClick={() => onSelectUnit(getUnit('unit-commerce'))}
+            onClick={() => {
+              const unit = getUnit('unit-commerce');
+              if (unit) onSelectUnit(unit.id);
+            }}
             onMouseEnter={() => setHoveredBlock('boutiques')}
             onMouseLeave={() => setHoveredBlock(null)}
             className="cursor-pointer"
@@ -363,12 +381,14 @@ function MasterPlanSVG({ units, onSelectUnit }: { units: Unit3DDetails[]; onSele
 // ─────────────────────────────────────────────────────────────
 function AerialPhotoView({
   view,
-  units,
+  blockTargets,
+  titleDeed,
   onSelectUnit,
 }: {
   view: ComplexView;
-  units: Unit3DDetails[];
-  onSelectUnit: (u: Unit3DDetails) => void;
+  blockTargets: { id: string; unitId: string }[];
+  titleDeed: string;
+  onSelectUnit: (unitId: string) => void;
 }) {
   return (
     <div className="relative w-full bg-ink-dark flex flex-col items-center p-3 sm:p-6">
@@ -384,7 +404,8 @@ function AerialPhotoView({
         {view.hotspots && view.hotspots.length > 0 && (
           <div className="absolute inset-0">
             {view.hotspots.map((hs) => {
-              const matchedUnit = units.find((u) => u.id === hs.targetBlockId) || units[0];
+              const matchedTarget = resolveHotspotTarget(hs.targetBlockId, blockTargets);
+              if (!matchedTarget) return null;
               return (
                 <div
                   key={hs.id}
@@ -392,7 +413,7 @@ function AerialPhotoView({
                   className="absolute -translate-x-1/2 -translate-y-1/2 z-20"
                 >
                   <button
-                    onClick={() => onSelectUnit(matchedUnit)}
+                    onClick={() => onSelectUnit(matchedTarget.unitId)}
                     className="relative group/hs flex items-center gap-2 bg-ink/90 hover:bg-laterite text-paper border-2 border-sand hover:border-paper px-3 py-1.5 rounded-full text-xs font-mono shadow-2xl transition-all hover:scale-110"
                   >
                     <span className="w-2.5 h-2.5 rounded-full bg-laterite-light animate-ping absolute -left-1 -top-1" />
@@ -402,9 +423,7 @@ function AerialPhotoView({
 
                     {/* Tooltip */}
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 hidden group-hover/hs:flex flex-col bg-ink border border-paper/30 p-3 rounded-lg w-56 text-left shadow-2xl pointer-events-none z-30">
-                      <div className="font-serif text-sm font-semibold text-paper mb-1">{matchedUnit.name}</div>
-                      <div className="text-[11px] font-mono text-sand mb-1">{matchedUnit.surfaceTotaleM2} m² · {matchedUnit.startingPriceFormatted}</div>
-                      <div className="text-[10px] text-paper/70 line-clamp-2">{matchedUnit.description}</div>
+                      <div className="font-serif text-sm font-semibold text-paper mb-1">{hs.label}</div>
                     </div>
                   </button>
                 </div>
@@ -420,7 +439,7 @@ function AerialPhotoView({
           <p className="text-xs text-paper/70">{view.description}</p>
         </div>
         <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-lagoon/20 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded shrink-0">
-          <ShieldCheck className="w-3.5 h-3.5" /> Titre Foncier RM 100/71
+           <ShieldCheck className="w-3.5 h-3.5" /> {titleDeed}
         </span>
       </div>
     </div>
@@ -430,7 +449,7 @@ function AerialPhotoView({
 // ─────────────────────────────────────────────────────────────
 // MAIN VIEWER COMPONENT
 // ─────────────────────────────────────────────────────────────
-export default function ComplexOverviewViewer({ views, units, onSelectUnit }: ComplexOverviewViewerProps) {
+export default function ComplexOverviewViewer({ views, units, blockTargets, residenceInfo, onSelectUnit }: ComplexOverviewViewerProps) {
   const [activeViewId, setActiveViewId] = useState<string>('view-masterplan');
   const activeView = views.find((v) => v.id === activeViewId) || views[0];
 
@@ -441,7 +460,7 @@ export default function ComplexOverviewViewer({ views, units, onSelectUnit }: Co
         <div>
           <div className="inline-flex items-center gap-2 text-xs font-mono text-sand uppercase tracking-wider mb-1">
             <Sparkles className="w-4 h-4 text-laterite-light" />
-            Vue d'ensemble · Titre Foncier RM 100/71 · 6 593 m²
+            Vue d'ensemble · {residenceInfo.titleDeed} · {residenceInfo.totalLandArea}
           </div>
           <h2 className="font-serif text-xl sm:text-2xl font-semibold text-paper">
             {activeView.title}
@@ -467,28 +486,30 @@ export default function ComplexOverviewViewer({ views, units, onSelectUnit }: Co
       </div>
 
       {/* Render correct view */}
-      {activeView.id === 'view-masterplan'
-        ? <MasterPlanSVG units={units} onSelectUnit={onSelectUnit} />
-        : <AerialPhotoView view={activeView} units={units} onSelectUnit={onSelectUnit} />
-      }
+      <AerialPhotoView
+        view={activeView}
+        blockTargets={blockTargets}
+        titleDeed={residenceInfo.titleDeed}
+        onSelectUnit={onSelectUnit}
+      />
 
       {/* Metrics bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-paper/15 border-t border-paper/15 bg-ink/40 font-mono text-xs text-paper/80">
         <div className="p-3.5 text-center">
           <span className="text-paper/50 block text-[10px] uppercase">Terrain Global</span>
-          <span className="font-bold text-paper text-sm">6 593 m²</span>
+          <span className="font-bold text-paper text-sm">{residenceInfo.totalLandArea}</span>
         </div>
         <div className="p-3.5 text-center">
           <span className="text-paper/50 block text-[10px] uppercase">Livraison Estimée</span>
-          <span className="font-bold text-sand text-sm">Trimestre 4 - 2026</span>
+          <span className="font-bold text-sand text-sm">{residenceInfo.deliveryDate}</span>
         </div>
         <div className="p-3.5 text-center">
           <span className="text-paper/50 block text-[10px] uppercase">Notaire Référant</span>
-          <span className="font-bold text-paper text-sm">Étude K. Lawson</span>
+          <span className="font-bold text-paper text-sm">{residenceInfo.notaryName}</span>
         </div>
         <div className="p-3.5 text-center">
           <span className="text-paper/50 block text-[10px] uppercase">Garantie Vente</span>
-          <span className="font-bold text-lagoon-light text-sm">Compte Séquestre</span>
+          <span className="font-bold text-lagoon-light text-sm">{residenceInfo.escrowBank}</span>
         </div>
       </div>
     </div>

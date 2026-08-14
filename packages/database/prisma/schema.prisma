@@ -57,6 +57,7 @@ enum UnitStatus {
   RESERVE // verrou actif, en attente d'acompte
   VENDU // acompte payé, échéancier en cours
   LIVRE
+  ARCHIVE // retiré du catalogue public (données conservées, restauration en un clic)
 }
 
 // Type de média d'une unité (UnitMedia). RENDU_3D déclenche le badge

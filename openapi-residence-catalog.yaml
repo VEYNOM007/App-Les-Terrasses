@@ -958,6 +958,21 @@ paths:
             schema: { $ref: '#/components/schemas/UnitInput' }
       responses:
         "200": { description: Unité mise à jour }
+    delete:
+      tags: [Admin]
+      summary: Supprimer définitivement une unité (filet de sécurité)
+      description: |
+        Réservé aux unités n'ayant JAMAIS eu de réservation (même annulée).
+        Refusé (409) si l'unité a un historique de réservation — archivez-la
+        plutôt via `PATCH /admin/units/{unitId}` avec `status: archive`.
+        Les médias sont supprimés en cascade.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UnitId'
+      responses:
+        "200": { description: Unité supprimée }
+        "404": { description: Unité introuvable }
+        "409": { description: Unité avec historique de réservation, suppression refusée }
 
   /admin/units/{unitId}/media:
     post:
@@ -1296,6 +1311,10 @@ components:
             id: { type: string }
             constructionPhase: { type: string }
             progressPercent: { type: integer }
+            units:
+              type: array
+              description: "Unités du bloc (tous statuts, y compris archive) — renseigné par GET /admin/projects pour alimenter le panneau admin."
+              items: { $ref: '#/components/schemas/Unit' }
 
     UnitInput:
       type: object
@@ -1307,7 +1326,7 @@ components:
         floor: { type: integer }
         price: { type: number }
         planImage: { type: string }
-        status: { type: string, enum: [disponible, reserve, vendu, livre] }
+        status: { type: string, enum: [disponible, reserve, vendu, livre, archive] }
         hasStorefront: { type: boolean, description: "Pertinent uniquement pour type=commerce : vitrine sur rue" }
         streetFacing: { type: boolean, description: "Accès direct depuis la voie publique" }
 

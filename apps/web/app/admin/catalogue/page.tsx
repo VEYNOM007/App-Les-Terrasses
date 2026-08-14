@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from '../../../components/Navbar';
 import Footer from '../../../components/Footer';
-import { getCatalogData, ComplexInfo, Unit3DDetails, ComplexView } from '../../../lib/catalogData';
+import { DEFAULT_COMPLEX_DATA, ComplexInfo, Unit3DDetails, ComplexView } from '../../../lib/catalogData';
 import {
   adminAddUnitMedia,
   adminCreateUnit,
@@ -78,7 +78,7 @@ export default function AdminCataloguePage() {
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
   useEffect(() => {
-    setData(getCatalogData());
+    setData(DEFAULT_COMPLEX_DATA);
   }, []);
 
   // ── Section « Unités de la base (API) » — persistance réelle ──

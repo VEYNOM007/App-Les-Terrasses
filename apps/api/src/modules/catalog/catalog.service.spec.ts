@@ -94,14 +94,18 @@ describe('CatalogService', () => {
     expect(prisma.unit.count).toHaveBeenCalledWith({ where: expectedWhere });
   });
 
-  it('ne retourne une unité publique que si son projet est publié', async () => {
+  it('ne retourne une unité publique que si son projet est publié et non archivée', async () => {
     prisma.unit.findFirst.mockResolvedValue(null);
 
     const result = await service.getUnit('unit-draft');
 
     expect(result).toBeNull();
     expect(prisma.unit.findFirst).toHaveBeenCalledWith({
-      where: { id: 'unit-draft', block: { project: { status: ProjectStatus.PUBLIE } } },
+      where: {
+        id: 'unit-draft',
+        status: { not: UnitStatus.ARCHIVE },
+        block: { project: { status: ProjectStatus.PUBLIE } },
+      },
       include: {
         block: {
           include: {
@@ -138,6 +142,54 @@ describe('CatalogService', () => {
 
     expect(result.blocks[0].fillRatePercent).toBe(0);
     expect(result.blocks[0].totalUnits).toBe(0);
+  });
+
+  it('exclut les unités archivées du taux de remplissage du bloc', async () => {
+    prisma.project.findFirstOrThrow.mockResolvedValue({
+      id: 'project-1',
+      name: 'Projet test',
+      siteMapImageUrl: null,
+      blocks: [
+        {
+          id: 'block-1',
+          name: 'Bloc A',
+          frontage: 'Est',
+          distanceFromEntranceM: null,
+          sitePlanPolygon: null,
+          launchStatus: 'EN_COMMERCIALISATION',
+          constructionPhase: 'FONDATIONS',
+          units: [
+            { status: UnitStatus.VENDU },
+            { status: UnitStatus.DISPONIBLE },
+            { status: UnitStatus.ARCHIVE },
+            { status: UnitStatus.ARCHIVE },
+          ],
+        },
+      ],
+    });
+
+    const result = await service.getSitePlan('project-1');
+
+    expect(result.blocks[0].totalUnits).toBe(2);
+    expect(result.blocks[0].soldUnits).toBe(1);
+    expect(result.blocks[0].fillRatePercent).toBe(50);
+  });
+
+  it('par défaut, la recherche publique exclut les unités archivées', async () => {
+    prisma.$transaction.mockResolvedValue([[{ id: 'unit-1' }], 1]);
+
+    await service.searchUnits({ type: UnitType.T2 });
+
+    expect(prisma.unit.findMany).toHaveBeenCalledWith({
+      where: {
+        block: { project: { status: ProjectStatus.PUBLIE, id: undefined } },
+        type: UnitType.T2,
+        status: { not: UnitStatus.ARCHIVE },
+        price: { gte: undefined, lte: undefined },
+      },
+      skip: 0,
+      take: 20,
+    });
   });
 
   describe('getTypologies', () => {
@@ -178,7 +230,10 @@ describe('CatalogService', () => {
       const result = await service.getTypologies();
 
       expect(prisma.unit.findMany).toHaveBeenCalledWith({
-        where: { block: { project: { status: ProjectStatus.PUBLIE } } },
+        where: {
+          status: { not: UnitStatus.ARCHIVE },
+          block: { project: { status: ProjectStatus.PUBLIE } },
+        },
         include: {
           block: { select: { name: true, frontage: true } },
           media: { where: { type: 'RENDU_3D' }, select: { id: true } },
@@ -236,7 +291,11 @@ describe('CatalogService', () => {
       const result = await service.getPaymentPreview('unit-1');
 
       expect(prisma.unit.findFirst).toHaveBeenCalledWith({
-        where: { id: 'unit-1', block: { project: { status: ProjectStatus.PUBLIE } } },
+        where: {
+          id: 'unit-1',
+          status: { not: UnitStatus.ARCHIVE },
+          block: { project: { status: ProjectStatus.PUBLIE } },
+        },
         select: { id: true, price: true, currency: true, type: true },
       });
       expect(result.unitId).toBe('unit-1');

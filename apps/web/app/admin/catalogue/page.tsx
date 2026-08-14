@@ -6,15 +6,18 @@ import Footer from '../../../components/Footer';
 import { getCatalogData, saveCatalogData, ComplexInfo, Unit3DDetails, ComplexView } from '../../../lib/catalogData';
 import {
   adminAddUnitMedia,
+  adminCreateUnit,
   adminDeleteMedia,
+  adminDeleteUnit,
   adminUpdateMedia,
   adminUpdateUnit,
-  fetchTypologies,
-  fetchUnit,
+  fetchAdminProjects,
   CatalogUnit,
   UnitMedia,
   UnitMediaType,
   UnitStatus,
+  UnitType,
+  AdminProject,
 } from '../../../lib/api';
 import {
   Save,
@@ -35,6 +38,36 @@ import {
   AlertCircle,
   Database
 } from 'lucide-react';
+
+/**
+ * Aplatit l'écran admin (projets → blocs → unités, tous statuts dont ARCHIVE)
+ * vers la forme CatalogUnit utilisée par le tableau du panneau.
+ */
+function flattenAdminUnits(projects: AdminProject[]): CatalogUnit[] {
+  const result: CatalogUnit[] = [];
+  for (const project of projects) {
+    for (const block of project.blocks) {
+      for (const u of block.units) {
+        result.push({
+          id: u.id,
+          type: u.type,
+          surface: u.surface,
+          floor: u.floor,
+          price: u.price,
+          status: u.status,
+          currency: u.currency,
+          planImage: u.planImage,
+          virtualTourUrl: u.virtualTourUrl,
+          marketingDescription: u.marketingDescription,
+          highlights: u.highlights,
+          block: { name: block.name, frontage: block.frontage },
+          media: u.media,
+        });
+      }
+    }
+  }
+  return result;
+}
 
 export default function AdminCataloguePage() {
   const [data, setData] = useState<ComplexInfo | null>(null);
@@ -62,18 +95,29 @@ export default function AdminCataloguePage() {
   const [mediaActionError, setMediaActionError] = useState('');
   const [mediaActionSuccess, setMediaActionSuccess] = useState('');
 
+  // Formulaire d'ajout d'une unité dans un bloc réel.
+  const [adminProjects, setAdminProjects] = useState<AdminProject[]>([]);
+  const [addMode, setAddMode] = useState(false);
+  const [newBlockId, setNewBlockId] = useState('');
+  const [newUnitType, setNewUnitType] = useState<UnitType>('STUDIO');
+  const [newSurface, setNewSurface] = useState('');
+  const [newFloor, setNewFloor] = useState('');
+  const [newPrice, setNewPrice] = useState('');
+  const [addingUnit, setAddingUnit] = useState(false);
+  const [addUnitError, setAddUnitError] = useState('');
+  const [addUnitSuccess, setAddUnitSuccess] = useState('');
+  const [deletingUnit, setDeletingUnit] = useState(false);
+
   const loadApiUnits = useCallback(async () => {
     setLoadingUnits(true);
     setUnitsError('');
     try {
-      const groups = await fetchTypologies();
-      const fetched: CatalogUnit[] = [];
-      for (const group of groups) {
-        for (const u of group.units) {
-          fetched.push(await fetchUnit(u.id));
-        }
-      }
-      setUnits(fetched);
+      const projects = await fetchAdminProjects();
+      setAdminProjects(projects);
+      // Source admin uniquement (GET /admin/projects) : seule à montrer les
+      // ARCHIVE (restauration en un clic) et les blocs réels du formulaire
+      // d'ajout — le catalogue public exclut les deux.
+      setUnits(flattenAdminUnits(projects));
     } catch (e) {
       setUnitsError(e instanceof Error ? e.message : 'Impossible de charger les unités.');
     } finally {
@@ -86,14 +130,13 @@ export default function AdminCataloguePage() {
   }, [loadApiUnits]);
 
   const refreshSelectedUnit = useCallback(async (unitId: string) => {
-    const refreshed = await fetchUnit(unitId);
-    setUnits((prev) => {
-      const idx = prev.findIndex((u) => u.id === unitId);
-      if (idx === -1) return prev;
-      const next = [...prev];
-      next[idx] = refreshed;
-      return next;
-    });
+    // Recharge depuis la source admin complète (pas la fiche publique, qui
+    // renvoie un corps vide pour une unité ARCHIVE) puis resynchronise le
+    // tableau et la sélection courante.
+    const projects = await fetchAdminProjects();
+    const all = flattenAdminUnits(projects);
+    const refreshed = all.find((u) => u.id === unitId) ?? null;
+    setUnits(all);
     return refreshed;
   }, []);
 
@@ -105,7 +148,7 @@ export default function AdminCataloguePage() {
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
-  const UNIT_STATUS_OPTIONS: UnitStatus[] = ['DISPONIBLE', 'RESERVE', 'VENDU', 'LIVRE'];
+  const UNIT_STATUS_OPTIONS: UnitStatus[] = ['DISPONIBLE', 'RESERVE', 'VENDU', 'LIVRE', 'ARCHIVE'];
   const MEDIA_TYPE_OPTIONS: UnitMediaType[] = ['RENDU_3D', 'PHOTO', 'PHOTO_REELLE', 'PLAN'];
 
   const selectedUnit = units.find((u) => u.id === selectedUnitId) ?? null;
@@ -132,8 +175,10 @@ export default function AdminCataloguePage() {
       }
       await adminUpdateUnit(selectedUnit.id, { price, status: statusInput });
       const refreshed = await refreshSelectedUnit(selectedUnit.id);
-      setPriceInput(refreshed.price);
-      setStatusInput(refreshed.status);
+      if (refreshed) {
+        setPriceInput(refreshed.price);
+        setStatusInput(refreshed.status);
+      }
       setUnitActionSuccess('Prix et statut enregistrés (base de données).');
     } catch (e) {
       setUnitActionError(e instanceof Error ? e.message : 'Échec de la sauvegarde.');
@@ -184,6 +229,81 @@ export default function AdminCataloguePage() {
       setMediaActionSuccess('Média supprimé.');
     } catch (e) {
       setMediaActionError(e instanceof Error ? e.message : 'Impossible de supprimer le média.');
+    }
+  };
+
+  const handleAddNewUnitToBase = async () => {
+    setAddingUnit(true);
+    setAddUnitError('');
+    setAddUnitSuccess('');
+    try {
+      if (!newBlockId) throw new Error('Sélectionnez un bloc.');
+      const surface = Number(newSurface);
+      if (!Number.isFinite(surface) || surface <= 0) {
+        throw new Error('La surface doit être un nombre positif.');
+      }
+      const floor = Number(newFloor);
+      if (!Number.isInteger(floor) || floor < 0) {
+        throw new Error('L’étage doit être un entier positif.');
+      }
+      const price = Number(newPrice);
+      if (!Number.isFinite(price) || price < 0) {
+        throw new Error('Le prix doit être un montant positif.');
+      }
+      const created = await adminCreateUnit({ blockId: newBlockId, type: newUnitType, surface, floor, price });
+      await loadApiUnits();
+      setSelectedUnitId(created.id);
+      setAddMode(false);
+      setNewSurface('');
+      setNewFloor('');
+      setNewPrice('');
+      setAddUnitSuccess(`Unité ${created.id} ajoutée au bloc.`);
+    } catch (e) {
+      setAddUnitError(e instanceof Error ? e.message : 'Impossible d’ajouter l’unité.');
+    } finally {
+      setAddingUnit(false);
+    }
+  };
+
+  const handleArchiveUnit = async (unit: CatalogUnit, archive: boolean) => {
+    if (!confirm(archive
+      ? `Archiver ${unit.type} · ${unit.block.name} (Étage ${unit.floor}) ? Elle sera retirée du catalogue public mais restera en base (restaurable).`
+      : `Restaurer ${unit.type} · ${unit.block.name} (Étage ${unit.floor}) dans le catalogue public ?`)) {
+      return;
+    }
+    setUnitActionError('');
+    setUnitActionSuccess('');
+    try {
+      await adminUpdateUnit(unit.id, { status: archive ? 'ARCHIVE' : 'DISPONIBLE' });
+      const refreshed = await refreshSelectedUnit(unit.id);
+      if (refreshed) {
+        setPriceInput(refreshed.price);
+        setStatusInput(refreshed.status);
+      }
+      setUnitActionSuccess(archive ? 'Unité archivée (retirée du catalogue public).' : 'Unité restaurée dans le catalogue public.');
+    } catch (e) {
+      setUnitActionError(e instanceof Error ? e.message : 'Impossible de modifier le statut.');
+    }
+  };
+
+  const handleDeleteUnitPermanently = async (unit: CatalogUnit) => {
+    if (!confirm(`Suppression DÉFINITIVE (base de données) de ${unit.type} · ${unit.block.name} (Étage ${unit.floor}) ?\n\nCette action est irréversible. Les unités avec un historique de réservation ne peuvent pas être supprimées (bouton API 409).`)) {
+      return;
+    }
+    setDeletingUnit(true);
+    setUnitActionError('');
+    setUnitActionSuccess('');
+    try {
+      await adminDeleteUnit(unit.id);
+      setUnits((prev) => prev.filter((u) => u.id !== unit.id));
+      if (selectedUnitId === unit.id) setSelectedUnitId(null);
+      setUnitActionSuccess('Unité supprimée définitivement de la base.');
+    } catch (e) {
+      setUnitActionError(
+        e instanceof Error ? e.message : 'Suppression refusée par l’API (unité avec historique). Utilisez « Archiver ».',
+      );
+    } finally {
+      setDeletingUnit(false);
     }
   };
 
@@ -347,6 +467,127 @@ export default function AdminCataloguePage() {
             </button>
           </div>
 
+          {!addMode && (
+            <button
+              onClick={() => setAddMode(true)}
+              className="bg-lagoon hover:bg-lagoon-light text-paper font-mono text-xs font-bold px-4 py-2.5 rounded-lg inline-flex items-center gap-2 transition-all shadow-md"
+            >
+              <Plus className="w-4 h-4" /> Créer une unité dans un bloc réel
+            </button>
+          )}
+
+          {addMode && (
+            <div className="bg-ink border border-lagoon/40 rounded-lg p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-serif text-base font-semibold text-paper">
+                  Créer une unité (insérée en base via POST /admin/units)
+                </h4>
+                <button
+                  onClick={() => setAddMode(false)}
+                  className="text-paper/60 hover:text-paper text-xs font-mono"
+                  title="Fermer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs">
+                <div>
+                  <label className="block text-paper/70 mb-1">Bloc (réel)</label>
+                  <select
+                    value={newBlockId}
+                    onChange={(e) => setNewBlockId(e.target.value)}
+                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                  >
+                    <option value="">— Sélectionner —</option>
+                    {adminProjects.flatMap((p) =>
+                      p.blocks.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {p.name} · {b.name} ({b.floors} étages)
+                        </option>
+                      )),
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-paper/70 mb-1">Type</label>
+                  <select
+                    value={newUnitType}
+                    onChange={(e) => setNewUnitType(e.target.value as UnitType)}
+                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                  >
+                    {(['STUDIO', 'T2', 'T3', 'T4', 'T5'] as UnitType[]).map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-paper/70 mb-1">Surface (m²)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={newSurface}
+                    onChange={(e) => setNewSurface(e.target.value)}
+                    placeholder="ex : 45,5"
+                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-paper/70 mb-1">Étage</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newFloor}
+                    onChange={(e) => setNewFloor(e.target.value)}
+                    placeholder="ex : 2"
+                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-paper/70 mb-1">Prix (XOF)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newPrice}
+                    onChange={(e) => setNewPrice(e.target.value)}
+                    placeholder="ex : 25000000"
+                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                  />
+                </div>
+              </div>
+
+              {addUnitError && (
+                <div className="bg-laterite/15 border border-laterite/40 rounded p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-laterite-light shrink-0" />
+                  <p className="text-xs text-paper font-mono">{addUnitError}</p>
+                </div>
+              )}
+              {addUnitSuccess && (
+                <div className="bg-lagoon/15 border border-lagoon/40 rounded p-3 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-lagoon-light shrink-0" />
+                  <p className="text-xs text-paper font-mono">{addUnitSuccess}</p>
+                </div>
+              )}
+
+              <button
+                onClick={() => void handleAddNewUnitToBase()}
+                disabled={addingUnit}
+                className="w-full md:w-auto bg-lagoon hover:bg-lagoon-light text-paper font-mono text-xs font-bold px-5 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+              >
+                {addingUnit ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Création…
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" /> Créer l'unité
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {loadingUnits && (
             <div className="flex items-center justify-center gap-3 font-mono text-xs text-paper/60 py-10">
               <Loader2 className="w-5 h-5 animate-spin text-laterite-light" /> Chargement des unités…
@@ -370,7 +611,7 @@ export default function AdminCataloguePage() {
 
           {!loadingUnits && !unitsError && units.length === 0 && (
             <div className="bg-ink border border-paper/20 rounded-md p-10 text-center font-mono text-xs text-paper/70">
-              Aucune unité publiée trouvée dans la base.
+              Aucune unité trouvée dans la base (tous statuts, brouillons inclus).
             </div>
           )}
 
@@ -410,7 +651,30 @@ export default function AdminCataloguePage() {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-paper/80">{u.media.length}</td>
-                        <td className="px-3 py-2 text-sand font-mono">Éditer →</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sand font-mono">Éditer →</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); void handleArchiveUnit(u, u.status !== 'ARCHIVE'); }}
+                              title={u.status === 'ARCHIVE' ? 'Restaurer dans le catalogue public' : 'Archiver (retirer du catalogue public)'}
+                              className={`px-2 py-1 rounded text-[10px] font-mono border transition-all ${
+                                u.status === 'ARCHIVE'
+                                  ? 'bg-lagoon/15 text-lagoon-light border-lagoon/40 hover:bg-lagoon/25'
+                                  : 'bg-paper/10 text-paper/80 border-paper/20 hover:bg-paper/20'
+                              }`}
+                            >
+                              {u.status === 'ARCHIVE' ? 'Restaurer' : 'Archiver'}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); void handleDeleteUnitPermanently(u); }}
+                              disabled={deletingUnit}
+                              title="Suppression SQL définitive — rare, réservée aux unités sans réservation"
+                              className="px-2 py-1 rounded text-[10px] font-mono bg-laterite/15 text-laterite-light border border-laterite/40 hover:bg-laterite/25 transition-all disabled:opacity-60"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -46,6 +46,11 @@ export class ProjectController {
     return this.projectService.updateUnit(id, body);
   }
 
+  @Delete('units/:id')
+  deleteUnit(@Param('id') id: string) {
+    return this.projectService.deleteUnit(id);
+  }
+
   @Post('units/:unitId/media')
   addMedia(@Param('unitId') unitId: string, @Body() body: CreateUnitMediaDto) {
     return this.projectService.addMedia(unitId, body);

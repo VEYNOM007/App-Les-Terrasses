@@ -123,12 +123,24 @@ describe('ProjectService', () => {
     expect(prisma.unit.create).toHaveBeenCalledWith({ data });
   });
 
-  it('liste les projets admin avec leurs blocs, y compris les brouillons', async () => {
+  it('liste les projets admin avec leurs blocs, unités et médias, y compris les brouillons', async () => {
     prisma.project.findMany.mockResolvedValue([]);
 
     await service.listAllProjects();
 
-    expect(prisma.project.findMany).toHaveBeenCalledWith({ include: { blocks: true } });
+    expect(prisma.project.findMany).toHaveBeenCalledWith({
+      include: {
+        blocks: {
+          orderBy: { name: 'asc' },
+          include: {
+            units: {
+              orderBy: [{ floor: 'asc' }, { type: 'asc' }],
+              include: { media: { orderBy: { sortOrder: 'asc' } } },
+            },
+          },
+        },
+      },
+    });
   });
 
   describe('médias d’unité (admin)', () => {

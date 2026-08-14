@@ -52,7 +52,10 @@ export class CatalogService {
     const where = {
       block: { project: { status: ProjectStatus.PUBLIE, id: filters.projectId } },
       type: filters.type,
-      status: filters.status,
+      // Exclusion ARCHIVE par défaut : une unité retirée du catalogue ne doit
+      // pas refaire surface dans les résultats publics de recherche. Un statut
+      // explicite passé par le client prime (usage admin/API avancé).
+      status: filters.status ?? { not: UnitStatus.ARCHIVE },
       price: { gte: filters.priceMin, lte: filters.priceMax },
     };
 
@@ -70,7 +73,11 @@ export class CatalogService {
    */
   async getUnit(id: string) {
     return this.prisma.unit.findFirst({
-      where: { id, block: { project: { status: ProjectStatus.PUBLIE } } },
+      where: {
+        id,
+        status: { not: UnitStatus.ARCHIVE },
+        block: { project: { status: ProjectStatus.PUBLIE } },
+      },
       include: {
         block: {
           include: {
@@ -92,7 +99,10 @@ export class CatalogService {
    */
   async getTypologies() {
     const units = await this.prisma.unit.findMany({
-      where: { block: { project: { status: ProjectStatus.PUBLIE } } },
+      where: {
+        status: { not: UnitStatus.ARCHIVE },
+        block: { project: { status: ProjectStatus.PUBLIE } },
+      },
       include: {
         block: { select: { name: true, frontage: true } },
         media: {
@@ -143,7 +153,11 @@ export class CatalogService {
    */
   async getPaymentPreview(unitId: string, downPaymentPercent?: number) {
     const unit = await this.prisma.unit.findFirst({
-      where: { id: unitId, block: { project: { status: ProjectStatus.PUBLIE } } },
+      where: {
+        id: unitId,
+        status: { not: UnitStatus.ARCHIVE },
+        block: { project: { status: ProjectStatus.PUBLIE } },
+      },
       select: { id: true, price: true, currency: true, type: true },
     });
     if (!unit) {
@@ -185,8 +199,9 @@ export class CatalogService {
       projectName: project.name,
       siteMapImageUrl: project.siteMapImageUrl,
       blocks: project.blocks.map((b) => {
-        const totalUnits = b.units.length;
-        const soldUnits = b.units.filter(
+        const visibleUnits = b.units.filter((u) => u.status !== UnitStatus.ARCHIVE);
+        const totalUnits = visibleUnits.length;
+        const soldUnits = visibleUnits.filter(
           (u) => u.status === UnitStatus.VENDU || u.status === UnitStatus.LIVRE,
         ).length;
         return {

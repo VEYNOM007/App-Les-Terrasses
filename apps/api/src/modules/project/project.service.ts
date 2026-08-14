@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -104,6 +104,34 @@ export class ProjectService {
     });
   }
 
+  /**
+   * Suppression réelle d'une unité — filet de sécurité rare, réservé aux
+   * unités n'ayant JAMAIS eu de réservation (même ANNULEE). Toute historique
+   * (réservation, échéancier, échéances) est protégé par la FK RESTRICT en
+   * base : on remonte ici un 409 explicite au lieu d'un 500 brut. Le champ
+   * quotidien de retrait du catalogue passe par `status: ARCHIVE`, pas par ici.
+   */
+  async deleteUnit(id: string) {
+    const unit = await this.prisma.unit.findUnique({ where: { id } });
+    if (!unit) {
+      throw new NotFoundException('Unité introuvable.');
+    }
+
+    // Toutes réservations confondues, y compris ANNULEE : une annulation reste
+    // un historique légitime (funnel, traçabilité) qu'on ne détruit pas.
+    const reservationCount = await this.prisma.reservation.count({ where: { unitId: id } });
+    if (reservationCount > 0) {
+      throw new ConflictException(
+        'Impossible de supprimer cette unité : elle possède un historique de réservation ' +
+          '(même annulée). Archivez-la (`status: ARCHIVE`) pour la masquer du catalogue.',
+      );
+    }
+
+    // UnitMedia suit en cascade (`unit_media_unitId_fkey ON DELETE CASCADE`) ;
+    // aucune réservation restante grâce au garde-fou ci-dessus.
+    return this.prisma.unit.delete({ where: { id } });
+  }
+
   // ------------- Médias d'unité (admin) -------------
 
   addMedia(unitId: string, data: CreateUnitMediaDto) {
@@ -139,7 +167,21 @@ export class ProjectService {
   }
 
   listAllProjects() {
-    // Inclut les BROUILLON, contrairement à CatalogService.listProjects()
-    return this.prisma.project.findMany({ include: { blocks: true } });
+    // Inclut les BROUILLON, contrairement à CatalogService.listProjects().
+    // Unités (médias ordonnés) incluses : le panneau admin s'alimente à cette
+    // source unique, qui montre aussi les ARCHIVE (exclus du catalogue public).
+    return this.prisma.project.findMany({
+      include: {
+        blocks: {
+          orderBy: { name: 'asc' },
+          include: {
+            units: {
+              orderBy: [{ floor: 'asc' }, { type: 'asc' }],
+              include: { media: { orderBy: { sortOrder: 'asc' } } },
+            },
+          },
+        },
+      },
+    });
   }
 }

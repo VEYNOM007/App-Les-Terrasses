@@ -43,6 +43,8 @@ export function unitStatusLabel(status: UnitStatus): string {
       return 'Vendu';
     case 'LIVRE':
       return 'Livré';
+    case 'ARCHIVE':
+      return 'Archivé';
   }
 }
 

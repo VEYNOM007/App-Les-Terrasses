@@ -9,6 +9,12 @@ packages:
 minimumReleaseAge: 10080 # 7 jours en minutes
 minimumReleaseAgeStrict: true
 
+# Vite 7 accepte esbuild 0.27.x ou 0.28.x. La version 0.28.2 du lockfile
+# n'a pas encore atteint le délai de maturité minimal ; on reste sur la
+# dernière branche mature compatible, sans exception au garde-fou.
+overrides:
+  esbuild: 0.27.2
+
 # 2) allowBuilds : seuls les paquets listés ici peuvent exécuter leurs
 #    scripts de build (postinstall/install/preinstall). Tout autre paquet
 #    est bloqué par défaut (strictDepBuilds=true → install en erreur).

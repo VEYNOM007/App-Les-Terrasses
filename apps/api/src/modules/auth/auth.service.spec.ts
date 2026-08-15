@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
+import { StorageService } from '../../common/storage/storage.service';
 
 /**
  * Tests unitaires — AuthService (refresh tokens durcis)
@@ -98,6 +99,13 @@ const createMockEmailService = () => ({
   sendPasswordResetEmail: jest.fn(),
 });
 
+const createMockStorageService = () => ({
+  putObject: jest.fn(),
+  getObject: jest.fn(),
+  getSignedUrl: jest.fn(),
+  deleteObject: jest.fn(),
+});
+
 const REFRESH_TOKEN_VALUE = 'real-refresh-jwt-value';
 const REFRESH_TOKEN_HASH = crypto.createHash('sha256').update(REFRESH_TOKEN_VALUE).digest('hex');
 
@@ -117,6 +125,7 @@ describe('AuthService', () => {
   let prisma: ReturnType<typeof createMockPrisma>;
   let jwt: ReturnType<typeof createMockJwtService>;
   let email: ReturnType<typeof createMockEmailService>;
+  let storage: ReturnType<typeof createMockStorageService>;
   let hashSpy: HashSpy;
   let compareSpy: CompareSpy;
 
@@ -131,6 +140,7 @@ describe('AuthService', () => {
     prisma = createMockPrisma();
     jwt = createMockJwtService();
     email = createMockEmailService();
+    storage = createMockStorageService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -138,6 +148,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwt },
         { provide: EmailService, useValue: email },
+        { provide: StorageService, useValue: storage },
       ],
     }).compile();
 
@@ -444,22 +455,32 @@ describe('AuthService', () => {
   // ──────────────────────────────────────────────────
 
   describe('uploadKyc', () => {
-    it('devrait créer un Document PIECE_IDENTITE lié au user et passer kycStatus EN_ATTENTE', async () => {
+    it('devrait déposer le fichier sur B2 sous une clé interne et référencer la clé en base', async () => {
+      storage.putObject.mockResolvedValue(undefined);
       prisma.document.create.mockResolvedValue({ id: 'doc-001' });
       prisma.user.update.mockResolvedValue({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
 
+      const buffer = Buffer.from('fake-png-bytes');
       const result = await service.uploadKyc('user-001', {
-        filename: 'uuid-1234.jpg',
+        buffer,
+        mimetype: 'image/png',
         originalname: 'passeport.jpg',
       });
 
-      // Le fichier est écrit par multer côté controller ; ici on vérifie
-      // que la base référence le chemin serveur (jamais le nom client brut)
+      // Upload B2 : clé interne `kyc/<uuid>.png`, ContentType serveur
+      expect(storage.putObject).toHaveBeenCalledTimes(1);
+      const [key, uploaded, contentType] = storage.putObject.mock.calls[0];
+      expect(key).toMatch(/^kyc\/[0-9a-f-]+\.png$/);
+      expect(uploaded).toBe(buffer);
+      expect(contentType).toBe('image/png');
+
+      // La base référence la clé interne B2 (jamais un chemin disque, jamais
+      // le nom client brut)
       expect(prisma.document.create).toHaveBeenCalledWith({
         data: {
           type: 'PIECE_IDENTITE',
           name: 'passeport.jpg',
-          fileUrl: '/uploads/kyc/uuid-1234.jpg',
+          fileUrl: key,
           kycOwnerId: 'user-001',
         },
       });
@@ -471,6 +492,22 @@ describe('AuthService', () => {
       });
 
       expect(result).toEqual({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
+    });
+
+    it('devrait choisir l\'extension .pdf pour un MIME application/pdf', async () => {
+      storage.putObject.mockResolvedValue(undefined);
+      prisma.document.create.mockResolvedValue({ id: 'doc-002' });
+      prisma.user.update.mockResolvedValue({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
+
+      await service.uploadKyc('user-001', {
+        buffer: Buffer.from('pdf'),
+        mimetype: 'application/pdf',
+        originalname: 'cni.pdf',
+      });
+
+      const [key] = storage.putObject.mock.calls[0];
+      expect(key).toMatch(/^kyc\/[0-9a-f-]+\.pdf$/);
+      expect(storage.putObject.mock.calls[0][2]).toBe('application/pdf');
     });
   });
 

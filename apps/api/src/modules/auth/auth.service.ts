@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
+import { StorageService } from '../../common/storage/storage.service';
 import { DocumentType, KycStatus } from '@prisma/client';
 
 const ACCESS_TOKEN_TTL = '15m';
@@ -12,6 +13,13 @@ const REFRESH_TOKEN_TTL_MS = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1h
 const RESET_GENERIC_MESSAGE =
   'Si un compte est associé à cet email, un lien de réinitialisation a été envoyé.';
+
+/** Extension de clé interne dérivée du MIME, jamais du nom client. */
+const KYC_EXT_BY_MIME: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'application/pdf': '.pdf',
+};
 
 /**
  * Hash SHA-256 du refresh token. On ne stocke jamais le token en clair :
@@ -31,6 +39,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly email: EmailService,
+    private readonly storage: StorageService,
   ) {}
 
   async register(data: { email: string; phone: string; password: string; fullName: string; country?: string }) {
@@ -246,16 +255,21 @@ export class AuthService {
 
   /**
    * Enregistre une pièce d'identité téléversée et passe le user en
-   * `kycStatus = EN_ATTENTE`. Le fichier a déjà été écrit sur disque par
-   * multer (fileFilter + limits appliqués) ; la base ne référence que le
-   * chemin relatif.
+   * `kycStatus = EN_ATTENTE`. Le fichier (buffer en mémoire, validé en
+   * amont par multer : fileFilter + limits) est déposé sur B2 sous une
+   * clé interne `kyc/<uuid>.<ext>` ; la base ne référence que cette clé —
+   * jamais une URL B2, jamais un chemin disque.
    */
-  async uploadKyc(userId: string, file: { filename: string; originalname: string }) {
+  async uploadKyc(userId: string, file: { buffer: Buffer; mimetype: string; originalname: string }) {
+    const ext = KYC_EXT_BY_MIME[file.mimetype] ?? '.bin';
+    const key = `kyc/${crypto.randomUUID()}${ext}`;
+    await this.storage.putObject(key, file.buffer, file.mimetype);
+
     await this.prisma.document.create({
       data: {
         type: DocumentType.PIECE_IDENTITE,
         name: file.originalname,
-        fileUrl: `/uploads/kyc/${file.filename}`,
+        fileUrl: key,
         kycOwnerId: userId,
       },
     });

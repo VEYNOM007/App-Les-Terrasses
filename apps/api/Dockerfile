@@ -40,7 +40,6 @@ RUN pnpm --filter @residence-catalog/api deploy --prod /app/deploy \
   && DST=$(ls -d /app/deploy/node_modules/.pnpm/@prisma+client@*/node_modules/) \
   && cp -r "$SRC" "$DST" \
   && cp -r /app/apps/api/dist /app/deploy/dist \
-  && mkdir -p /app/deploy/uploads \
   && chown -R node:node /app/deploy
 
 # --- Migrations : CLI Prisma + schema + migrations versionnées ---

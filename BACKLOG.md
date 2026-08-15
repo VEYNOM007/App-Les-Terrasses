@@ -51,3 +51,15 @@ pas en passant.
   `any` dans `handleUpdateUnitField` et `handleUpdateViewField`.
 - Hors SC3 : à corriger dans un cycle dédié avec des types de champs explicites,
   sans cast de contournement ni régression de l'éditeur.
+
+## 8. CI — ne construit jamais l'image Docker
+- La CI (`ci.yml`) n'exécute que `pnpm install` + `tsc --noEmit` + Jest : le
+  build Docker (Dockerfiles `apps/api` et `apps/web`) n'est jamais validé avant
+  le merge.
+- Impact constaté en réel : l'incompatibilité Dockerfile/pnpm (bump pnpm
+  9→11.1.1, `ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE`) n'a été détectée qu'au
+  déploiement sur le VPS, alors qu'elle casse tout build de production.
+- Cible : ajouter un job/stage de build Docker (api + web, `--build` uniquement,
+  pas de `push`) à la CI pour détecter ce type de casse avant le merge.
+  Même famille de faille de process que la base de test non resynchronisée
+  automatiquement : se corriger une fois qu'on la voit, pas seulement ce cas.

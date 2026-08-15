@@ -2,6 +2,15 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# pnpm >= 10 ne déploie que des workspace packages "injectés" (copies
+# matérielles dans node_modules du package cible). Sans cette option,
+# `pnpm --filter <pkg> deploy --prod` (utilisé dans apps/api/Dockerfile)
+# échoue avec ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE. Le flag --legacy est
+# un contournement voué à disparaître : l'injection est le mode natif.
+# NB : clé en camelCase (comme minimumReleaseAge/allowBuilds ci-dessous) —
+# en kebab-case pnpm ne la lit pas (config get → undefined).
+injectWorkspacePackages: true
+
 # Sécurité chaîne d'approvisionnement (pnpm >= 10).
 # 1) minimumReleaseAge : bloque l'installation de toute version publiée
 #    depuis moins de 7 jours (fenêtre de détection/retrait des paquets

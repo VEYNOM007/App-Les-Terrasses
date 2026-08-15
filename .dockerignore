@@ -15,6 +15,12 @@
 uploads/
 *.log
 
+# Dossier de travail local (nginx de déploiement), hors git et jamais
+# nécessaire dans l'image — entre en collision avec /app/deploy (cible du
+# `pnpm deploy` dans apps/api/Dockerfile) : le laisser dans le contexte
+# faisait échouer le build (ERR_PNPM_DEPLOY_DIR_NOT_EMPTY).
+deploy/
+
 # Fichiers système
 .DS_Store
 

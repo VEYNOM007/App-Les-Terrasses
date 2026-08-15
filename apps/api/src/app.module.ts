@@ -4,6 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
 import { EmailModule } from './common/email/email.module';
+import { StorageModule } from './common/storage/storage.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -27,6 +28,7 @@ import { AdminModule } from './modules/admin/admin.module';
     PrismaModule,
     RedisModule,
     EmailModule,
+    StorageModule, // global : stockage B2 accessible partout (KYC, contrats, signatures)
     NotificationModule, // global, doit être importé tôt
     AuthModule,
     CatalogModule,

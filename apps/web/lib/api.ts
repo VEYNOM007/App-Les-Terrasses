@@ -549,19 +549,17 @@ export function fetchPortalDocuments(): Promise<PortalDocument[]> {
   return apiFetch<PortalDocument[]>('/v1/portal/documents');
 }
 
-export interface DownloadDocumentOptions {
-  disposition?: 'inline' | 'attachment';
+export interface DownloadDocumentResponse {
+  downloadUrl: string;
 }
 
-export async function downloadDocument(documentId: string, options: DownloadDocumentOptions = {}) {
-  const res = await fetch(
-    `${API_BASE_URL}/v1/portal/documents/${documentId}/download${
-      options.disposition === 'attachment' ? '?disposition=attachment' : ''
-    }`,
-    { credentials: 'include' },
-  );
-  if (!res.ok) throw new Error(`Erreur téléchargement: ${res.status}`);
-  return res.blob();
+/**
+ * Renvoie une URL signée (B2) à durée limitée pour télécharger le document.
+ * Le navigateur télécharge directement depuis B2 — l'API ne proxie jamais
+ * le fichier. L'appartenance du document est vérifiée côté serveur.
+ */
+export async function downloadDocument(documentId: string): Promise<DownloadDocumentResponse> {
+  return apiFetch<DownloadDocumentResponse>(`/v1/portal/documents/${documentId}/download`);
 }
 
 export async function signContract(documentId: string, signatureBlob: Blob): Promise<PortalDocument> {

@@ -5,14 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { mkdir, writeFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
-import * as path from 'path';
 import { Prisma, ContractSignerType, DocumentType, UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { ContractPdfService } from './contract-pdf.service';
-import { UPLOAD_ROOT, isPng } from '../../common/files/uploads.util';
+import { StorageService } from '../../common/storage/storage.service';
+import { isPng } from '../../common/files/uploads.util';
 
 /**
  * Génère et suit les contrats — côté acheteur (contrat de réservation/vente
@@ -30,6 +29,7 @@ export class ContractService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationService,
     private readonly pdf: ContractPdfService,
+    private readonly storage: StorageService,
   ) {}
 
   async generateBuyerContract(reservationId: string, userId: string, role: UserRole) {
@@ -250,12 +250,10 @@ export class ContractService {
     });
   }
 
+  /** Dépose la signature PNG sur B2 sous une clé interne et renvoie la clé. */
   private async persistSignature(buffer: Buffer): Promise<string> {
-    const fileName = `${randomUUID()}.png`;
-    const relativeDirectory = 'signatures';
-    const absoluteDirectory = path.join(UPLOAD_ROOT, relativeDirectory);
-    await mkdir(absoluteDirectory, { recursive: true });
-    await writeFile(path.join(absoluteDirectory, fileName), buffer);
-    return `/uploads/${relativeDirectory}/${fileName}`;
+    const key = `signatures/${randomUUID()}.png`;
+    await this.storage.putObject(key, buffer, 'image/png');
+    return key;
   }
 }

@@ -19,8 +19,10 @@
 #   - Ports hôte : 3001 (api), 3002 (web) — 3000 est occupé
 #     par un autre projet (ComptaAI) sur ce VPS partagé.
 #   - Les migrations Prisma sont appliquées par le job one-shot
-#     `migrate` avant le démarrage de l'API. Les uploads (KYC,
-#     contrats) persistent dans le volume `prod-uploads`.
+#     `migrate` avant le démarrage de l'API. Les fichiers (KYC, contrats
+#     PDF, signatures) sont stockés sur Backblaze B2 (StorageService,
+#     variables B2_*) ; le volume `prod-uploads` reste monté pour la
+#     compatibilité mais n'est plus jamais écrit.
 # ==========================================================
 
 name: residence-catalog-prod

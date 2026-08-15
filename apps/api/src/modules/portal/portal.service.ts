@@ -1,10 +1,13 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { resolveUploadFilePath } from '../../common/files/uploads.util';
+import { StorageService } from '../../common/storage/storage.service';
 
 @Injectable()
 export class PortalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   async getDashboard(userId: string) {
     const reservations = await this.prisma.reservation.findMany({
@@ -38,12 +41,13 @@ export class PortalService {
   }
 
   /**
-   * Localise le fichier d'un document et vérifie qu'il appartient au user
-   * (via la réservation liée OU le propriétaire KYC). 403 si le document
-   * appartient à un tiers, 404 s'il n'existe pas ou si le fichier a été
-   * supprimé du disque.
+   * Vérifie l'appartenance d'un document puis renvoie une URL signée à
+   * durée limitée (B2) pour le télécharger. 403 si le document appartient
+   * à un tiers, 404 s'il n'existe pas ou si aucune clé de fichier n'est
+   * enregistrée. Le navigateur télécharge directement depuis B2 — jamais
+   * de proxy serveur.
    */
-  async getDocumentFile(documentId: string, userId: string) {
+  async getDocumentFile(documentId: string, userId: string): Promise<{ downloadUrl: string }> {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
       include: {
@@ -61,6 +65,9 @@ export class PortalService {
 
     // Un contrat signé se télécharge dans sa version contresignée ; l'original
     // (fileUrl) reste archivé pour l'audit.
-    return resolveUploadFilePath(document.signedFileUrl ?? document.fileUrl);
+    const key = document.signedFileUrl ?? document.fileUrl;
+    if (!key) throw new NotFoundException('Document sans fichier associé.');
+
+    return { downloadUrl: await this.storage.getSignedUrl(key) };
   }
 }

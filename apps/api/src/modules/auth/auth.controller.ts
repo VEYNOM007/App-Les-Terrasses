@@ -13,9 +13,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import * as fs from 'fs';
-import { randomUUID } from 'crypto';
+import { memoryStorage } from 'multer';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
@@ -48,31 +46,18 @@ export function getCookieOptions() {
   };
 }
 
-const KYC_UPLOAD_DIR = 'uploads/kyc';
 const KYC_MAX_SIZE = 5 * 1024 * 1024; // 5 Mo
 const KYC_ALLOWED_MIMES = new Set(['image/png', 'image/jpeg', 'application/pdf']);
-const KYC_EXT_BY_MIME: Record<string, string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'application/pdf': '.pdf',
-};
 
 /**
- * Interceptor multipart : le nom de fichier est généré côté serveur
- * (UUID + extension dérivée du MIME) — on n'utilise jamais le nom
- * fourni par le client, source classique de path traversal.
+ * Interceptor multipart : fichier chargé en mémoire (memoryStorage), jamais
+ * écrit sur le disque du container. Le nom de fichier est généré côté
+ * serveur par le service (clé interne B2 `kyc/<uuid>.<ext>`, extension
+ * dérivée du MIME) — on n'utilise jamais le nom fourni par le client,
+ * source classique de path traversal.
  */
 const kycFileInterceptor = FileInterceptor('file', {
-  storage: diskStorage({
-    destination: (_req, _file, cb) => {
-      fs.mkdirSync(KYC_UPLOAD_DIR, { recursive: true });
-      cb(null, KYC_UPLOAD_DIR);
-    },
-    filename: (_req, file, cb) => {
-      const ext = KYC_EXT_BY_MIME[file.mimetype] ?? '.bin';
-      cb(null, `${randomUUID()}${ext}`);
-    },
-  }),
+  storage: memoryStorage(),
   limits: { fileSize: KYC_MAX_SIZE },
   fileFilter: (_req, file, cb) => {
     if (!KYC_ALLOWED_MIMES.has(file.mimetype)) {

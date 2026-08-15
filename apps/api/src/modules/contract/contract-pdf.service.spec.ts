@@ -1,7 +1,6 @@
-import { mkdir, readFile, rm, writeFile } from 'fs/promises';
-import * as path from 'path';
+import { Test, TestingModule } from '@nestjs/testing';
 import { ContractPdfService } from './contract-pdf.service';
-import { UPLOAD_ROOT } from '../../common/files/uploads.util';
+import { StorageService } from '../../common/storage/storage.service';
 
 // PNG 1x1 RGBA minimal — valide pour pdf-lib embedPng.
 const PNG_1X1 = Buffer.from(
@@ -9,16 +8,29 @@ const PNG_1X1 = Buffer.from(
   'base64',
 );
 
-describe('ContractPdfService', () => {
-  const service = new ContractPdfService();
-  const generatedFiles: string[] = [];
+const createMockStorage = () => ({
+  putObject: jest.fn(),
+  getObject: jest.fn(),
+  getSignedUrl: jest.fn(),
+  deleteObject: jest.fn(),
+});
 
-  afterEach(async () => {
-    await Promise.all(generatedFiles.splice(0).map((file) => rm(file, { force: true })));
+describe('ContractPdfService', () => {
+  let service: ContractPdfService;
+  let storage: ReturnType<typeof createMockStorage>;
+
+  beforeEach(async () => {
+    storage = createMockStorage();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [ContractPdfService, { provide: StorageService, useValue: storage }],
+    }).compile();
+    service = module.get(ContractPdfService);
   });
 
-  it('génère un vrai PDF dans le stockage des contrats', async () => {
-    const fileUrl = await service.generate({
+  it('génère un vrai PDF et le dépose sur B2 sous une clé interne contracts/<uuid>.pdf', async () => {
+    storage.putObject.mockResolvedValue(undefined);
+
+    const key = await service.generate({
       title: 'Contrat de test',
       reference: 'contract-test-1',
       sections: [
@@ -26,39 +38,45 @@ describe('ContractPdfService', () => {
       ],
     });
 
-    expect(fileUrl).toMatch(/^\/uploads\/contracts\/[0-9a-f-]+\.pdf$/);
-    const absolutePath = path.join(UPLOAD_ROOT, 'contracts', path.basename(fileUrl));
-    generatedFiles.push(absolutePath);
-
-    const content = await readFile(absolutePath);
-    expect(content.subarray(0, 5).toString()).toBe('%PDF-');
-    expect(content.length).toBeGreaterThan(500);
+    expect(key).toMatch(/^contracts\/[0-9a-f-]+\.pdf$/);
+    expect(storage.putObject).toHaveBeenCalledTimes(1);
+    const [putKey, body, contentType] = storage.putObject.mock.calls[0];
+    expect(putKey).toBe(key);
+    expect(body.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(body.length).toBeGreaterThan(500);
+    expect(contentType).toBe('application/pdf');
   });
 
-  it('contresigne un PDF existant avec les images de signature', async () => {
-    const originalUrl = await service.generate({
+  it('contresigne un PDF existant : lit l\'original + PNG depuis B2, dépose la copie signée', async () => {
+    const originalKey = await service.generate({
       title: 'Contrat à signer',
       reference: 'contract-sign-1',
       sections: [{ heading: 'Parties', lines: ['Acheteur : Kofi Mensah'] }],
     });
-    generatedFiles.push(path.join(UPLOAD_ROOT, 'contracts', path.basename(originalUrl)));
+    const [, originalBody] = storage.putObject.mock.calls[0];
 
-    const signatureDirectory = path.join(UPLOAD_ROOT, 'signatures');
-    await mkdir(signatureDirectory, { recursive: true });
-    const signatureUrl = '/uploads/signatures/signature-test.png';
-    const signaturePath = path.join(signatureDirectory, 'signature-test.png');
-    await writeFile(signaturePath, PNG_1X1);
-    generatedFiles.push(signaturePath);
+    const signatureKey = 'signatures/signature-test.png';
+    storage.getObject.mockImplementation(async (key: string) => {
+      if (key === signatureKey) return { body: PNG_1X1, contentType: 'image/png' };
+      if (key === originalKey) return { body: originalBody, contentType: 'application/pdf' };
+      throw new Error(`Clé inattendue dans le mock : ${key}`);
+    });
 
-    const signedUrl = await service.sign(originalUrl, [
-      { label: 'Propriétaire', imageUrl: signatureUrl },
+    const signedKey = await service.sign(originalKey, [
+      { label: 'Propriétaire', imageUrl: signatureKey },
     ]);
-    generatedFiles.push(path.join(UPLOAD_ROOT, 'contracts', path.basename(signedUrl)));
 
-    expect(signedUrl).toMatch(/^\/uploads\/contracts\/[0-9a-f-]+\.pdf$/);
-    expect(signedUrl).not.toBe(originalUrl);
+    expect(signedKey).toMatch(/^contracts\/[0-9a-f-]+\.pdf$/);
+    expect(signedKey).not.toBe(originalKey);
 
-    const content = await readFile(path.join(UPLOAD_ROOT, 'contracts', path.basename(signedUrl)));
-    expect(content.subarray(0, 5).toString()).toBe('%PDF-');
+    // L'original et le PNG ont été lus depuis B2
+    expect(storage.getObject).toHaveBeenCalledWith(originalKey);
+    expect(storage.getObject).toHaveBeenCalledWith(signatureKey);
+
+    // La copie signée est un vrai PDF déposé à part
+    expect(storage.putObject).toHaveBeenCalledTimes(2);
+    const [signedPutKey, signedBody] = storage.putObject.mock.calls[1];
+    expect(signedPutKey).toBe(signedKey);
+    expect(signedBody.subarray(0, 5).toString()).toBe('%PDF-');
   });
 });

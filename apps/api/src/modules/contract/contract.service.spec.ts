@@ -9,6 +9,7 @@ import { ContractService } from './contract.service';
 import { ContractPdfService } from './contract-pdf.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+import { StorageService } from '../../common/storage/storage.service';
 
 const VALID_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
@@ -42,8 +43,15 @@ const createMockNotifications = () => ({
 });
 
 const createMockPdf = () => ({
-  generate: jest.fn().mockResolvedValue('/uploads/contracts/generated.pdf'),
-  sign: jest.fn().mockResolvedValue('/uploads/contracts/signed.pdf'),
+  generate: jest.fn().mockResolvedValue('contracts/generated.pdf'),
+  sign: jest.fn().mockResolvedValue('contracts/signed.pdf'),
+});
+
+const createMockStorage = () => ({
+  putObject: jest.fn().mockResolvedValue(undefined),
+  getObject: jest.fn(),
+  getSignedUrl: jest.fn(),
+  deleteObject: jest.fn(),
 });
 
 describe('ContractService', () => {
@@ -51,15 +59,18 @@ describe('ContractService', () => {
   let prisma: ReturnType<typeof createMockPrisma>;
   let notifications: ReturnType<typeof createMockNotifications>;
   let pdf: ReturnType<typeof createMockPdf>;
+  let storage: ReturnType<typeof createMockStorage>;
 
   beforeEach(() => {
     prisma = createMockPrisma();
     notifications = createMockNotifications();
     pdf = createMockPdf();
+    storage = createMockStorage();
     service = new ContractService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationService,
       pdf as unknown as ContractPdfService,
+      storage as unknown as StorageService,
     );
     prisma.document.create.mockResolvedValue({ id: 'document-1' });
   });
@@ -106,7 +117,7 @@ describe('ContractService', () => {
         data: {
           type: DocumentType.CONTRAT,
           name: 'Contrat de vente - reservation-1',
-          fileUrl: '/uploads/contracts/generated.pdf',
+          fileUrl: 'contracts/generated.pdf',
           reservationId: 'reservation-1',
         },
       });
@@ -135,7 +146,7 @@ describe('ContractService', () => {
         data: {
           type: DocumentType.CONTRAT,
           name: 'Contrat artisan - affectation assignment-1',
-          fileUrl: '/uploads/contracts/generated.pdf',
+          fileUrl: 'contracts/generated.pdf',
           artisanAssignmentId: 'assignment-1',
         },
       });
@@ -177,7 +188,7 @@ describe('ContractService', () => {
   describe('signContract', () => {
     const buyerDocument = {
       id: 'document-1',
-      fileUrl: '/uploads/contracts/1.pdf',
+      fileUrl: 'contracts/1.pdf',
       reservation: { userId: 'user-1' },
       artisanAssignment: null,
       signatures: [] as { signerType: ContractSignerType; signatureImageUrl: string }[],
@@ -186,7 +197,7 @@ describe('ContractService', () => {
     beforeEach(() => {
       prisma.contractSignature.create.mockResolvedValue({ id: 'signature-1' });
       prisma.contractSignature.findMany.mockResolvedValue([]);
-      prisma.document.update.mockResolvedValue({ id: 'document-1', signedFileUrl: '/uploads/contracts/signed.pdf' });
+      prisma.document.update.mockResolvedValue({ id: 'document-1', signedFileUrl: 'contracts/signed.pdf' });
       prisma.document.findUnique.mockResolvedValue(buyerDocument);
     });
 
@@ -208,7 +219,7 @@ describe('ContractService', () => {
     it('refuse un document sans propriétaire signataire résolvable', async () => {
       prisma.document.findUnique.mockResolvedValue({
         id: 'document-1',
-        fileUrl: '/uploads/contracts/1.pdf',
+        fileUrl: 'contracts/1.pdf',
         reservation: null,
         artisanAssignment: null,
         signatures: [],
@@ -221,18 +232,26 @@ describe('ContractService', () => {
 
     it('signe en PROPRIETAIRE pour l\'acheteur propriétaire (jamais ADMIN côté client)', async () => {
       prisma.contractSignature.findMany.mockResolvedValue([
-        { signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: '/uploads/signatures/a.png' },
+        { signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: 'signatures/a.png' },
       ]);
       prisma.document.findUnique.mockResolvedValue(buyerDocument);
 
       await service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG);
+
+      // La signature PNG est déposée sur B2 sous une clé interne avant d'être
+      // référencée en base
+      expect(storage.putObject).toHaveBeenCalledTimes(1);
+      const [uploadKey, uploadBody, contentType] = storage.putObject.mock.calls[0];
+      expect(uploadKey).toMatch(/^signatures\/[0-9a-f-]+\.png$/);
+      expect(uploadBody).toBe(VALID_PNG);
+      expect(contentType).toBe('image/png');
 
       expect(prisma.contractSignature.create).toHaveBeenCalledWith({
         data: {
           documentId: 'document-1',
           signerType: ContractSignerType.PROPRIETAIRE,
           signerUserId: 'user-1',
-          signatureImageUrl: expect.stringMatching(/^\/uploads\/signatures\/[0-9a-f-]+\.png$/),
+          signatureImageUrl: uploadKey,
         },
       });
     });
@@ -240,7 +259,7 @@ describe('ContractService', () => {
     it('signe en PROPRIETAIRE pour l\'artisan affecté', async () => {
       prisma.document.findUnique.mockResolvedValue({
         id: 'document-1',
-        fileUrl: '/uploads/contracts/1.pdf',
+        fileUrl: 'contracts/1.pdf',
         reservation: null,
         artisanAssignment: { artisan: { userId: 'artisan-user-1' } },
         signatures: [],
@@ -283,7 +302,7 @@ describe('ContractService', () => {
     it('refuse le doublon de signature ADMIN (409)', async () => {
       prisma.document.findUnique.mockResolvedValue({
         ...buyerDocument,
-        signatures: [{ signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: '/uploads/signatures/a.png' }],
+        signatures: [{ signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: 'signatures/a.png' }],
       });
       prisma.contractSignature.create.mockRejectedValue(p2002());
 
@@ -296,23 +315,23 @@ describe('ContractService', () => {
       prisma.document.findUnique
         .mockResolvedValueOnce({
           ...buyerDocument,
-          signatures: [{ signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: '/uploads/signatures/a.png' }],
+          signatures: [{ signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: 'signatures/a.png' }],
         })
         .mockResolvedValue({ id: 'document-1', signatures: [] });
       prisma.contractSignature.findMany.mockResolvedValue([
-        { signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: '/uploads/signatures/a.png' },
-        { signerType: ContractSignerType.ADMIN, signatureImageUrl: '/uploads/signatures/b.png' },
+        { signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: 'signatures/a.png' },
+        { signerType: ContractSignerType.ADMIN, signatureImageUrl: 'signatures/b.png' },
       ]);
 
       await service.signContract('document-1', 'admin-1', UserRole.ADMIN, VALID_PNG);
 
-      expect(pdf.sign).toHaveBeenCalledWith('/uploads/contracts/1.pdf', [
-        { label: 'Propriétaire', imageUrl: '/uploads/signatures/a.png' },
-        { label: 'Administration', imageUrl: '/uploads/signatures/b.png' },
+      expect(pdf.sign).toHaveBeenCalledWith('contracts/1.pdf', [
+        { label: 'Propriétaire', imageUrl: 'signatures/a.png' },
+        { label: 'Administration', imageUrl: 'signatures/b.png' },
       ]);
       expect(prisma.document.update).toHaveBeenCalledWith({
         where: { id: 'document-1' },
-        data: { signedFileUrl: '/uploads/contracts/signed.pdf' },
+        data: { signedFileUrl: 'contracts/signed.pdf' },
       });
       expect(notifications.notifyUser).toHaveBeenCalledWith(
         'user-1',

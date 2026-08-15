@@ -1,9 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { mkdir, readFile, writeFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
-import * as path from 'path';
-import { UPLOAD_ROOT, resolveUploadFilePath } from '../../common/files/uploads.util';
+import { StorageService } from '../../common/storage/storage.service';
 
 export interface ContractPdfSection {
   heading: string;
@@ -29,6 +27,8 @@ const LINE_HEIGHT = 17;
 
 @Injectable()
 export class ContractPdfService {
+  constructor(private readonly storage: StorageService) {}
+
   async generate(input: ContractPdfInput): Promise<string> {
     const document = await PDFDocument.create();
     const regular = await document.embedFont(StandardFonts.Helvetica);
@@ -83,14 +83,14 @@ export class ContractPdfService {
   }
 
   /**
-   * Contresigne un PDF existant : charge le fichier original (résolu via
-   * resolveUploadFilePath), incorpore les images de signature (PNG) sur la
-   * dernière page et écrit une version signée à part. L'original reste
+   * Contresigne un PDF existant : charge l'original depuis B2 (clé interne),
+   * incorpore les images de signature (PNG, aussi chargées depuis B2) sur la
+   * dernière page et dépose une version signée à part. L'original reste
    * intact — seul `signedFileUrl` référence la copie signée.
    */
   async sign(fileUrl: string, signatures: ContractPdfSignature[]): Promise<string> {
-    const { absolutePath } = resolveUploadFilePath(fileUrl);
-    const document = await PDFDocument.load(await readFile(absolutePath));
+    const original = await this.storage.getObject(fileUrl);
+    const document = await PDFDocument.load(original.body);
     const regular = await document.embedFont(StandardFonts.Helvetica);
     const bold = await document.embedFont(StandardFonts.HelveticaBold);
     const page = document.getPage(document.getPageCount() - 1);
@@ -107,8 +107,8 @@ export class ContractPdfService {
 
     let x = MARGIN;
     for (const signature of signatures) {
-      const { absolutePath: imagePath } = resolveUploadFilePath(signature.imageUrl);
-      const image = await document.embedPng(await readFile(imagePath));
+      const { body: imageBody } = await this.storage.getObject(signature.imageUrl);
+      const image = await document.embedPng(imageBody);
       const scale = Math.min(boxWidth / image.width, signatureBoxHeight / image.height);
       const drawWidth = image.width * scale;
       const drawHeight = image.height * scale;
@@ -128,12 +128,10 @@ export class ContractPdfService {
     return this.persist(document);
   }
 
+  /** Dépose le PDF sur B2 et renvoie sa clé interne. */
   private async persist(document: PDFDocument): Promise<string> {
-    const fileName = `${randomUUID()}.pdf`;
-    const relativeDirectory = 'contracts';
-    const absoluteDirectory = path.join(UPLOAD_ROOT, relativeDirectory);
-    await mkdir(absoluteDirectory, { recursive: true });
-    await writeFile(path.join(absoluteDirectory, fileName), await document.save());
-    return `/uploads/${relativeDirectory}/${fileName}`;
+    const key = `contracts/${randomUUID()}.pdf`;
+    await this.storage.putObject(key, Buffer.from(await document.save()), 'application/pdf');
+    return key;
   }
 }

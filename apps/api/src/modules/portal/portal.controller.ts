@@ -1,6 +1,4 @@
-import { Controller, Get, Param, Res, StreamableFile, UseGuards } from '@nestjs/common';
-import { Response } from 'express';
-import { createReadStream } from 'fs';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { PortalService } from './portal.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -21,17 +19,12 @@ export class PortalController {
     return this.portalService.listDocuments(user.id);
   }
 
+  /**
+   * Renvoie une URL signée (B2) que le navigateur télécharge directement.
+   * L'appartenance du document est vérifiée côté serveur (getDocumentFile).
+   */
   @Get('documents/:documentId/download')
-  async downloadDocument(
-    @Param('documentId') documentId: string,
-    @CurrentUser() user: AuthUser,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const { absolutePath, mimeType } = await this.portalService.getDocumentFile(documentId, user.id);
-    res.set({
-      'Content-Type': mimeType,
-      'Content-Disposition': `inline; filename="document${mimeType === 'application/pdf' ? '.pdf' : ''}"`,
-    });
-    return new StreamableFile(createReadStream(absolutePath));
+  downloadDocument(@Param('documentId') documentId: string, @CurrentUser() user: AuthUser) {
+    return this.portalService.getDocumentFile(documentId, user.id);
   }
 }

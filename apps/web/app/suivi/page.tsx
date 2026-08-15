@@ -120,15 +120,10 @@ export default function SuiviAcquereur() {
 
   const handleDownload = async (documentId: string) => {
     try {
-      const blob = await downloadDocument(documentId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'contrat.pdf';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      const { downloadUrl } = await downloadDocument(documentId);
+      // URL signée B2 à durée limitée : ouverture directe dans un onglet,
+      // le fichier est servi par B2 (jamais par le serveur applicatif).
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     } catch {
       setSigningError('Téléchargement impossible pour le moment.');
     }

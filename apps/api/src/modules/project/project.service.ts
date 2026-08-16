@@ -1,12 +1,32 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { MediaType, Prisma } from '@prisma/client';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { StorageService } from '../../common/storage/storage.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
-import { CreateUnitMediaDto, UpdateUnitMediaDto } from './dto/unit-media.dto';
+import {
+  CreateUnitMediaDto,
+  UpdateUnitMediaDto,
+  UploadUnitMediaDto,
+} from './dto/unit-media.dto';
+
+/** Extension de clé interne dérivée du MIME, jamais du nom client. */
+const MEDIA_EXT_BY_MIME: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'application/pdf': '.pdf',
+};
 
 /**
  * CRUD réservé admin pour projets/blocs/unités — distinct du CatalogModule
@@ -14,7 +34,12 @@ import { CreateUnitMediaDto, UpdateUnitMediaDto } from './dto/unit-media.dto';
  */
 @Injectable()
 export class ProjectService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ProjectService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   createProject(data: CreateProjectDto) {
     return this.prisma.project.create({
@@ -158,12 +183,68 @@ export class ProjectService {
     });
   }
 
-  async removeMedia(id: string) {
-    try {
-      return await this.prisma.unitMedia.delete({ where: { id } });
-    } catch {
-      throw new NotFoundException('Média introuvable.');
+  /**
+   * Upload d'un fichier média vers le bucket public B2. La clé interne
+   * (`unit-media/<uuid>.<ext>`, extension dérivée du MIME) et l'URL publique
+   * stable sont générées côté serveur — jamais le nom du fichier client.
+   * Si la création en base échoue après l'upload, le blob est retiré de B2
+   * (best-effort, tracé en log) pour ne pas laisser d'orphelin.
+   */
+  async uploadMedia(unitId: string, data: UploadUnitMediaDto, file: Express.Multer.File) {
+    const ext = MEDIA_EXT_BY_MIME[file.mimetype];
+    if (!ext) {
+      throw new BadRequestException('Format non supporté : PNG, JPG, WebP ou PDF uniquement.');
     }
+    const key = `unit-media/${crypto.randomUUID()}${ext}`;
+    await this.storage.putObjectPublic(key, file.buffer, file.mimetype);
+
+    try {
+      return await this.prisma.unitMedia.create({
+        data: {
+          unitId,
+          type: data.type,
+          url: this.storage.getPublicUrl(key),
+          altText: data.altText,
+          sortOrder: data.sortOrder ?? 0,
+        },
+      });
+    } catch (error) {
+      await this.storage.deleteObjectPublic(key).catch((cleanupError) => {
+        this.logger.warn(
+          `Blob B2 public non nettoyé après échec de création en base (${key}) : ` +
+            `${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+        );
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Suppression d'un média : le delete Prisma est la source de vérité, puis
+   * le blob B2 est retiré du bucket public (best-effort). Si B2 échoue après
+   * le delete en base, on logge une trace au lieu de bloquer — jamais de blob
+   * orphelin silencieux. Les URL externes (collées par l'admin) ne déclenchent
+   * rien (`extractKeyFromPublicUrl` renvoie null).
+   */
+  async removeMedia(id: string) {
+    const media = await this.prisma.unitMedia.findUnique({ where: { id } });
+    if (!media) throw new NotFoundException('Média introuvable.');
+
+    await this.prisma.unitMedia.delete({ where: { id } });
+
+    const key = this.storage.extractKeyFromPublicUrl(media.url);
+    if (key) {
+      try {
+        await this.storage.deleteObjectPublic(key);
+      } catch (error) {
+        this.logger.warn(
+          `Blob B2 public orphelin non supprimé (${key}) : ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return media;
   }
 
   listAllProjects() {

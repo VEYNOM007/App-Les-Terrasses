@@ -7,10 +7,11 @@ import {
 } from '@prisma/client';
 import { ProjectService } from './project.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { StorageService } from '../../common/storage/storage.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
-import { CreateUnitMediaDto } from './dto/unit-media.dto';
+import { CreateUnitMediaDto, UploadUnitMediaDto } from './dto/unit-media.dto';
 
 const createMockPrisma = () => ({
   project: {
@@ -29,16 +30,34 @@ const createMockPrisma = () => ({
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    findUnique: jest.fn(),
   },
+});
+
+/** Mock du stockage : clés internes `unit-media/…` pour le bucket public. */
+const PUBLIC_URL_PREFIX = 'https://public.b2.example.com/';
+
+const createMockStorage = () => ({
+  putObjectPublic: jest.fn().mockResolvedValue(undefined),
+  getPublicUrl: jest.fn((key: string) => `${PUBLIC_URL_PREFIX}${key}`),
+  deleteObjectPublic: jest.fn().mockResolvedValue(undefined),
+  extractKeyFromPublicUrl: jest.fn((url: string) =>
+    url.startsWith(PUBLIC_URL_PREFIX) ? url.slice(PUBLIC_URL_PREFIX.length) : null,
+  ),
 });
 
 describe('ProjectService', () => {
   let service: ProjectService;
   let prisma: ReturnType<typeof createMockPrisma>;
+  let storage: ReturnType<typeof createMockStorage>;
 
   beforeEach(() => {
     prisma = createMockPrisma();
-    service = new ProjectService(prisma as unknown as PrismaService);
+    storage = createMockStorage();
+    service = new ProjectService(
+      prisma as unknown as PrismaService,
+      storage as unknown as StorageService,
+    );
   });
 
   it('mappe les champs du DTO lors de la création d’un projet', async () => {
@@ -210,21 +229,168 @@ describe('ProjectService', () => {
       expect(result.altText).toBe('Plan à jour');
     });
 
-    it('supprime un média existant', async () => {
+    it('supprime un média existant puis purge le blob du bucket public', async () => {
+      prisma.unitMedia.findUnique.mockResolvedValue({
+        id: 'media-1',
+        url: `${PUBLIC_URL_PREFIX}unit-media/abc-123.png`,
+      });
       prisma.unitMedia.delete.mockResolvedValue({ id: 'media-1' });
 
       const result = await service.removeMedia('media-1');
 
+      expect(prisma.unitMedia.findUnique).toHaveBeenCalledWith({ where: { id: 'media-1' } });
       expect(prisma.unitMedia.delete).toHaveBeenCalledWith({ where: { id: 'media-1' } });
-      expect(result).toEqual({ id: 'media-1' });
+      expect(storage.extractKeyFromPublicUrl).toHaveBeenCalledWith(
+        `${PUBLIC_URL_PREFIX}unit-media/abc-123.png`,
+      );
+      expect(storage.deleteObjectPublic).toHaveBeenCalledWith('unit-media/abc-123.png');
+      expect(result).toEqual({
+        id: 'media-1',
+        url: `${PUBLIC_URL_PREFIX}unit-media/abc-123.png`,
+      });
+    });
+
+    it('ne purge rien pour une URL externe collée par l’admin (rien à supprimer côté B2)', async () => {
+      prisma.unitMedia.findUnique.mockResolvedValue({
+        id: 'media-2',
+        url: 'https://cdn.example.com/photo.jpg',
+      });
+      prisma.unitMedia.delete.mockResolvedValue({ id: 'media-2' });
+
+      await service.removeMedia('media-2');
+
+      expect(prisma.unitMedia.delete).toHaveBeenCalledWith({ where: { id: 'media-2' } });
+      expect(storage.deleteObjectPublic).not.toHaveBeenCalled();
+    });
+
+    it('supprime quand même en base si la purge B2 échoue (best-effort, jamais bloquant)', async () => {
+      prisma.unitMedia.findUnique.mockResolvedValue({
+        id: 'media-3',
+        url: `${PUBLIC_URL_PREFIX}unit-media/abc-456.png`,
+      });
+      prisma.unitMedia.delete.mockResolvedValue({ id: 'media-3' });
+      storage.deleteObjectPublic.mockRejectedValue(new Error('b2 temporairement indisponible'));
+
+      const result = await service.removeMedia('media-3');
+
+      expect(prisma.unitMedia.delete).toHaveBeenCalledWith({ where: { id: 'media-3' } });
+      expect(storage.deleteObjectPublic).toHaveBeenCalledWith('unit-media/abc-456.png');
+      expect(result).toEqual({
+        id: 'media-3',
+        url: `${PUBLIC_URL_PREFIX}unit-media/abc-456.png`,
+      });
     });
 
     it('remonte une 404 quand le média à supprimer n\'existe pas', async () => {
-      prisma.unitMedia.delete.mockRejectedValue(new Error('P2025: Record not found'));
+      prisma.unitMedia.findUnique.mockResolvedValue(null);
 
       await expect(service.removeMedia('media-inconnue')).rejects.toThrow(
         'Média introuvable.',
       );
+      expect(prisma.unitMedia.delete).not.toHaveBeenCalled();
+    });
+
+    it('uploade un fichier vers le bucket public et crée l’entrée avec l’URL stable', async () => {
+      const data: UploadUnitMediaDto = { type: MediaType.RENDU_3D, altText: 'Vue artiste' };
+      const file = {
+        fieldname: 'file',
+        originalname: 'rendu-client.png',
+        encoding: '7bit',
+        mimetype: 'image/png',
+        buffer: Buffer.from('render-bytes'),
+        size: 12,
+      } as Express.Multer.File;
+      prisma.unitMedia.create.mockImplementation(async ({ data: createData }) => ({
+        id: 'media-4',
+        ...createData,
+      }));
+
+      const result = await service.uploadMedia('unit-1', data, file);
+
+      expect(storage.putObjectPublic).toHaveBeenCalledTimes(1);
+      const [key, body, contentType] = storage.putObjectPublic.mock.calls[0] as [string, Buffer, string];
+      expect(key).toMatch(/^unit-media\/[0-9a-f-]+\.png$/);
+      expect(body).toBe(file.buffer);
+      expect(contentType).toBe('image/png');
+      expect(storage.getPublicUrl).toHaveBeenCalledWith(key);
+      expect(prisma.unitMedia.create).toHaveBeenCalledWith({
+        data: {
+          unitId: 'unit-1',
+          type: MediaType.RENDU_3D,
+          url: `${PUBLIC_URL_PREFIX}${key}`,
+          altText: 'Vue artiste',
+          sortOrder: 0,
+        },
+      });
+      expect(result).toMatchObject({
+        unitId: 'unit-1',
+        type: MediaType.RENDU_3D,
+        altText: 'Vue artiste',
+        sortOrder: 0,
+      });
+    });
+
+    it('respecte un sortOrder explicite à l’upload', async () => {
+      const data: UploadUnitMediaDto = { type: MediaType.PLAN, sortOrder: 3 };
+      const file = {
+        fieldname: 'file',
+        originalname: 'plan.pdf',
+        encoding: '7bit',
+        mimetype: 'application/pdf',
+        buffer: Buffer.from('pdf-bytes'),
+        size: 9,
+      } as Express.Multer.File;
+      prisma.unitMedia.create.mockResolvedValue({ id: 'media-5' });
+
+      await service.uploadMedia('unit-1', data, file);
+
+      const [key] = storage.putObjectPublic.mock.calls[0] as [string];
+      expect(key).toMatch(/^unit-media\/[0-9a-f-]+\.pdf$/);
+      expect(prisma.unitMedia.create).toHaveBeenCalledWith({
+        data: {
+          unitId: 'unit-1',
+          type: MediaType.PLAN,
+          url: `${PUBLIC_URL_PREFIX}${key}`,
+          altText: undefined,
+          sortOrder: 3,
+        },
+      });
+    });
+
+    it('rejette un MIME hors whitelist avant tout appel à B2', async () => {
+      const data: UploadUnitMediaDto = { type: MediaType.PHOTO };
+      const file = {
+        fieldname: 'file',
+        originalname: 'virus.exe',
+        encoding: '7bit',
+        mimetype: 'application/x-msdownload',
+        buffer: Buffer.from('x'),
+        size: 1,
+      } as Express.Multer.File;
+
+      await expect(service.uploadMedia('unit-1', data, file)).rejects.toThrow(
+        'Format non supporté : PNG, JPG, WebP ou PDF uniquement.',
+      );
+      expect(storage.putObjectPublic).not.toHaveBeenCalled();
+      expect(prisma.unitMedia.create).not.toHaveBeenCalled();
+    });
+
+    it('nettoie le blob B2 si la création en base échoue (pas d’orphelin silencieux)', async () => {
+      const data: UploadUnitMediaDto = { type: MediaType.PHOTO };
+      const file = {
+        fieldname: 'file',
+        originalname: 'photo.jpg',
+        encoding: '7bit',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.from('jpg-bytes'),
+        size: 9,
+      } as Express.Multer.File;
+      prisma.unitMedia.create.mockRejectedValue(new Error('base indisponible'));
+
+      await expect(service.uploadMedia('unit-1', data, file)).rejects.toThrow(
+        'base indisponible',
+      );
+      expect(storage.deleteObjectPublic).toHaveBeenCalledWith(expect.stringMatching(/^unit-media\//));
     });
   });
 });

@@ -1,11 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PaymentService } from './payment.service';
+import { PaymentService, CinetPayWebhookPayload } from './payment.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PaymentProvider } from '@prisma/client';
 
 /**
@@ -17,8 +21,13 @@ import { PaymentProvider } from '@prisma/client';
  *  3. markInstallmentPaid — installment introuvable → log warning, pas d'exception
  *  4. initiatePayment — échéance déjà payée → BadRequestException
  *  5. initiatePayment — utilisateur non propriétaire → BadRequestException
- *  6. handleCinetPayWebhook — signature invalide en production → rejet
- *  7. handleStripeWebhook — événement non checkout.session.completed → ignoré
+ *  6. handleCinetPayWebhook — vérification serveur-à-serveur ACCEPTED + montant → PAYE
+ *  7. handleCinetPayWebhook — désaccord webhook/vérification (ACCEPTED vs REFUSED) → jamais PAYE
+ *  8. handleCinetPayWebhook — désaccord de montant (montant CinetPay ≠ échéance) → jamais PAYE
+ *  9. handleCinetPayWebhook — PENDING → échéance inchangée
+ * 10. handleCinetPayWebhook — transaction inconnue → ignoré
+ * 11. handleCinetPayWebhook — indisponibilité CinetPay → rejet, jamais PAYE
+ * 12. handleStripeWebhook — événement non checkout.session.completed → ignoré
  */
 
 // ────────────────────────────────────────────────────────────
@@ -63,6 +72,7 @@ const createMockPrisma = () => ({
   },
   paymentInstallment: {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     findUniqueOrThrow: jest.fn(),
     findMany: jest.fn(),
     update: jest.fn(),
@@ -82,7 +92,12 @@ const createMockCinetPayClient = () => ({
     paymentUrl: 'https://cinetpay.com/pay/demo',
     paymentToken: 'tok_demo',
   }),
-  verifySignature: jest.fn().mockReturnValue(true),
+  checkPaymentStatus: jest.fn().mockResolvedValue({
+    code: '00',
+    status: 'ACCEPTED',
+    amount: '500000',
+    currency: 'XOF',
+  }),
 });
 
 const createMockStripeClient = () => ({
@@ -345,64 +360,109 @@ describe('PaymentService', () => {
   // ──────────────────────────────────────────────────
 
   describe('handleCinetPayWebhook', () => {
-    it('devrait traiter un webhook CinetPay valide avec cpm_result 00', async () => {
-      cinetPayClient.verifySignature.mockReturnValue(true);
+    it('devrait marquer PAYE si la vérification serveur-à-serveur confirme ACCEPTED + montant cohérent', async () => {
+      prisma.paymentInstallment.findFirst.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+      });
       prisma.paymentInstallment.findUnique.mockResolvedValue({
         ...mockInstallmentBase,
         status: 'EN_ATTENTE',
       });
       prisma.paymentInstallment.update.mockResolvedValue({});
 
-      await service.handleCinetPayWebhook(
-        {
-          cpm_result: '00',
-          cpm_trans_id: 'CPM-TX-001',
-          metadata: { installmentId: 'inst-001' },
-        },
-        'valid-signature',
-      );
+      await service.handleCinetPayWebhook({ cpm_trans_id: 'CPM-TX-001' });
 
+      expect(cinetPayClient.checkPaymentStatus).toHaveBeenCalledWith('CPM-TX-001');
       expect(prisma.paymentInstallment.update).toHaveBeenCalled();
     });
 
-    it('devrait ignorer un webhook CinetPay avec cpm_result != 00 (échec paiement)', async () => {
-      cinetPayClient.verifySignature.mockReturnValue(true);
+    it('désaccord webhook/vérification : jamais PAYE si CinetPay dit REFUSED malgré un POST prétendument accepté', async () => {
+      // Le POST webhook peut prétendre un succès — seul /v2/payment/check fait foi.
+      cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+        code: '627',
+        status: 'REFUSED',
+        amount: '500000',
+        currency: 'XOF',
+      });
+      prisma.paymentInstallment.findFirst.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+      });
 
-      await service.handleCinetPayWebhook(
-        {
-          cpm_result: '604',
-          cpm_trans_id: 'CPM-TX-002',
-          metadata: { installmentId: 'inst-001' },
-        },
-        'valid-signature',
-      );
+      await service.handleCinetPayWebhook({ cpm_trans_id: 'CPM-TX-002' });
+
+      expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
+      expect(reservationService.confirmReservation).not.toHaveBeenCalled();
+      expect(notificationService.notifyUser).not.toHaveBeenCalled();
+    });
+
+    it('désaccord de montant : jamais PAYE si CinetPay confirme ACCEPTED avec un montant != échéance', async () => {
+      // transaction_id manipulé pour pointer vers une autre échéance → montant divergent.
+      cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+        code: '00',
+        status: 'ACCEPTED',
+        amount: '999999',
+        currency: 'XOF',
+      });
+      prisma.paymentInstallment.findFirst.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+      });
+
+      await service.handleCinetPayWebhook({ cpm_trans_id: 'CPM-TX-003' });
+
+      expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
+      expect(reservationService.confirmReservation).not.toHaveBeenCalled();
+      expect(notificationService.notifyUser).not.toHaveBeenCalled();
+    });
+
+    it('devrait laisser l\'échéance inchangée si CinetPay est en attente (PENDING)', async () => {
+      cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+        code: '662',
+        status: 'PENDING',
+        amount: '500000',
+        currency: 'XOF',
+      });
+      prisma.paymentInstallment.findFirst.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+      });
+
+      await service.handleCinetPayWebhook({ cpm_trans_id: 'CPM-TX-004' });
 
       expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
     });
 
-    it('devrait rejeter si metadata.installmentId est manquant', async () => {
-      cinetPayClient.verifySignature.mockReturnValue(true);
+    it('devrait ignorer un webhook pour une transaction inconnue (aucun providerRef)', async () => {
+      prisma.paymentInstallment.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.handleCinetPayWebhook(
-          { cpm_result: '00', cpm_trans_id: 'CPM-TX-003' },
-          'valid-signature',
-        ),
-      ).rejects.toThrow(BadRequestException);
+        service.handleCinetPayWebhook({ cpm_trans_id: 'CPM-INCONNU' }),
+      ).resolves.toBeUndefined();
+
+      expect(cinetPayClient.checkPaymentStatus).not.toHaveBeenCalled();
+      expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
     });
 
-    it('devrait rejeter une signature invalide même hors production (pas de bypass dev)', async () => {
-      cinetPayClient.verifySignature.mockReturnValue(false);
+    it('devrait rejeter sans marquer PAYE si la vérification serveur-à-serveur est indisponible', async () => {
+      cinetPayClient.checkPaymentStatus.mockRejectedValueOnce(
+        new ServiceUnavailableException('CinetPay injoignable'),
+      );
+      prisma.paymentInstallment.findFirst.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+      });
 
+      await expect(service.handleCinetPayWebhook({ cpm_trans_id: 'CPM-TX-005' })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
+    });
+
+    it('devrait rejeter si cpm_trans_id est manquant', async () => {
       await expect(
-        service.handleCinetPayWebhook(
-          {
-            cpm_result: '00',
-            cpm_trans_id: 'CPM-TX-004',
-            metadata: { installmentId: 'inst-001' },
-          },
-          'signature-invalide',
-        ),
+        service.handleCinetPayWebhook({} as CinetPayWebhookPayload),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
     });

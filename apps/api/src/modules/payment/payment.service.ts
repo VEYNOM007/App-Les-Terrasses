@@ -14,12 +14,11 @@ import {
 /**
  * Contract minimal d'un webhook CinetPay — seuls les champs lus par le
  * service sont déclarés. Les champs supplémentaires envoyés par CinetPay
- * sont ignores sans casser le typage.
+ * sont ignores sans casser le typage. Le POST webhook sert uniquement de
+ * déclencheur : aucun statut de ce payload n'est cru tel quel.
  */
 export interface CinetPayWebhookPayload {
   cpm_trans_id: string;
-  cpm_result: string;
-  metadata?: { installmentId?: string };
 }
 
 @Injectable()
@@ -245,27 +244,47 @@ export class PaymentService {
   }
 
   /**
-   * Webhook CinetPay — la signature HMAC est TOUJOURS vérifiée, quel que
-   * soit l'environnement (pas de bypass en dev). En mode démo la clé de
-   * secours `demo_secret_key` est connue et utilisée pour signer.
+   * Webhook CinetPay — le POST n'est qu'un déclencheur (CinetPay ne signe
+   * pas ses notifications et n'y transmet pas de statut fiable). L'échéance
+   * est retrouvée par la transaction que NOUS avons émise à l'initiation
+   * (providerRef), puis l'état réel est rappelé serveur-à-serveur via
+   * /v2/payment/check. `markInstallmentPaid` n'est appelé que si CinetPay
+   * confirme ACCEPTED (code 00) ET le montant payé correspond à l'échéance.
    */
-  async handleCinetPayWebhook(payload: CinetPayWebhookPayload, signatureHeader: string) {
-    const isValid = this.cinetPayClient.verifySignature(payload, signatureHeader);
-    if (!isValid) {
-      throw new BadRequestException('Signature CinetPay invalide.');
+  async handleCinetPayWebhook(payload: CinetPayWebhookPayload) {
+    const transactionId = payload.cpm_trans_id;
+    if (!transactionId) {
+      throw new BadRequestException('cpm_trans_id manquant dans le webhook CinetPay.');
     }
 
-    if (payload.cpm_result !== '00') {
-      this.logger.warn(`Paiement CinetPay non validé (code ${payload.cpm_result}) pour transaction ${payload.cpm_trans_id}`);
+    const installment = await this.prisma.paymentInstallment.findFirst({
+      where: { providerRef: transactionId },
+    });
+
+    if (!installment) {
+      this.logger.warn(`Webhook CinetPay ignoré : aucune échéance liée à la transaction ${transactionId}.`);
       return;
     }
 
-    const installmentId = payload.metadata?.installmentId;
-    if (!installmentId) {
-      throw new BadRequestException('metadata.installmentId manquant dans le webhook CinetPay.');
+    const status = await this.cinetPayClient.checkPaymentStatus(transactionId);
+
+    if (status.code !== '00' || status.status !== 'ACCEPTED') {
+      this.logger.warn(
+        `Paiement CinetPay ${transactionId} non accepté (code=${status.code}, statut=${status.status}) — échéance inchangée.`,
+      );
+      return;
     }
 
-    await this.markInstallmentPaid(installmentId, PaymentProvider.CINETPAY, payload.cpm_trans_id);
+    const paidAmount = Number(status.amount);
+    const expectedAmount = Number(installment.amount);
+    if (paidAmount !== expectedAmount) {
+      this.logger.error(
+        `Webhook CinetPay refusé : montant vérifié ${paidAmount} ${status.currency} != montant attendu ${expectedAmount} pour l'échéance ${installment.id}.`,
+      );
+      return;
+    }
+
+    await this.markInstallmentPaid(installment.id, PaymentProvider.CINETPAY, transactionId);
   }
 
   /**

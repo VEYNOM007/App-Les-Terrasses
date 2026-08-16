@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import { PaymentService } from './payment.service';
+import { PaymentService, CinetPayWebhookPayload } from './payment.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
@@ -39,7 +39,7 @@ describe('PaymentService — integration (vraie DB)', () => {
   let notificationService: { notifyUser: jest.Mock };
   let cinetPayClient: {
     createPaymentSession: jest.Mock;
-    verifySignature: jest.Mock;
+    checkPaymentStatus: jest.Mock;
   };
   let stripeClient: {
     createCheckoutSession: jest.Mock;
@@ -55,7 +55,12 @@ describe('PaymentService — integration (vraie DB)', () => {
         transactionId: 'tx-1',
         token: 'demo-token',
       }),
-      verifySignature: jest.fn().mockReturnValue(true),
+      checkPaymentStatus: jest.fn().mockResolvedValue({
+        code: '00',
+        status: 'ACCEPTED',
+        amount: '500000',
+        currency: 'XOF',
+      }),
     };
     stripeClient = {
       createCheckoutSession: jest.fn().mockResolvedValue({
@@ -89,7 +94,7 @@ describe('PaymentService — integration (vraie DB)', () => {
     reservationService.confirmReservation.mockClear();
     notificationService.notifyUser.mockClear();
     cinetPayClient.createPaymentSession.mockClear();
-    cinetPayClient.verifySignature.mockClear();
+    cinetPayClient.checkPaymentStatus.mockClear();
     stripeClient.createCheckoutSession.mockClear();
     stripeClient.constructEvent.mockClear();
   });
@@ -321,7 +326,7 @@ describe('PaymentService — integration (vraie DB)', () => {
   // ──────────────────────────────────────────────────
 
   describe('handleCinetPayWebhook', () => {
-    it('marque l\'échéance PAYE si signature valide + cpm_result = 00 + metadata.installmentId', async () => {
+    it('marque PAYE si la vérification serveur-à-serveur confirme ACCEPTED + montant cohérent', async () => {
       const user = await createUserFixture();
       const { units } = await createProjectWithBlockAndUnits(1);
       const { schedule } = await createReservationWithSchedule({
@@ -330,25 +335,27 @@ describe('PaymentService — integration (vraie DB)', () => {
       });
       const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
 
-      cinetPayClient.verifySignature.mockReturnValueOnce(true);
+      // L'initiation stocke providerRef (TX-...) : c'est cette référence que le
+      // webhook doit rapporter (cpm_trans_id) pour retrouver l'échéance.
+      const result = await service.initiatePayment(installment.id, 'CINETPAY', user.id);
 
-      await service.handleCinetPayWebhook(
-        {
-          cpm_trans_id: 'cpm-123',
-          cpm_result: '00',
-          metadata: { installmentId: installment.id },
-        },
-        'valid-signature',
-      );
+      cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+        code: '00',
+        status: 'ACCEPTED',
+        amount: String(installment.amount),
+        currency: 'XOF',
+      });
+
+      await service.handleCinetPayWebhook({ cpm_trans_id: result.transactionId });
 
       const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
         where: { id: installment.id },
       });
       expect(updated.status).toBe('PAYE');
-      expect(updated.providerRef).toBe('cpm-123');
+      expect(updated.providerRef).toBe(result.transactionId);
     });
 
-    it('ignore un webhook avec cpm_result != 00 (paiement échoué)', async () => {
+    it('désaccord de montant : refuse même si CinetPay confirme ACCEPTED avec un montant != échéance', async () => {
       const user = await createUserFixture();
       const { units } = await createProjectWithBlockAndUnits(1);
       const { schedule } = await createReservationWithSchedule({
@@ -357,31 +364,60 @@ describe('PaymentService — integration (vraie DB)', () => {
       });
       const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
 
-      cinetPayClient.verifySignature.mockReturnValueOnce(true);
+      const result = await service.initiatePayment(installment.id, 'CINETPAY', user.id);
 
-      await service.handleCinetPayWebhook(
-        {
-          cpm_trans_id: 'cpm-failed',
-          cpm_result: '666',
-          metadata: { installmentId: installment.id },
-        },
-        'valid-signature',
-      );
+      cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+        code: '00',
+        status: 'ACCEPTED',
+        amount: '999999',
+        currency: 'XOF',
+      });
+
+      await service.handleCinetPayWebhook({ cpm_trans_id: result.transactionId });
 
       const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
         where: { id: installment.id },
       });
-      expect(updated.status).toBe('EN_ATTENTE'); // inchangé
+      expect(updated.status).toBe('EN_ATTENTE'); // jamais marqué PAYE
     });
 
-    it('leve BadRequestException si metadata.installmentId manque', async () => {
-      cinetPayClient.verifySignature.mockReturnValueOnce(true);
+    it('désaccord webhook/vérification : refuse si CinetPay dit REFUSED malgré un POST prétendument accepté', async () => {
+      const user = await createUserFixture();
+      const { units } = await createProjectWithBlockAndUnits(1);
+      const { schedule } = await createReservationWithSchedule({
+        userId: user.id,
+        unitId: units[0].id,
+      });
+      const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
 
+      const result = await service.initiatePayment(installment.id, 'CINETPAY', user.id);
+
+      cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+        code: '627',
+        status: 'REFUSED',
+        amount: String(installment.amount),
+        currency: 'XOF',
+      });
+
+      await service.handleCinetPayWebhook({ cpm_trans_id: result.transactionId });
+
+      const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
+        where: { id: installment.id },
+      });
+      expect(updated.status).toBe('EN_ATTENTE'); // jamais marqué PAYE
+    });
+
+    it('ignore un webhook pour une transaction inconnue (aucun providerRef)', async () => {
       await expect(
-        service.handleCinetPayWebhook(
-          { cpm_trans_id: 'cpm-x', cpm_result: '00' },
-          'valid-signature',
-        ),
+        service.handleCinetPayWebhook({ cpm_trans_id: 'CPM-INTROUVABLE' }),
+      ).resolves.toBeUndefined();
+
+      expect(cinetPayClient.checkPaymentStatus).not.toHaveBeenCalled();
+    });
+
+    it('leve BadRequestException si cpm_trans_id manque', async () => {
+      await expect(
+        service.handleCinetPayWebhook({} as CinetPayWebhookPayload),
       ).rejects.toThrow(BadRequestException);
     });
   });

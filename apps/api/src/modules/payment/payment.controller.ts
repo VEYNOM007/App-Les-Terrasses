@@ -54,16 +54,15 @@ export class PaymentController {
   }
 
   /**
-   * Webhook CinetPay — pas de guard JWT (appel serveur à serveur), la
-   * sécurité repose sur la vérification de signature dans le service.
+   * Webhook CinetPay — pas de guard JWT (appel serveur à serveur). CinetPay
+   * ne signe pas ses notifications : la sécurité repose sur le rappel
+   * serveur-à-serveur /v2/payment/check effectué dans le service (statut
+   * réel + montant vérifiés avant toute écriture).
    */
   @SkipThrottle()
   @Post('webhooks/cinetpay')
-  async cinetpayWebhook(
-    @Body() payload: CinetPayWebhookPayload,
-    @Headers('x-cinetpay-signature') signature: string,
-  ) {
-    await this.paymentService.handleCinetPayWebhook(payload, signature);
+  async cinetpayWebhook(@Body() payload: CinetPayWebhookPayload) {
+    await this.paymentService.handleCinetPayWebhook(payload);
     return { received: true };
   }
 

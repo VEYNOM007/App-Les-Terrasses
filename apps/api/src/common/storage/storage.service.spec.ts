@@ -16,6 +16,10 @@ const ORIGINAL_ENV: Record<string, string | undefined> = {
   B2_ENDPOINT: process.env.B2_ENDPOINT,
   B2_REGION: process.env.B2_REGION,
   B2_SIGNED_URL_TTL_SECONDS: process.env.B2_SIGNED_URL_TTL_SECONDS,
+  B2_PUBLIC_BUCKET: process.env.B2_PUBLIC_BUCKET,
+  B2_PUBLIC_ENDPOINT: process.env.B2_PUBLIC_ENDPOINT,
+  B2_PUBLIC_KEY_ID: process.env.B2_PUBLIC_KEY_ID,
+  B2_PUBLIC_APPLICATION_KEY: process.env.B2_PUBLIC_APPLICATION_KEY,
 };
 
 function setB2Env(overrides: Record<string, string | undefined> = {}) {
@@ -25,6 +29,10 @@ function setB2Env(overrides: Record<string, string | undefined> = {}) {
     B2_BUCKET: 'test-bucket',
     B2_ENDPOINT: 'https://s3.test.backblazeb2.com',
     B2_REGION: 'us-test-1',
+    B2_PUBLIC_BUCKET: 'test-public-bucket',
+    B2_PUBLIC_ENDPOINT: 'https://s3.public.backblazeb2.com',
+    B2_PUBLIC_KEY_ID: 'test-public-key-id',
+    B2_PUBLIC_APPLICATION_KEY: 'test-public-app-key',
   };
   for (const name of Object.keys(ORIGINAL_ENV)) {
     delete process.env[name];
@@ -148,6 +156,83 @@ describe('StorageService', () => {
     await expect(service.putObject('kyc/a.pdf', Buffer.from('x'), 'application/pdf')).rejects.toThrow(
       'Stockage B2 non configuré',
     );
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  // ── Bucket PUBLIC (médias catalogue) ───────────────────────────────
+
+  it('dépose un objet sur le bucket public avec la clé interne et le ContentType serveur', async () => {
+    mockSend.mockResolvedValue({});
+    const service = new StorageService();
+    const body = Buffer.from('render-png');
+
+    await service.putObjectPublic('unit-media/abc-123.png', body, 'image/png');
+
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    const command = mockSend.mock.calls[0][0];
+    expect(command.name).toBe('PutObjectCommand');
+    expect(command.input).toEqual({
+      Bucket: 'test-public-bucket',
+      Key: 'unit-media/abc-123.png',
+      Body: body,
+      ContentType: 'image/png',
+    });
+  });
+
+  it('génère une URL publique stable sans signature (endpoint + bucket + clé)', () => {
+    const service = new StorageService();
+
+    const url = service.getPublicUrl('unit-media/abc-123.png');
+
+    expect(url).toBe('https://s3.public.backblazeb2.com/test-public-bucket/unit-media/abc-123.png');
+  });
+
+  it('extrait la clé interne depuis une URL de notre bucket public', () => {
+    const service = new StorageService();
+
+    const key = service.extractKeyFromPublicUrl(
+      'https://s3.public.backblazeb2.com/test-public-bucket/unit-media/abc-123.png',
+    );
+
+    expect(key).toBe('unit-media/abc-123.png');
+  });
+
+  it('renvoie null pour une URL externe (collée par l’admin) : rien à supprimer côté B2', () => {
+    const service = new StorageService();
+
+    const key = service.extractKeyFromPublicUrl('https://cdn.example.com/photo.jpg');
+
+    expect(key).toBeNull();
+  });
+
+  it('renvoie null pour une URL de notre bucket sans clé (suffixe vide)', () => {
+    const service = new StorageService();
+
+    const key = service.extractKeyFromPublicUrl(
+      'https://s3.public.backblazeb2.com/test-public-bucket/',
+    );
+
+    expect(key).toBeNull();
+  });
+
+  it('supprime un objet du bucket public (nettoyage à la suppression d’un média)', async () => {
+    mockSend.mockResolvedValue({});
+    const service = new StorageService();
+
+    await service.deleteObjectPublic('unit-media/abc-123.png');
+
+    const command = mockSend.mock.calls[0][0];
+    expect(command.name).toBe('DeleteObjectCommand');
+    expect(command.input).toEqual({ Bucket: 'test-public-bucket', Key: 'unit-media/abc-123.png' });
+  });
+
+  it('échoue si le bucket public est absent de la config (pas de boot planté)', async () => {
+    setB2Env({ B2_PUBLIC_ENDPOINT: undefined });
+    const service = new StorageService();
+
+    await expect(
+      service.putObjectPublic('unit-media/a.png', Buffer.from('x'), 'image/png'),
+    ).rejects.toThrow('Bucket public B2 non configuré');
     expect(mockSend).not.toHaveBeenCalled();
   });
 });

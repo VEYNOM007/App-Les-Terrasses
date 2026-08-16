@@ -17,7 +17,9 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     credentials: 'include',
     headers: {
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      // Un FormData (upload multipart) ne doit JAMAIS recevoir de Content-Type
+      // JSON : le navigateur pose lui-même le boundary multipart.
+      ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       ...init.headers,
     },
   });
@@ -357,6 +359,34 @@ export function adminUpdateMedia(mediaId: string, body: AdminUnitMediaUpdate): P
 export function adminDeleteMedia(mediaId: string): Promise<{ message?: string }> {
   return apiFetch<{ message?: string }>(`/v1/admin/media/${mediaId}`, {
     method: 'DELETE',
+  });
+}
+
+export interface AdminUnitMediaUpload {
+  type: UnitMediaType;
+  altText?: string;
+  sortOrder?: number;
+}
+
+/**
+ * Upload d'un fichier média (rendu 3D, photo, plan) vers le bucket public B2.
+ * Envoi multipart : le fichier passe dans un FormData, le Content-Type est
+ * posé automatiquement par le navigateur (boundary) — pas de header manuel.
+ * Le serveur génère la clé interne et l'URL publique stable.
+ */
+export function uploadUnitMedia(
+  unitId: string,
+  body: AdminUnitMediaUpload,
+  file: File,
+): Promise<UnitMedia> {
+  const formData = new FormData();
+  formData.append('type', body.type);
+  if (body.altText !== undefined) formData.append('altText', body.altText);
+  if (body.sortOrder !== undefined) formData.append('sortOrder', String(body.sortOrder));
+  formData.append('file', file);
+  return apiFetch<UnitMedia>(`/v1/admin/units/${unitId}/media/upload`, {
+    method: 'POST',
+    body: formData,
   });
 }
 

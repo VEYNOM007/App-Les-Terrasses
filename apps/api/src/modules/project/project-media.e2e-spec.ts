@@ -6,6 +6,7 @@ import { ProjectController } from './project.controller';
 import { ProjectService } from './project.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { StorageService } from '../../common/storage/storage.service';
 import {
   cleanupTestDatabase,
   createUserFixture,
@@ -17,16 +18,31 @@ import {
 
 /**
  * Tests e2e HTTP — routes admin des médias d'unité
- * (POST /v1/admin/units/:unitId/media, PATCH/DELETE /v1/admin/media/:id).
+ * (POST /v1/admin/units/:unitId/media, POST …/media/upload,
+ * PATCH/DELETE /v1/admin/media/:id).
  *
  * Vérifie le wiring Nest des guards : sans JWT -> 401, ACHETEUR -> 403,
- * ADMIN -> 201/200/200 (R6 : toute route /admin/* doit être ADMIN-only).
+ * ADMIN -> 201/201/200/200 (R6 : toute route /admin/* doit être ADMIN-only).
+ *
+ * Le StorageService est mocké : aucun appel B2 réel — on vérifie que le
+ * service de stockage reçoit bien la clé interne et le ContentType attendus,
+ * et que la suppression d'un média d'origine B2 déclenche la purge du blob.
  *
  * Env vars (JWT_SECRET, DATABASE_URL, etc.) sont positionnées dans
  * jest.setup.ts exécuté avant tout import.
  */
 
 const API_PREFIX = 'v1';
+const PUBLIC_URL_PREFIX = 'https://public.b2.example.com/';
+
+const mockStorage = {
+  putObjectPublic: jest.fn().mockResolvedValue(undefined),
+  getPublicUrl: jest.fn((key: string) => `${PUBLIC_URL_PREFIX}${key}`),
+  deleteObjectPublic: jest.fn().mockResolvedValue(undefined),
+  extractKeyFromPublicUrl: jest.fn((url: string) =>
+    url.startsWith(PUBLIC_URL_PREFIX) ? url.slice(PUBLIC_URL_PREFIX.length) : null,
+  ),
+};
 
 describe('ProjectModule — e2e HTTP médias admin (supertest)', () => {
   let app: INestApplication;
@@ -40,6 +56,8 @@ describe('ProjectModule — e2e HTTP médias admin (supertest)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(testPrisma)
+      .overrideProvider(StorageService)
+      .useValue(mockStorage)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -60,6 +78,7 @@ describe('ProjectModule — e2e HTTP médias admin (supertest)', () => {
   });
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     await cleanupTestDatabase();
   });
 
@@ -137,6 +156,84 @@ describe('ProjectModule — e2e HTTP médias admin (supertest)', () => {
   });
 
   // ──────────────────────────────────────────────────
+  // POST /v1/admin/units/:unitId/media/upload (multipart)
+  // ──────────────────────────────────────────────────
+
+  it('POST /admin/units/:unitId/media/upload par un ADMIN -> 201, upload B2 + URL publique stable', async () => {
+    await createUserFixture({ email: 'admin-up1@test.tg', phone: '+22851000010', password: 'Secret123!', role: 'ADMIN' });
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-up1@test.tg', 'Secret123!');
+    const fileBuffer = Buffer.from('fake-png-bytes');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/units/${units[0].id}/media/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .field('type', 'RENDU_3D')
+      .field('altText', 'Vue artiste')
+      .attach('file', fileBuffer, { filename: 'rendu.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.unitId).toBe(units[0].id);
+    expect(res.body.type).toBe('RENDU_3D');
+    expect(res.body.altText).toBe('Vue artiste');
+    expect(res.body.sortOrder).toBe(0);
+    expect(res.body.url).toMatch(new RegExp(`^${PUBLIC_URL_PREFIX}unit-media/[0-9a-f-]+\\.png$`));
+
+    expect(mockStorage.putObjectPublic).toHaveBeenCalledTimes(1);
+    const [key, body, contentType] = mockStorage.putObjectPublic.mock.calls[0];
+    expect(key).toMatch(/^unit-media\/[0-9a-f-]+\.png$/);
+    expect(body).toEqual(fileBuffer);
+    expect(contentType).toBe('image/png');
+
+    const inDb = await testPrisma.unitMedia.findUniqueOrThrow({ where: { id: res.body.id } });
+    expect(inDb.unitId).toBe(units[0].id);
+  });
+
+  it('POST …/media/upload sans fichier par un ADMIN -> 400', async () => {
+    await createUserFixture({ email: 'admin-up2@test.tg', phone: '+22851000011', password: 'Secret123!', role: 'ADMIN' });
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-up2@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/units/${units[0].id}/media/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .field('type', 'PHOTO');
+
+    expect(res.status).toBe(400);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
+
+  it('POST …/media/upload avec un MIME interdit -> 400 (whitelist PNG/JPG/WebP/PDF)', async () => {
+    await createUserFixture({ email: 'admin-up3@test.tg', phone: '+22851000012', password: 'Secret123!', role: 'ADMIN' });
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-up3@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/units/${units[0].id}/media/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .field('type', 'PHOTO')
+      .attach('file', Buffer.from('not-an-image'), { filename: 'malware.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(400);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
+
+  it('POST …/media/upload par un ACHETEUR -> 403 Forbidden', async () => {
+    await createUserFixture({ email: 'acheteur-up1@test.tg', phone: '+22851000013', password: 'Secret123!' });
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('acheteur-up1@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/units/${units[0].id}/media/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .field('type', 'PHOTO')
+      .attach('file', Buffer.from('x'), { filename: 'p.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(403);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
+
+  // ──────────────────────────────────────────────────
   // PATCH /v1/admin/media/:id
   // ──────────────────────────────────────────────────
 
@@ -198,6 +295,46 @@ describe('ProjectModule — e2e HTTP médias admin (supertest)', () => {
     expect(res.status).toBe(200);
     const inDb = await testPrisma.unitMedia.findUnique({ where: { id: media.id } });
     expect(inDb).toBeNull();
+  });
+
+  it('DELETE /admin/media/:id (média venu du bucket public) -> purge du blob B2', async () => {
+    await createUserFixture({ email: 'admin-media6@test.tg', phone: '+22851000014', password: 'Secret123!', role: 'ADMIN' });
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const media = await testPrisma.unitMedia.create({
+      data: {
+        unitId: units[0].id,
+        type: 'PHOTO',
+        url: `${PUBLIC_URL_PREFIX}unit-media/abc-123.png`,
+        sortOrder: 1,
+      },
+    });
+    const token = await loginAndGetToken('admin-media6@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .delete(`/${API_PREFIX}/admin/media/${media.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(mockStorage.extractKeyFromPublicUrl).toHaveBeenCalledWith(
+      `${PUBLIC_URL_PREFIX}unit-media/abc-123.png`,
+    );
+    expect(mockStorage.deleteObjectPublic).toHaveBeenCalledWith('unit-media/abc-123.png');
+  });
+
+  it('DELETE /admin/media/:id (URL externe) -> pas de purge B2', async () => {
+    await createUserFixture({ email: 'admin-media7@test.tg', phone: '+22851000015', password: 'Secret123!', role: 'ADMIN' });
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const media = await testPrisma.unitMedia.create({
+      data: { unitId: units[0].id, type: 'PHOTO', url: 'https://cdn.example.com/old.jpg', sortOrder: 1 },
+    });
+    const token = await loginAndGetToken('admin-media7@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .delete(`/${API_PREFIX}/admin/media/${media.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(mockStorage.deleteObjectPublic).not.toHaveBeenCalled();
   });
 
   it('DELETE /admin/media/:id par un ACHETEUR -> 403 Forbidden', async () => {

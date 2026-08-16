@@ -13,6 +13,7 @@ import {
   adminUpdateMedia,
   adminUpdateUnit,
   fetchAdminProjects,
+  uploadUnitMedia,
   CatalogUnit,
   UnitMedia,
   UnitMediaType,
@@ -92,6 +93,7 @@ export default function AdminCataloguePage() {
   const [unitActionSuccess, setUnitActionSuccess] = useState('');
   const [mediaTypeInput, setMediaTypeInput] = useState<UnitMediaType>('RENDU_3D');
   const [mediaUrlInput, setMediaUrlInput] = useState('');
+  const [mediaFileInput, setMediaFileInput] = useState<File | null>(null);
   const [savingMedia, setSavingMedia] = useState(false);
   const [mediaActionError, setMediaActionError] = useState('');
   const [mediaActionSuccess, setMediaActionSuccess] = useState('');
@@ -235,6 +237,24 @@ export default function AdminCataloguePage() {
       setMediaActionSuccess('Média ajouté.');
     } catch (e) {
       setMediaActionError(e instanceof Error ? e.message : 'Impossible d’ajouter le média.');
+    } finally {
+      setSavingMedia(false);
+    }
+  };
+
+  const handleUploadMedia = async () => {
+    if (!selectedUnit) return;
+    setSavingMedia(true);
+    setMediaActionError('');
+    setMediaActionSuccess('');
+    try {
+      if (!mediaFileInput) throw new Error('Sélectionnez un fichier à uploader.');
+      await uploadUnitMedia(selectedUnit.id, { type: mediaTypeInput }, mediaFileInput);
+      await refreshSelectedUnit(selectedUnit.id);
+      setMediaFileInput(null);
+      setMediaActionSuccess('Média uploadé sur le stockage public.');
+    } catch (e) {
+      setMediaActionError(e instanceof Error ? e.message : 'Impossible d’uploader le média.');
     } finally {
       setSavingMedia(false);
     }
@@ -817,6 +837,39 @@ export default function AdminCataloguePage() {
                           />
                         </div>
                       </div>
+
+                      <div className="border-t border-paper/15 pt-3 space-y-2">
+                        <label className="block text-paper/70 font-mono text-xs">
+                          Upload depuis l'ordinateur (rendus, photos, plans — PNG, JPG, WebP, PDF, ≤ 15 Mo)
+                        </label>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,application/pdf"
+                          onChange={(e) => setMediaFileInput(e.target.files?.[0] ?? null)}
+                          className="w-full text-xs text-paper/70 font-mono file:mr-3 file:rounded-lg file:border file:border-sand/40 file:bg-ink-card file:px-3 file:py-2 file:text-paper file:font-mono file:cursor-pointer hover:file:bg-ink"
+                        />
+                        {mediaFileInput && (
+                          <p className="text-[11px] font-mono text-lagoon-light break-all">
+                            {mediaFileInput.name} — {(mediaFileInput.size / (1024 * 1024)).toFixed(2)} Mo
+                          </p>
+                        )}
+                        <button
+                          onClick={() => void handleUploadMedia()}
+                          disabled={savingMedia || !mediaFileInput}
+                          className="w-full bg-sand/20 hover:bg-sand/30 text-sand font-mono text-xs font-bold py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all disabled:opacity-60 border border-sand/40"
+                        >
+                          {savingMedia ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" /> Upload…
+                            </>
+                          ) : (
+                            <>
+                              <Image className="w-4 h-4" /> Uploader le média
+                            </>
+                          )}
+                        </button>
+                      </div>
+
                       <button
                         onClick={() => void handleAddMedia()}
                         disabled={savingMedia}

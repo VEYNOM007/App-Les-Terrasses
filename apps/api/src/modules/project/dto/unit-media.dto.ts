@@ -27,3 +27,24 @@ export class CreateUnitMediaDto {
 }
 
 export class UpdateUnitMediaDto extends PartialType(CreateUnitMediaDto) {}
+
+/**
+ * Upload d'un fichier média vers le bucket public B2 (`POST /admin/units/:unitId/media/upload`).
+ * Pas d'`url` : la clé interne (`unit-media/<uuid>.<ext>`) et l'URL publique
+ * stable sont générées côté serveur. Le fichier arrive en multipart (`file`),
+ * validé par l'interceptor (MIME whitelist, ≤ 15 Mo).
+ */
+export class UploadUnitMediaDto {
+  @IsEnum(MediaType)
+  type!: MediaType;
+
+  @IsOptional()
+  @IsString()
+  altText?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+}

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, BadRequestException } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import * as request from 'supertest';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { AuthModule } from '../auth/auth.module';
@@ -12,6 +13,7 @@ import { RedisModule } from '../../common/redis/redis.module';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+import { convertXofToEurCents, resolveXofToEurRate } from '../../common/payment/eur-conversion';
 import {
   cleanupTestDatabase,
   createUserFixture,
@@ -104,7 +106,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
       .useValue({ add: jest.fn() })
       .compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication<NestExpressApplication>({ rawBody: true });
     app.setGlobalPrefix(API_PREFIX);
     await app.init();
   });
@@ -330,7 +332,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
   // POST /v1/payments/webhooks/stripe
   // ──────────────────────────────────────────────────
 
-  it('POST /payments/webhooks/stripe avec event checkout.session.completed -> 200 + installment PAYE', async () => {
+  it('POST /payments/webhooks/stripe avec event checkout.session.completed -> 201 + installment PAYE', async () => {
     const user = await createUserFixture();
     const { units } = await createProjectWithBlockAndUnits(1);
     const { schedule } = await createReservationWithSchedule({
@@ -339,13 +341,14 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
     });
     const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
 
-    // constructEvent retourne l'event parse -> signature valide
+    // constructEvent retourne l'event parse -> signature valide, montant conforme
     stripeClient.constructEvent.mockReturnValueOnce({
       type: 'checkout.session.completed',
       data: {
         object: {
           id: 'cs_test_123',
           payment_intent: 'pi_456',
+          amount_total: convertXofToEurCents(Number(installment.amount), resolveXofToEurRate()),
           metadata: { installmentId: installment.id },
         },
       },
@@ -364,6 +367,68 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
     });
     expect(updated.status).toBe('PAYE');
     expect(updated.providerRef).toBe('pi_456');
+  });
+
+  it('POST /payments/webhooks/stripe : signature invalide -> 400, échéance jamais PAYE', async () => {
+    const user = await createUserFixture();
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const { schedule } = await createReservationWithSchedule({
+      userId: user.id,
+      unitId: units[0].id,
+    });
+    const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
+
+    // Le client réel (constructEvent) lève BadRequestException sur une
+    // signature invalide — le webhook est rejeté avant tout traitement.
+    stripeClient.constructEvent.mockImplementationOnce(() => {
+      throw new BadRequestException('Signature Stripe invalide.');
+    });
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/payments/webhooks/stripe`)
+      .set('stripe-signature', 'stripe-sig-forgee')
+      .send({ type: 'checkout.session.completed', data: { object: {} } });
+
+    expect(res.status).toBe(400);
+
+    const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
+      where: { id: installment.id },
+    });
+    expect(updated.status).toBe('EN_ATTENTE');
+  });
+
+  it('POST /payments/webhooks/stripe : désaccord de montant -> 201 mais jamais PAYE', async () => {
+    const user = await createUserFixture();
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const { schedule } = await createReservationWithSchedule({
+      userId: user.id,
+      unitId: units[0].id,
+    });
+    const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
+
+    stripeClient.constructEvent.mockReturnValueOnce({
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_test_999',
+          payment_intent: 'pi_999',
+          amount_total: 1,
+          metadata: { installmentId: installment.id },
+        },
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/payments/webhooks/stripe`)
+      .set('stripe-signature', 'sig')
+      .send({ type: 'checkout.session.completed', data: { object: {} } });
+
+    expect(res.status).toBe(201);
+
+    const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
+      where: { id: installment.id },
+    });
+    expect(updated.status).toBe('EN_ATTENTE');
   });
 
   it('POST /payments/webhooks/stripe avec event non pertinent -> 200, installment inchangé', async () => {

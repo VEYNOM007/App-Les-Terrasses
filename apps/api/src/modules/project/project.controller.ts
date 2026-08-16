@@ -1,4 +1,18 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ProjectService } from './project.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -8,7 +22,31 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
-import { CreateUnitMediaDto, UpdateUnitMediaDto } from './dto/unit-media.dto';
+import {
+  CreateUnitMediaDto,
+  UpdateUnitMediaDto,
+  UploadUnitMediaDto,
+} from './dto/unit-media.dto';
+
+const MEDIA_MAX_SIZE = 15 * 1024 * 1024; // 15 Mo
+const MEDIA_ALLOWED_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'application/pdf']);
+
+/**
+ * Interceptor multipart : fichier chargé en mémoire (memoryStorage), jamais
+ * écrit sur le disque du container. Le nom de fichier est généré côté serveur
+ * par le service (clé interne B2 `unit-media/<uuid>.<ext>`).
+ */
+const unitMediaFileInterceptor = FileInterceptor('file', {
+  storage: memoryStorage(),
+  limits: { fileSize: MEDIA_MAX_SIZE },
+  fileFilter: (_req, file, cb) => {
+    if (!MEDIA_ALLOWED_MIMES.has(file.mimetype)) {
+      cb(new BadRequestException('Format non supporté : PNG, JPG, WebP ou PDF uniquement.'), false);
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
@@ -54,6 +92,17 @@ export class ProjectController {
   @Post('units/:unitId/media')
   addMedia(@Param('unitId') unitId: string, @Body() body: CreateUnitMediaDto) {
     return this.projectService.addMedia(unitId, body);
+  }
+
+  @Post('units/:unitId/media/upload')
+  @UseInterceptors(unitMediaFileInterceptor)
+  uploadMedia(
+    @Param('unitId') unitId: string,
+    @Body() body: UploadUnitMediaDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) throw new BadRequestException('Fichier manquant.');
+    return this.projectService.uploadMedia(unitId, body, file);
   }
 
   @Patch('media/:mediaId')

@@ -56,15 +56,15 @@ jobs:
       NODE_ENV: test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup pnpm
         # Pas de "version" ici : pnpm/action-setup lit automatiquement
         # packageManager (pnpm@9.0.0) depuis package.json.
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           # node-version: 20 -> warning deprecation, on monte sur 22 LTS.
           node-version: 22
@@ -98,13 +98,13 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build API image (apps/api/Dockerfile)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/api/Dockerfile
@@ -115,7 +115,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build migrate image (apps/api/Dockerfile, target migrate)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/api/Dockerfile
@@ -127,7 +127,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build Web image (apps/web/Dockerfile)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/web/Dockerfile

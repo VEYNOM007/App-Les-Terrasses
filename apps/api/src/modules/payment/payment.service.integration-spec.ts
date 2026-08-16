@@ -6,6 +6,7 @@ import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
+import { convertXofToEurCents, resolveXofToEurRate } from '../../common/payment/eur-conversion';
 import {
   cleanupTestDatabase,
   createUserFixture,
@@ -165,7 +166,7 @@ describe('PaymentService — integration (vraie DB)', () => {
       expect(updated.providerRef).toBe(result.transactionId);
     });
 
-    it('initie un paiement STRIPE et update installment.provider en DB', async () => {
+    it('initie un paiement STRIPE en EUR et update installment.provider en DB', async () => {
       const user = await createUserFixture();
       const { units } = await createProjectWithBlockAndUnits(1);
       const { schedule } = await createReservationWithSchedule({
@@ -180,10 +181,23 @@ describe('PaymentService — integration (vraie DB)', () => {
       expect(result.paymentUrl).toMatch(/stripe/);
       expect(result.sessionId).toBeDefined();
 
+      // L'échéance XOF est convertie en centimes EUR avant l'appel Stripe.
+      expect(stripeClient.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amountEurCents: convertXofToEurCents(
+            Number(installment.amount),
+            resolveXofToEurRate(),
+          ),
+          installmentId: installment.id,
+          customerEmail: user.email,
+        }),
+      );
+
       const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
         where: { id: installment.id },
       });
       expect(updated.provider).toBe('STRIPE');
+      expect(updated.providerRef).toBe(result.transactionId);
     });
 
     it('leve BadRequestException si l\'échéance n\'appartient pas au user', async () => {
@@ -427,7 +441,10 @@ describe('PaymentService — integration (vraie DB)', () => {
   // ──────────────────────────────────────────────────
 
   describe('handleStripeWebhook', () => {
-    it('marque l\'échéance PAYE si event = checkout.session.completed + metadata.installmentId', async () => {
+    const expectedEurCents = (amount: number) =>
+      convertXofToEurCents(amount, resolveXofToEurRate());
+
+    it('marque l\'échéance PAYE si event = checkout.session.completed + metadata.installmentId + montant conforme', async () => {
       const user = await createUserFixture();
       const { units } = await createProjectWithBlockAndUnits(1);
       const { schedule } = await createReservationWithSchedule({
@@ -443,6 +460,7 @@ describe('PaymentService — integration (vraie DB)', () => {
           object: {
             id: 'cs_test_123',
             payment_intent: 'pi_456',
+            amount_total: expectedEurCents(Number(installment.amount)),
             metadata: { installmentId: installment.id },
           },
         },
@@ -460,6 +478,40 @@ describe('PaymentService — integration (vraie DB)', () => {
       });
       expect(updated.status).toBe('PAYE');
       expect(updated.providerRef).toBe('pi_456');
+    });
+
+    it('désaccord de montant : jamais PAYE si amount_total != montant attendu en EUR', async () => {
+      const user = await createUserFixture();
+      const { units } = await createProjectWithBlockAndUnits(1);
+      const { schedule } = await createReservationWithSchedule({
+        userId: user.id,
+        unitId: units[0].id,
+      });
+      const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
+
+      stripeClient.constructEvent.mockReturnValueOnce({
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            id: 'cs_test_999',
+            payment_intent: 'pi_999',
+            amount_total: 99999,
+            metadata: { installmentId: installment.id },
+          },
+        },
+      });
+
+      await service.handleStripeWebhook(
+        JSON.stringify({ type: 'checkout.session.completed' }),
+        'sig',
+      );
+
+      const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
+        where: { id: installment.id },
+      });
+      expect(updated.status).toBe('EN_ATTENTE');
+      expect(updated.providerRef).toBeNull();
+      expect(notificationService.notifyUser).not.toHaveBeenCalled();
     });
 
     it('ignore un event Stripe qui n\'est pas checkout.session.completed', async () => {
@@ -480,7 +532,7 @@ describe('PaymentService — integration (vraie DB)', () => {
     it('leve BadRequestException si metadata.installmentId manque sur le checkout.session.completed', async () => {
       stripeClient.constructEvent.mockReturnValueOnce({
         type: 'checkout.session.completed',
-        data: { object: { id: 'cs_x', payment_intent: 'pi_x' } },
+        data: { object: { id: 'cs_x', payment_intent: 'pi_x', amount_total: 1 } },
       });
 
       await expect(

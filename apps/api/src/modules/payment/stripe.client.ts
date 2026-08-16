@@ -1,10 +1,10 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import * as crypto from 'crypto';
+import { Injectable, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import Stripe from 'stripe';
 
 export interface StripeCheckoutRequest {
   transactionId: string;
-  amount: number; // en centimes ou unités selon devise
-  currency?: string; // XOF ou EUR
+  /** Montant à facturer en CENTIMES d'euro (déjà converti par PaymentService). */
+  amountEurCents: number;
   description: string;
   installmentId: string;
   customerEmail?: string;
@@ -21,113 +21,99 @@ export interface StripeCheckoutResponse {
 export class StripeClient {
   private readonly logger = new Logger(StripeClient.name);
 
-  private readonly stripeSecretKey = process.env.STRIPE_SECRET_KEY || 'sk_demo_stripe_key';
-  private readonly webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_demo_secret';
+  private readonly secretKey = process.env.STRIPE_SECRET_KEY;
+  private readonly webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  private readonly defaultSuccessUrl = 'https://immo-les-terrasse.com/suivi?payment=success';
+  private readonly defaultCancelUrl = 'https://immo-les-terrasse.com/suivi?payment=cancel';
 
   /**
-   * Crée une session Checkout Stripe pour le paiement par carte bancaire
+   * Stripe facture en EUR pour la diaspora : le montant reçu est déjà en
+   * centimes d'euro (conversion XOF→EUR effectuée côté PaymentService).
+   * Sans clé secrète, on refuse explicitement — jamais d'URL de démo ou
+   * de faux succès : cela masquerait une erreur réelle.
    */
-  async createCheckoutSession(params: StripeCheckoutRequest): Promise<StripeCheckoutResponse> {
-    this.logger.log(`Initialisation Checkout Stripe pour échéance ${params.installmentId} (${params.amount} ${params.currency || 'XOF'})`);
-
-    const sessionId = `cs_test_${params.installmentId.substring(0, 8)}_${Date.now()}`;
-    const checkoutUrl = `https://checkout.stripe.com/c/pay/${sessionId}`;
-
-    // Si nous sommes en mode démo / sans clé Stripe réelle configurée
-    if (this.stripeSecretKey === 'sk_demo_stripe_key') {
-      return {
-        checkoutUrl,
-        sessionId,
-      };
+  private requireSecret(value: string | undefined, name: string): string {
+    if (!value) {
+      this.logger.error(`Stripe non configuré : ${name} absente.`);
+      throw new ServiceUnavailableException(`Stripe non configuré : ${name} absente.`);
     }
-
-    try {
-      // Intégration HTTP directe de l'API REST Stripe v1 (sans dépendance lourde optionnelle)
-      const formBody = new URLSearchParams({
-        'payment_method_types[0]': 'card',
-        'line_items[0][price_data][currency]': (params.currency || 'XOF').toLowerCase(),
-        'line_items[0][price_data][product_data][name]': params.description,
-        'line_items[0][price_data][unit_amount]': String(Math.round(params.amount)),
-        'line_items[0][quantity]': '1',
-        'mode': 'payment',
-        'metadata[installmentId]': params.installmentId,
-        'metadata[transactionId]': params.transactionId,
-        'success_url': params.successUrl || 'https://terrasses-baguida.tg/suivi?payment=success',
-        'cancel_url': params.cancelUrl || 'https://terrasses-baguida.tg/suivi?payment=cancel',
-      });
-
-      if (params.customerEmail) {
-        formBody.append('customer_email', params.customerEmail);
-      }
-
-      const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.stripeSecretKey}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formBody.toString(),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        this.logger.error(`Erreur API Stripe : ${data.error.message}`);
-        throw new BadRequestException(`Stripe : ${data.error.message}`);
-      }
-
-      return {
-        checkoutUrl: data.url,
-        sessionId: data.id,
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'erreur inconnue';
-      this.logger.error(`Erreur réseau Stripe : ${message}`);
-      return {
-        checkoutUrl,
-        sessionId,
-      };
-    }
+    return value;
   }
 
   /**
-   * Vérifie la signature cryptographique du webhook Stripe (stripe-signature)
+   * Crée une Checkout Session hébergée (mode payment, EUR). Les erreurs
+   * réseau remontent en 503 ; une erreur API (clé/paramètres invalides)
+   * remonte en BadRequest — aucune URL de secours n'est jamais retournée.
    */
-  constructEvent(rawBody: Buffer | string, signatureHeader?: string): Record<string, unknown> | null {
+  async createCheckoutSession(params: StripeCheckoutRequest): Promise<StripeCheckoutResponse> {
+    const key = this.requireSecret(this.secretKey, 'STRIPE_SECRET_KEY');
+
+    this.logger.log(
+      `Initialisation Checkout Stripe pour échéance ${params.installmentId} (${params.amountEurCents} EUR cents)`,
+    );
+
+    let session: Stripe.Checkout.Session;
+    try {
+      const stripe = new Stripe(key);
+      session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'eur',
+              unit_amount: params.amountEurCents,
+              product_data: { name: params.description },
+            },
+          },
+        ],
+        metadata: {
+          installmentId: params.installmentId,
+          transactionId: params.transactionId,
+        },
+        success_url: params.successUrl || this.defaultSuccessUrl,
+        cancel_url: params.cancelUrl || this.defaultCancelUrl,
+        ...(params.customerEmail ? { customer_email: params.customerEmail } : {}),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'erreur inconnue';
+      this.logger.error(`Erreur Stripe (création de session) : ${message}`);
+      if (err instanceof Stripe.errors.StripeConnectionError) {
+        throw new ServiceUnavailableException('Stripe injoignable : paiement impossible à initier.');
+      }
+      throw new BadRequestException(`Stripe : ${message}`);
+    }
+
+    if (!session.url || !session.id) {
+      this.logger.error('Session Stripe créée sans url/id — réponse inattendue.');
+      throw new ServiceUnavailableException('Réponse inattendue du service Stripe.');
+    }
+
+    return {
+      checkoutUrl: session.url,
+      sessionId: session.id,
+    };
+  }
+
+  /**
+   * Vérifie STRICTEMENT la signature du webhook via le SDK officiel
+   * (stripe.webhooks.constructEvent). Aucun repli sur le body brut ni sur
+   * un secret factice : signature invalide ou absente → BadRequestException
+   * (rejeté, jamais traité). Secret non configuré → 503 (Stripe retentera).
+   */
+  constructEvent(rawBody: Buffer | string, signatureHeader: string | undefined): Stripe.Event {
+    const secret = this.requireSecret(this.webhookSecret, 'STRIPE_WEBHOOK_SECRET');
+
     if (!signatureHeader) {
-      this.logger.warn('En-tête stripe-signature manquant.');
-      return null;
+      throw new BadRequestException('En-tête stripe-signature manquant.');
     }
 
     try {
-      // Découpage du header signature t=timestamp,v1=signature
-      const items = signatureHeader.split(',').reduce<Record<string, string>>((acc, item) => {
-        const [k, v] = item.split('=');
-        acc[k.trim()] = v.trim();
-        return acc;
-      }, {});
-
-      const timestamp = items.t;
-      const signature = items.v1;
-
-      if (!timestamp || !signature) {
-        return null;
-      }
-
-      const payload = `${timestamp}.${rawBody.toString()}`;
-      const expectedSignature = crypto
-        .createHmac('sha256', this.webhookSecret)
-        .update(payload)
-        .digest('hex');
-
-      if (crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))) {
-        return JSON.parse(rawBody.toString()) as Record<string, unknown>;
-      }
+      return Stripe.webhooks.constructEvent(rawBody, signatureHeader, secret);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'erreur inconnue';
       this.logger.warn(`Signature Webhook Stripe non vérifiée : ${message}`);
+      throw new BadRequestException('Signature Stripe invalide.');
     }
-
-    return null;
   }
 }

@@ -27,7 +27,10 @@ import { PaymentProvider } from '@prisma/client';
  *  9. handleCinetPayWebhook — PENDING → échéance inchangée
  * 10. handleCinetPayWebhook — transaction inconnue → ignoré
  * 11. handleCinetPayWebhook — indisponibilité CinetPay → rejet, jamais PAYE
- * 12. handleStripeWebhook — événement non checkout.session.completed → ignoré
+ * 12. handleStripeWebhook — signature invalide (constructEvent lève) → propagé, aucune lecture DB
+ * 13. handleStripeWebhook — désaccord de montant (amount_total ≠ échéance convertie en EUR) → jamais PAYE
+ * 14. handleStripeWebhook — événements d'échec (session expirée, carte refusée, annulé) → échéance inchangée
+ * 15. initiatePayment STRIPE — échéance XOF convertie en centimes EUR avant appel Stripe
  */
 
 // ────────────────────────────────────────────────────────────
@@ -253,7 +256,7 @@ describe('PaymentService', () => {
       expect(cinetPayClient.createPaymentSession).toHaveBeenCalled();
     });
 
-    it('devrait initier un paiement Stripe et retourner une checkoutUrl', async () => {
+    it('devrait initier un paiement Stripe en EUR (montant converti en centimes) et retourner une checkoutUrl', async () => {
       prisma.paymentInstallment.findUniqueOrThrow.mockResolvedValue({
         ...mockInstallmentBase,
         status: 'EN_ATTENTE',
@@ -265,7 +268,16 @@ describe('PaymentService', () => {
       expect(result).toHaveProperty('paymentUrl');
       expect(result).toHaveProperty('sessionId');
       expect(result.provider).toBe('STRIPE');
-      expect(stripeClient.createCheckoutSession).toHaveBeenCalled();
+
+      // Le service convertit l'échéance XOF en centimes EUR avant d'appeler
+      // Stripe (500 000 XOF = 762,245 € = 76225 centimes à 655,957 XOF/EUR).
+      expect(stripeClient.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amountEurCents: 76225,
+          installmentId: 'inst-001',
+          customerEmail: 'kofi@test.tg',
+        }),
+      );
     });
 
     it('devrait rejeter un provider inconnu', async () => {
@@ -473,9 +485,12 @@ describe('PaymentService', () => {
   // ──────────────────────────────────────────────────
 
   describe('handleStripeWebhook', () => {
-    it('devrait rejeter si la signature est invalide (constructEvent null)', async () => {
-      // La signature n'est jamais contournée, même hors production.
-      stripeClient.constructEvent.mockReturnValue(null);
+    it('devrait propager le rejet de signature (constructEvent lève) sans toucher la base', async () => {
+      // La vérification est STRICTEMENT faite par le client (constructEvent) :
+      // une signature invalide lève BadRequestException avant tout traitement.
+      stripeClient.constructEvent.mockImplementationOnce(() => {
+        throw new BadRequestException('Signature Stripe invalide.');
+      });
 
       const rawBody = JSON.stringify({ type: 'checkout.session.completed', data: { object: {} } });
 
@@ -483,6 +498,7 @@ describe('PaymentService', () => {
         BadRequestException,
       );
       expect(prisma.paymentInstallment.findUnique).not.toHaveBeenCalled();
+      expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
     });
 
     it('devrait ignorer les événements Stripe non checkout.session.completed', async () => {
@@ -496,13 +512,38 @@ describe('PaymentService', () => {
       expect(prisma.paymentInstallment.findUnique).not.toHaveBeenCalled();
     });
 
-    it('devrait traiter un événement checkout.session.completed valide', async () => {
+    it.each([
+      ['checkout.session.expired'],
+      ['payment_intent.payment_failed'],
+      ['payment_intent.canceled'],
+    ])(
+      "devrait laisser l'échéance inchangée sur un événement d'échec (%s)",
+      async (eventType) => {
+        stripeClient.constructEvent.mockReturnValue({
+          type: eventType,
+          id: 'evt_echec',
+          data: { object: { id: 'cs_test_000' } },
+        });
+
+        await service.handleStripeWebhook('raw-body', 'sig_test');
+
+        // Jamais de marquage PAYE sur un échec.
+        expect(prisma.paymentInstallment.findUnique).not.toHaveBeenCalled();
+        expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
+        expect(reservationService.confirmReservation).not.toHaveBeenCalled();
+        expect(notificationService.notifyUser).not.toHaveBeenCalled();
+      },
+    );
+
+    it('devrait traiter un événement checkout.session.completed avec montant conforme', async () => {
       stripeClient.constructEvent.mockReturnValue({
         type: 'checkout.session.completed',
         data: {
           object: {
             id: 'cs_test_001',
             payment_intent: 'pi_test_001',
+            // 500 000 XOF = 76225 centimes EUR (garde-fou montant R6)
+            amount_total: 76225,
             metadata: { installmentId: 'inst-001' },
           },
         },
@@ -516,6 +557,9 @@ describe('PaymentService', () => {
 
       await service.handleStripeWebhook('raw-body', 'sig_test');
 
+      expect(prisma.paymentInstallment.findUnique).toHaveBeenCalledWith({
+        where: { id: 'inst-001' },
+      });
       expect(prisma.paymentInstallment.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'inst-001' },
@@ -528,6 +572,31 @@ describe('PaymentService', () => {
       );
     });
 
+    it('désaccord de montant : jamais PAYE si amount_total != montant attendu', async () => {
+      stripeClient.constructEvent.mockReturnValue({
+        type: 'checkout.session.completed',
+        data: {
+          object: {
+            id: 'cs_test_003',
+            payment_intent: 'pi_test_003',
+            amount_total: 99999,
+            metadata: { installmentId: 'inst-001' },
+          },
+        },
+      });
+
+      prisma.paymentInstallment.findUnique.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+      });
+
+      await service.handleStripeWebhook('raw-body', 'sig_test');
+
+      expect(prisma.paymentInstallment.update).not.toHaveBeenCalled();
+      expect(reservationService.confirmReservation).not.toHaveBeenCalled();
+      expect(notificationService.notifyUser).not.toHaveBeenCalled();
+    });
+
     it('devrait rejeter si metadata.installmentId manquant dans la session Stripe', async () => {
       stripeClient.constructEvent.mockReturnValue({
         type: 'checkout.session.completed',
@@ -535,6 +604,7 @@ describe('PaymentService', () => {
           object: {
             id: 'cs_test_002',
             payment_intent: 'pi_test_002',
+            amount_total: 76225,
             metadata: {},
           },
         },

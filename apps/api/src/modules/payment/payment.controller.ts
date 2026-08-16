@@ -8,6 +8,7 @@ import {
   UseGuards,
   Req,
   RawBodyRequest,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
@@ -68,17 +69,20 @@ export class PaymentController {
 
   /**
    * Webhook Stripe — nécessite le rawBody (non parsé) pour vérifier la
-   * signature HMAC ; s'assurer que le middleware Express est configuré
-   * avec `express.raw()` sur cette route spécifique, avant tout body-parser JSON global.
+   * signature HMAC via le SDK officiel. `rawBody: true` est configuré dans
+   * main.ts : s'il manque, c'est une erreur de serveur (503) — on ne
+   * re-sérialise JAMAIS le body parsé (la signature ne correspondrait pas).
    */
   @SkipThrottle()
   @Post('webhooks/stripe')
   async stripeWebhook(
     @Req() req: RawBodyRequest<Request>,
-    @Headers('stripe-signature') signature: string,
+    @Headers('stripe-signature') signature: string | undefined,
   ) {
-    const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
-    await this.paymentService.handleStripeWebhook(rawBody, signature);
+    if (!req.rawBody) {
+      throw new ServiceUnavailableException('rawBody non configuré pour le webhook Stripe.');
+    }
+    await this.paymentService.handleStripeWebhook(req.rawBody, signature);
     return { received: true };
   }
 }

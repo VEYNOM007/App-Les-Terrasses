@@ -27,7 +27,7 @@ import {
  *
  * Routes testées :
  *   POST   /v1/payments/installments/:id/pay     (JWT requis)
- *   POST   /v1/payments/webhooks/cinetpay        (pas de JWT, signature)
+ *   POST   /v1/payments/webhooks/cinetpay        (pas de JWT, vérification serveur-à-serveur)
  *   POST   /v1/payments/webhooks/stripe          (pas de JWT, signature)
  *
  * Overrides :
@@ -46,7 +46,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
 
   let cinetPayClient: {
     createPaymentSession: jest.Mock;
-    verifySignature: jest.Mock;
+    checkPaymentStatus: jest.Mock;
   };
   let stripeClient: {
     createCheckoutSession: jest.Mock;
@@ -60,7 +60,12 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
         paymentUrl: 'https://checkout.cinetpay.com/demo/tx-1',
         transactionId: 'tx-1',
       }),
-      verifySignature: jest.fn().mockReturnValue(true),
+      checkPaymentStatus: jest.fn().mockResolvedValue({
+        code: '00',
+        status: 'ACCEPTED',
+        amount: '500000',
+        currency: 'XOF',
+      }),
     };
     stripeClient = {
       createCheckoutSession: jest.fn().mockResolvedValue({
@@ -112,7 +117,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
   beforeEach(async () => {
     await cleanupTestDatabase();
     cinetPayClient.createPaymentSession.mockClear();
-    cinetPayClient.verifySignature.mockClear();
+    cinetPayClient.checkPaymentStatus.mockClear();
     stripeClient.createCheckoutSession.mockClear();
     stripeClient.constructEvent.mockClear();
     reservationService.confirmReservation.mockClear();
@@ -214,7 +219,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
   // POST /v1/payments/webhooks/cinetpay
   // ──────────────────────────────────────────────────
 
-  it('POST /payments/webhooks/cinetpay avec payload valide -> 200 + installment PAYE', async () => {
+  it('POST /payments/webhooks/cinetpay : vérification ACCEPTED + montant cohérent -> 201 + installment PAYE', async () => {
     const user = await createUserFixture();
     const { units } = await createProjectWithBlockAndUnits(1);
     const { schedule } = await createReservationWithSchedule({
@@ -222,16 +227,21 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
       unitId: units[0].id,
     });
     const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
-    cinetPayClient.verifySignature.mockReturnValueOnce(true);
+    // La transaction doit exister côté échéance (providerRef = cpm_trans_id)
+    await testPrisma.paymentInstallment.update({
+      where: { id: installment.id },
+      data: { providerRef: 'cpm-e2e-123' },
+    });
+    cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+      code: '00',
+      status: 'ACCEPTED',
+      amount: String(installment.amount),
+      currency: 'XOF',
+    });
 
     const res = await request(app.getHttpServer())
       .post(`/${API_PREFIX}/payments/webhooks/cinetpay`)
-      .set('x-cinetpay-signature', 'valid-signature')
-      .send({
-        cpm_trans_id: 'cpm-123',
-        cpm_result: '00',
-        metadata: { installmentId: installment.id },
-      });
+      .send({ cpm_trans_id: 'cpm-e2e-123' });
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ received: true });
@@ -240,9 +250,10 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
       where: { id: installment.id },
     });
     expect(updated.status).toBe('PAYE');
+    expect(updated.providerRef).toBe('cpm-e2e-123');
   });
 
-  it('POST /payments/webhooks/cinetpay rejette une signature invalide (pas de bypass dev)', async () => {
+  it('POST /payments/webhooks/cinetpay : désaccord webhook/vérification (REFUSED) -> 201 mais installment inchangé', async () => {
     const user = await createUserFixture();
     const { units } = await createProjectWithBlockAndUnits(1);
     const { schedule } = await createReservationWithSchedule({
@@ -250,25 +261,69 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
       unitId: units[0].id,
     });
     const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
-
-    // verifySignature retourne false -> signature invalide. Le webhook est
-    // TOUJOURS rejeté, quel que soit NODE_ENV (plus de comportement dev).
-    cinetPayClient.verifySignature.mockReturnValueOnce(false);
+    await testPrisma.paymentInstallment.update({
+      where: { id: installment.id },
+      data: { providerRef: 'cpm-e2e-refused' },
+    });
+    cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+      code: '627',
+      status: 'REFUSED',
+      amount: String(installment.amount),
+      currency: 'XOF',
+    });
 
     const res = await request(app.getHttpServer())
       .post(`/${API_PREFIX}/payments/webhooks/cinetpay`)
-      .send({
-        cpm_trans_id: 'cpm-123',
-        cpm_result: '00',
-        metadata: { installmentId: installment.id },
-      });
+      .send({ cpm_trans_id: 'cpm-e2e-refused' });
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ received: true });
 
     const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
       where: { id: installment.id },
     });
     expect(updated.status).toBe('EN_ATTENTE');
+  });
+
+  it('POST /payments/webhooks/cinetpay : désaccord de montant -> 201 mais jamais PAYE', async () => {
+    const user = await createUserFixture();
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const { schedule } = await createReservationWithSchedule({
+      userId: user.id,
+      unitId: units[0].id,
+    });
+    const installment = schedule.installments.find((i) => i.label === 'Tranche fondations')!;
+    await testPrisma.paymentInstallment.update({
+      where: { id: installment.id },
+      data: { providerRef: 'cpm-e2e-amount' },
+    });
+    cinetPayClient.checkPaymentStatus.mockResolvedValueOnce({
+      code: '00',
+      status: 'ACCEPTED',
+      amount: '999999',
+      currency: 'XOF',
+    });
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/payments/webhooks/cinetpay`)
+      .send({ cpm_trans_id: 'cpm-e2e-amount' });
+
+    expect(res.status).toBe(201);
+
+    const updated = await testPrisma.paymentInstallment.findUniqueOrThrow({
+      where: { id: installment.id },
+    });
+    expect(updated.status).toBe('EN_ATTENTE');
+  });
+
+  it('POST /payments/webhooks/cinetpay : transaction inconnue -> 201, aucun rappel de vérification', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/payments/webhooks/cinetpay`)
+      .send({ cpm_trans_id: 'cpm-e2e-inconnu' });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ received: true });
+    expect(cinetPayClient.checkPaymentStatus).not.toHaveBeenCalled();
   });
 
   // ──────────────────────────────────────────────────

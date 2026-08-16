@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import type Stripe from 'stripe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
@@ -10,6 +11,7 @@ import {
   DEFAULT_INSTALLMENT_PLAN,
   DEFAULT_DOWN_PAYMENT_PERCENT,
 } from '../../common/payment/installment-plan';
+import { convertXofToEurCents, resolveXofToEurRate } from '../../common/payment/eur-conversion';
 
 /**
  * Contract minimal d'un webhook CinetPay — seuls les champs lus par le
@@ -161,10 +163,15 @@ export class PaymentService {
 
     if (provider === PaymentProvider.STRIPE) {
       const user = installment.schedule.reservation.user;
+      // Stripe facture en EUR pour la diaspora : les échéances restent en
+      // XOF (prix catalogue), la conversion EUR n'intervient qu'ici.
+      const amountEurCents = convertXofToEurCents(
+        Number(installment.amount),
+        resolveXofToEurRate(),
+      );
       const session = await this.stripeClient.createCheckoutSession({
         transactionId,
-        amount: Number(installment.amount),
-        currency: installment.schedule.currency,
+        amountEurCents,
         description: `Paiement ${installment.label} - Résidence Baguida`,
         installmentId: installment.id,
         customerEmail: user.email,
@@ -288,42 +295,69 @@ export class PaymentService {
   }
 
   /**
-   * Webhook Stripe — la signature est TOUJOURS vérifiée via constructEvent()
-   * (pas de fallback sur le body brut). L'événement non vérifié est rejeté.
+   * Webhook Stripe — la signature HMAC est STRICTEMENT vérifiée via le SDK
+   * officiel (stripe.webhooks.constructEvent). Un événement non vérifié est
+   * rejeté avant tout traitement. Le payload signé EST la source de vérité
+   * (pas de rappel serveur-à-serveur, contrairement à CinetPay) : on traite
+   * checkout.session.completed avec un garde-fou de montant (amount_total
+   * recalculé en EUR depuis l'échéance), et on ne valide jamais un échec
+   * (session expirée, carte refusée, paiement annulé).
    */
-  async handleStripeWebhook(rawBody: Buffer | string, signatureHeader: string) {
+  async handleStripeWebhook(rawBody: Buffer | string, signatureHeader: string | undefined) {
     const event = this.stripeClient.constructEvent(rawBody, signatureHeader);
 
-    if (!event) {
-      throw new BadRequestException('Signature Stripe invalide.');
-    }
-
-    // Le client retourne un objet JSON non typé (Record<string, unknown>) ;
-    // on restreint au sous-ensemble lu ici, en tant que type (pas de `any`).
-    const checkoutSession = event as {
-      type?: string;
-      data?: {
-        object?: { metadata?: { installmentId?: string }; payment_intent?: string; id?: string };
-      };
-    };
-
-    if (checkoutSession.type !== 'checkout.session.completed') {
+    if (event.type !== 'checkout.session.completed') {
+      if (
+        event.type === 'checkout.session.expired' ||
+        event.type === 'payment_intent.payment_failed' ||
+        event.type === 'payment_intent.canceled'
+      ) {
+        this.logger.warn(
+          `Paiement Stripe ${event.id} (${event.type}) — échéance inchangée, aucun paiement validé.`,
+        );
+      }
       return;
     }
 
-    const session = checkoutSession.data?.object;
-    const installmentId = session?.metadata?.installmentId;
+    const session = event.data.object as Stripe.Checkout.Session;
+    const installmentId = session.metadata?.installmentId;
     if (!installmentId) {
       throw new BadRequestException('metadata.installmentId manquant dans le webhook Stripe.');
     }
 
+    const installment = await this.prisma.paymentInstallment.findUnique({
+      where: { id: installmentId },
+    });
+    if (!installment) {
+      this.logger.warn(
+        `Webhook Stripe ignoré : échéance ${installmentId} introuvable pour la session ${session.id}.`,
+      );
+      return;
+    }
+
+    // Garde-fou montant : Stripe doit avoir débité EXACTEMENT le montant EUR
+    // correspondant à l'échéance (taux XOF→EUR). Désaccord ⇒ jamais PAYE.
+    const expectedEurCents = convertXofToEurCents(
+      Number(installment.amount),
+      resolveXofToEurRate(),
+    );
+    if (session.amount_total !== expectedEurCents) {
+      this.logger.error(
+        `Webhook Stripe refusé : montant débité ${session.amount_total} EUR cents != montant attendu ${expectedEurCents} pour l'échéance ${installment.id}.`,
+      );
+      return;
+    }
+
     // Stripe garantit un `id` sur toute session checkout ; il sert de
-    // fallback si payment_intent est absent.
-    const providerRef = session?.payment_intent ?? session?.id;
+    // fallback si payment_intent est absent (async payment methods). On
+    // n'utilise que la forme string (jamais l'objet étendu).
+    const paymentIntentId =
+      typeof session.payment_intent === 'string' ? session.payment_intent : null;
+    const providerRef = paymentIntentId ?? session.id;
     if (!providerRef) {
       throw new BadRequestException('Référence de session Stripe manquante.');
     }
 
-    await this.markInstallmentPaid(installmentId, PaymentProvider.STRIPE, providerRef);
+    await this.markInstallmentPaid(installment.id, PaymentProvider.STRIPE, providerRef);
   }
 }

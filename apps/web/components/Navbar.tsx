@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Smartphone, CheckCircle, User, LogOut } from 'lucide-react';
+import { Smartphone, CheckCircle, User, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
 export default function Navbar() {
@@ -46,6 +46,14 @@ export default function Navbar() {
             <span className="font-mono text-xs text-paper/50">…</span>
           ) : user ? (
             <div className="flex items-center gap-2">
+              {user.role === 'ADMIN' && (
+                <a
+                  href="/admin"
+                  className="inline-flex items-center gap-1.5 font-mono text-xs border border-laterite/40 bg-laterite/15 text-laterite-light px-3 py-2 rounded-sm hover:bg-laterite/25 transition-all"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" /> Admin
+                </a>
+              )}
               <a
                 href="/suivi"
                 className="inline-flex items-center gap-1.5 font-mono text-xs border border-lagoon/40 bg-lagoon/15 text-lagoon-light px-3 py-2 rounded-sm hover:bg-lagoon/25 transition-all"

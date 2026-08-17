@@ -1,11 +1,11 @@
-import { Injectable, ConflictException, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, ForbiddenException, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
 import bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
 import { StorageService } from '../../common/storage/storage.service';
-import { DocumentType, KycStatus } from '@prisma/client';
+import { DocumentType, KycStatus, UserRole } from '@prisma/client';
 
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 30;
@@ -56,6 +56,40 @@ export class AuthService {
         passwordHash,
         fullName: data.fullName,
         country: data.country ?? 'TG',
+      },
+    });
+
+    return this.issueTokens(user);
+  }
+
+  /**
+   * Setup du premier administrateur. Ne fonctionne qu'une seule fois :
+   * si un ADMIN existe déjà en base, la requête est rejetée.
+   *
+   * Pattern "first-run" (WordPress, Ghost, etc.) : pas de clé secrète
+   * côté client, pas de variable d'env à configurer. L'endpoint est
+   * inoffensif tant qu'il y a déjà un admin.
+   */
+  async setupAdmin(data: { email: string; phone: string; password: string; fullName: string; country?: string }) {
+    const adminCount = await this.prisma.user.count({ where: { role: UserRole.ADMIN } });
+    if (adminCount > 0) {
+      throw new ForbiddenException('Un administrateur existe déjà. Utilisez la page de connexion.');
+    }
+
+    const existing = await this.prisma.user.findFirst({
+      where: { OR: [{ email: data.email }, { phone: data.phone }] },
+    });
+    if (existing) throw new ConflictException('Email ou téléphone déjà utilisé.');
+
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        email: data.email,
+        phone: data.phone,
+        passwordHash,
+        fullName: data.fullName,
+        country: data.country ?? 'TG',
+        role: UserRole.ADMIN,
       },
     });
 

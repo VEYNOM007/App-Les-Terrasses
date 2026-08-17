@@ -20,6 +20,7 @@ import { CurrentUser } from './current-user.decorator';
 import { AuthUser } from './auth-user.interface';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { SetupDto } from './dto/setup.dto';
 import { KycUploadDto } from './dto/kyc-upload.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -91,6 +92,14 @@ export class AuthController {
   @Post('register')
   async register(@Body() body: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const tokens = await this.authService.register(body);
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+    return { user: tokens.user };
+  }
+
+  @Post('setup')
+  @HttpCode(HttpStatus.CREATED)
+  async setup(@Body() body: SetupDto, @Res({ passthrough: true }) res: Response) {
+    const tokens = await this.authService.setupAdmin(body);
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     return { user: tokens.user };
   }

@@ -69,6 +69,19 @@ export function register(data: {
   });
 }
 
+export function setup(data: {
+  email: string;
+  phone: string;
+  password: string;
+  fullName: string;
+  country?: string;
+}): Promise<AuthResponse> {
+  return apiFetch<AuthResponse>('/v1/auth/setup', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export function logout(): Promise<{ success: boolean }> {
   return apiFetch<{ success: boolean }>('/v1/auth/logout', { method: 'POST' });
 }

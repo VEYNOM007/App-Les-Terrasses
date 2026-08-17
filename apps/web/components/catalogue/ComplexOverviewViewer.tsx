@@ -508,18 +508,24 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, resi
           <span className="text-paper/50 block text-[10px] uppercase">Terrain Global</span>
           <span className="font-bold text-paper text-sm">{residenceInfo.totalLandArea}</span>
         </div>
-        <div className="p-3.5 text-center">
-          <span className="text-paper/50 block text-[10px] uppercase">Livraison Estimée</span>
-          <span className="font-bold text-sand text-sm">{residenceInfo.deliveryDate}</span>
-        </div>
-        <div className="p-3.5 text-center">
-          <span className="text-paper/50 block text-[10px] uppercase">Notaire Référant</span>
-          <span className="font-bold text-paper text-sm">{residenceInfo.notaryName}</span>
-        </div>
-        <div className="p-3.5 text-center">
-          <span className="text-paper/50 block text-[10px] uppercase">Garantie Vente</span>
-          <span className="font-bold text-lagoon-light text-sm">{residenceInfo.escrowBank}</span>
-        </div>
+        {residenceInfo.deliveryDate && (
+          <div className="p-3.5 text-center">
+            <span className="text-paper/50 block text-[10px] uppercase">Livraison Estimée</span>
+            <span className="font-bold text-sand text-sm">{residenceInfo.deliveryDate}</span>
+          </div>
+        )}
+        {residenceInfo.notaryName && (
+          <div className="p-3.5 text-center">
+            <span className="text-paper/50 block text-[10px] uppercase">Notaire Référant</span>
+            <span className="font-bold text-paper text-sm">{residenceInfo.notaryName}</span>
+          </div>
+        )}
+        {residenceInfo.escrowBank && (
+          <div className="p-3.5 text-center">
+            <span className="text-paper/50 block text-[10px] uppercase">Garantie Vente</span>
+            <span className="font-bold text-lagoon-light text-sm">{residenceInfo.escrowBank}</span>
+          </div>
+        )}
       </div>
     </div>
   );

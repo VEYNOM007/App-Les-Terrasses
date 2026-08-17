@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, BadRequestException } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import * as request from 'supertest';
+import request from 'supertest';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { AuthModule } from '../auth/auth.module';
 import { PaymentController } from './payment.controller';

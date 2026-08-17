@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { AuthModule } from '../auth/auth.module';
 import { ReservationController } from './reservation.controller';

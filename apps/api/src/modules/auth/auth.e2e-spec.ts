@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as cookieParser from 'cookie-parser';
-import * as request from 'supertest';
+import cookieParser from 'cookie-parser';
+import request from 'supertest';
 import { AuthModule } from './auth.module';
 import { EmailService } from '../../common/email/email.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';

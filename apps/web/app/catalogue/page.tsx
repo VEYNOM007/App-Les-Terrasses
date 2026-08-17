@@ -49,9 +49,9 @@ export default function CataloguePage() {
           location: marketing?.location ?? publishedProject.location,
           titleDeed: marketing?.titleDeed ?? previous.titleDeed,
           totalLandArea: marketing?.totalLandArea ?? previous.totalLandArea,
-          deliveryDate: marketing?.deliveryDate ?? previous.deliveryDate,
-          notaryName: marketing?.notaryName ?? previous.notaryName,
-          escrowBank: marketing?.escrowBank ?? previous.escrowBank,
+          deliveryDate: marketing?.deliveryDate || previous.deliveryDate,
+          notaryName: marketing?.notaryName || previous.notaryName,
+          escrowBank: marketing?.escrowBank || previous.escrowBank,
           views: publishedProject.views ?? [],
         }));
       })

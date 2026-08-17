@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { ComplexInfo, ComplexView, Unit3DDetails } from '../../lib/catalogData';
 import { resolveHotspotTarget } from '../../lib/catalog/viewer-hotspots';
+import { selectActiveView } from '../../lib/catalog/overview-view';
 import {
   Eye,
   Sparkles,
@@ -451,7 +452,15 @@ function AerialPhotoView({
 // ─────────────────────────────────────────────────────────────
 export default function ComplexOverviewViewer({ views, units, blockTargets, residenceInfo, onSelectUnit }: ComplexOverviewViewerProps) {
   const [activeViewId, setActiveViewId] = useState<string>('view-masterplan');
-  const activeView = views.find((v) => v.id === activeViewId) || views[0];
+  const activeView = selectActiveView(views, activeViewId);
+
+  if (!activeView) {
+    return (
+      <div className="bg-ink-card border border-paper/20 rounded-2xl overflow-hidden shadow-2xl p-8 text-center">
+        <p className="text-paper/50 font-mono text-sm">Aucune vue disponible pour cette résidence.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-ink-card border border-paper/20 rounded-2xl overflow-hidden shadow-2xl">

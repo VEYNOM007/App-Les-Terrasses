@@ -88,6 +88,9 @@ export default function AdminCataloguePage() {
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState<string>('');
   const [statusInput, setStatusInput] = useState<UnitStatus>('DISPONIBLE');
+  const [descInput, setDescInput] = useState('');
+  const [highlightsInput, setHighlightsInput] = useState('');
+  const [virtualTourInput, setVirtualTourInput] = useState('');
   const [savingUnit, setSavingUnit] = useState(false);
   const [unitActionError, setUnitActionError] = useState('');
   const [unitActionSuccess, setUnitActionSuccess] = useState('');
@@ -106,6 +109,9 @@ export default function AdminCataloguePage() {
   const [newSurface, setNewSurface] = useState('');
   const [newFloor, setNewFloor] = useState('');
   const [newPrice, setNewPrice] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newHighlights, setNewHighlights] = useState('');
+  const [newVirtualTour, setNewVirtualTour] = useState('');
   const [addingUnit, setAddingUnit] = useState(false);
   const [addUnitError, setAddUnitError] = useState('');
   const [addUnitSuccess, setAddUnitSuccess] = useState('');
@@ -193,6 +199,9 @@ export default function AdminCataloguePage() {
     setSelectedUnitId(unit.id);
     setPriceInput(unit.price);
     setStatusInput(unit.status);
+    setDescInput(unit.marketingDescription ?? '');
+    setHighlightsInput(unit.highlights?.join(', ') ?? '');
+    setVirtualTourInput(unit.virtualTourUrl ?? '');
     setUnitActionError('');
     setUnitActionSuccess('');
     setMediaActionError('');
@@ -209,13 +218,26 @@ export default function AdminCataloguePage() {
       if (!Number.isFinite(price) || price < 0) {
         throw new Error('Le prix doit être un montant positif.');
       }
-      await adminUpdateUnit(selectedUnit.id, { price, status: statusInput });
+      const highlights = highlightsInput
+        .split(',')
+        .map((h) => h.trim())
+        .filter(Boolean);
+      await adminUpdateUnit(selectedUnit.id, {
+        price,
+        status: statusInput,
+        marketingDescription: descInput.trim() || undefined,
+        highlights,
+        virtualTourUrl: virtualTourInput.trim() || undefined,
+      });
       const refreshed = await refreshSelectedUnit(selectedUnit.id);
       if (refreshed) {
         setPriceInput(refreshed.price);
         setStatusInput(refreshed.status);
+        setDescInput(refreshed.marketingDescription ?? '');
+        setHighlightsInput(refreshed.highlights?.join(', ') ?? '');
+        setVirtualTourInput(refreshed.virtualTourUrl ?? '');
       }
-      setUnitActionSuccess('Prix et statut enregistrés (base de données).');
+      setUnitActionSuccess('Unité enregistrée (prix, statut, description, points forts, visite virtuelle).');
     } catch (e) {
       setUnitActionError(e instanceof Error ? e.message : 'Échec de la sauvegarde.');
     } finally {
@@ -304,13 +326,29 @@ export default function AdminCataloguePage() {
       if (!Number.isFinite(price) || price < 0) {
         throw new Error('Le prix doit être un montant positif.');
       }
-      const created = await adminCreateUnit({ blockId: newBlockId, type: newUnitType, surface, floor, price });
+      const highlights = newHighlights
+        .split(',')
+        .map((h) => h.trim())
+        .filter(Boolean);
+      const created = await adminCreateUnit({
+        blockId: newBlockId,
+        type: newUnitType,
+        surface,
+        floor,
+        price,
+        marketingDescription: newDesc.trim() || undefined,
+        highlights,
+        virtualTourUrl: newVirtualTour.trim() || undefined,
+      });
       await loadApiUnits();
       setSelectedUnitId(created.id);
       setAddMode(false);
       setNewSurface('');
       setNewFloor('');
       setNewPrice('');
+      setNewDesc('');
+      setNewHighlights('');
+      setNewVirtualTour('');
       setAddUnitSuccess(`Unité ${created.id} ajoutée au bloc.`);
     } catch (e) {
       setAddUnitError(e instanceof Error ? e.message : 'Impossible d’ajouter l’unité.');
@@ -558,6 +596,36 @@ export default function AdminCataloguePage() {
                     className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
                   />
                 </div>
+                <div className="md:col-span-2">
+                  <label className="block text-paper/70 mb-1">Description marketing</label>
+                  <textarea
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    placeholder="ex : T3 lumineux avec salon ouvert, 3 chambres, cuisine équipée, vue panoramique…"
+                    rows={3}
+                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none resize-y"
+                  />
+                </div>
+                <div>
+                  <label className="block text-paper/70 mb-1">Points forts (séparés par virgules)</label>
+                  <input
+                    type="text"
+                    value={newHighlights}
+                    onChange={(e) => setNewHighlights(e.target.value)}
+                    placeholder="ex : Terrasse 12m², Double parking, Calme"
+                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-paper/70 mb-1">Lien visite virtuelle 360°</label>
+                  <input
+                    type="url"
+                    value={newVirtualTour}
+                    onChange={(e) => setNewVirtualTour(e.target.value)}
+                    placeholder="https://…"
+                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
+                  />
+                </div>
               </div>
 
               {addUnitError && (
@@ -717,6 +785,37 @@ export default function AdminCataloguePage() {
                       </div>
                     </div>
 
+                    <div>
+                      <label className="block text-paper/70 mb-1 font-mono text-xs">Description marketing</label>
+                      <textarea
+                        value={descInput}
+                        onChange={(e) => setDescInput(e.target.value)}
+                        placeholder="Description du logement pour les acheteurs…"
+                        rows={3}
+                        className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none resize-y font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-paper/70 mb-1 font-mono text-xs">Points forts (séparés par virgules)</label>
+                      <input
+                        type="text"
+                        value={highlightsInput}
+                        onChange={(e) => setHighlightsInput(e.target.value)}
+                        placeholder="ex : Terrasse 12m², Double parking, Calme"
+                        className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-paper/70 mb-1 font-mono text-xs">Lien visite virtuelle 360°</label>
+                      <input
+                        type="url"
+                        value={virtualTourInput}
+                        onChange={(e) => setVirtualTourInput(e.target.value)}
+                        placeholder="https://…"
+                        className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none font-mono text-xs"
+                      />
+                    </div>
+
                     {unitActionError && (
                       <div className="bg-laterite/15 border border-laterite/40 rounded p-3 flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 text-laterite-light shrink-0" />
@@ -741,7 +840,7 @@ export default function AdminCataloguePage() {
                         </>
                       ) : (
                         <>
-                          <Save className="w-4 h-4" /> Enregistrer (prix & statut)
+                          <Save className="w-4 h-4" /> Enregistrer l'unité
                         </>
                       )}
                     </button>

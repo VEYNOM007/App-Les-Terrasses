@@ -480,6 +480,9 @@ export interface AdminUnitCreate {
   price: number;
   currency?: string;
   status?: UnitStatus;
+  marketingDescription?: string;
+  highlights?: string[];
+  virtualTourUrl?: string;
 }
 
 /**

@@ -13,7 +13,12 @@ export class PortalService {
     const reservations = await this.prisma.reservation.findMany({
       where: { userId },
       include: {
-        unit: { include: { block: true } },
+        unit: {
+          include: {
+            block: true,
+            media: { orderBy: { sortOrder: 'asc' } },
+          },
+        },
         paymentSchedule: { include: { installments: true } },
       },
     });

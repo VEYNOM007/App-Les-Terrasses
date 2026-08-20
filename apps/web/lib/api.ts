@@ -559,6 +559,10 @@ export interface PortalDashboard {
     surface: number;
     price: string;
     floor: number;
+    marketingDescription: string | null;
+    highlights: string[];
+    virtualTourUrl: string | null;
+    media: UnitMedia[];
     block: { name: string; progressPercent: number; constructionPhase: string };
   };
   constructionProgress: number;

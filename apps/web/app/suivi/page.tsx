@@ -15,6 +15,8 @@ import {
   Home,
   FileText,
   PenLine,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import SignaturePad from '../../components/SignaturePad';
@@ -231,6 +233,58 @@ export default function SuiviAcquereur() {
                     Lot {unit.block.name} — {unit.block.constructionPhase}
                   </span>
                 </div>
+
+                {(unit.marketingDescription || unit.highlights.length > 0 || unit.media.length > 0) && (
+                  <div className="bg-ink-card border border-paper/20 rounded-md p-6">
+                    <h3 className="font-serif text-xl font-semibold text-paper mb-4 flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-sand" /> Votre Logement
+                    </h3>
+
+                    <div className="flex flex-col md:flex-row gap-6">
+                      {unit.media.length > 0 && (
+                        <div className="md:w-2/5 shrink-0">
+                          <img
+                            src={unit.media[0].url}
+                            alt={unit.media[0].altText || `Rendu ${unit.type}`}
+                            className="w-full h-48 md:h-56 object-cover rounded border border-paper/15"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex-1 space-y-4">
+                        {unit.marketingDescription && (
+                          <p className="text-sm text-paper/80 font-mono leading-relaxed">
+                            {unit.marketingDescription}
+                          </p>
+                        )}
+
+                        {unit.highlights.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {unit.highlights.map((h) => (
+                              <span
+                                key={h}
+                                className="inline-flex items-center gap-1 bg-lagoon/15 text-lagoon-light border border-lagoon/30 px-2.5 py-1 rounded text-xs font-mono"
+                              >
+                                <CheckCircle2 className="w-3 h-3" /> {h}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {unit.virtualTourUrl && (
+                          <a
+                            href={unit.virtualTourUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-xs font-mono text-sand hover:text-sand/80 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> Visite virtuelle 360°
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   <div className="lg:col-span-4 bg-ink-card border border-paper/20 rounded-md p-6 space-y-4">

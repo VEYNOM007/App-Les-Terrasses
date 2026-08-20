@@ -158,8 +158,8 @@ async function main() {
         titleDeed: 'RM 100/71 (Titre Foncier Définitif et Libéré)',
         totalLandArea: '6 593 m²',
         deliveryDate: 'Trimestre 4 - 2026',
-        notaryName: 'Étude Maître K. Lawson & Associés (Notaire Agréé)',
-        escrowBank: 'Compte Séquestre Garantia - Ecobank / Coris Bank',
+        notaryName: '',
+        escrowBank: '',
       },
     },
   });

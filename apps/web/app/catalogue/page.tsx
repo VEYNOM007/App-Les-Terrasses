@@ -127,7 +127,7 @@ export default function CataloguePage() {
       </section>
 
       {/* Main Complex Interactive Overview Section — masqué tant qu'aucune vue réelle n'existe */}
-      {catalogData.views.length > 0 && (
+      {project !== null && catalogData.views.length > 0 && (
       <section className="py-12 bg-ink border-b border-paper/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <ComplexOverviewViewer

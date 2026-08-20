@@ -52,7 +52,7 @@ export default function CataloguePage() {
           deliveryDate: marketing?.deliveryDate || previous.deliveryDate,
           notaryName: marketing?.notaryName || previous.notaryName,
           escrowBank: marketing?.escrowBank || previous.escrowBank,
-          views: publishedProject.views ?? [],
+          views: publishedProject.views?.length ? publishedProject.views : previous.views,
         }));
       })
       .catch((e) => console.warn('[catalogue] données résidence indisponibles :', e));

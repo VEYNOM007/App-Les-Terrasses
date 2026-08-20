@@ -52,7 +52,7 @@ export default function CataloguePage() {
           deliveryDate: marketing?.deliveryDate || previous.deliveryDate,
           notaryName: marketing?.notaryName || previous.notaryName,
           escrowBank: marketing?.escrowBank || previous.escrowBank,
-          views: publishedProject.views?.length ? publishedProject.views : previous.views,
+          views: publishedProject.views ?? [],
         }));
       })
       .catch((e) => console.warn('[catalogue] données résidence indisponibles :', e));
@@ -126,7 +126,8 @@ export default function CataloguePage() {
         </div>
       </section>
 
-      {/* Main Complex Interactive Overview Section */}
+      {/* Main Complex Interactive Overview Section — masqué tant qu'aucune vue réelle n'existe */}
+      {catalogData.views.length > 0 && (
       <section className="py-12 bg-ink border-b border-paper/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <ComplexOverviewViewer
@@ -138,6 +139,7 @@ export default function CataloguePage() {
           />
         </div>
       </section>
+      )}
 
       {/* Catalog Filter & Unit Grid Section */}
       <section id="grille-biens" className="py-16 bg-ink-dark/50 border-b border-paper/10 scroll-mt-10">

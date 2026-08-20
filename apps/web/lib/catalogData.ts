@@ -84,7 +84,7 @@ export interface ComplexInfo {
 export const DEFAULT_COMPLEX_DATA: ComplexInfo = {
   name: "Résidence Les Terrasses · Baguida",
   location: "Baguida, Lomé - Togo (à 5 min du Littoral)",
-  titleDeed: "RM 100/71 (Titre Foncier Définitif et Libéré)",
+  titleDeed: "",
   totalLandArea: "6 593 m²",
   deliveryDate: "",
   notaryName: "",

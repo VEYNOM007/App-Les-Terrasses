@@ -154,20 +154,24 @@ export default function CataloguePage() {
       {/* Trust & Legal Reassurance Banner */}
       <section className="py-12 bg-ink border-b border-paper/10 font-mono text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-6">
+          {catalogData.titleDeed && (
           <div className="bg-ink-card p-4 rounded-xl border border-paper/15 flex items-start gap-3">
             <ShieldCheck className="w-6 h-6 text-sand shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-serif text-sm text-paper font-semibold mb-1">Titre Foncier N° RM 100/71</h4>
+              <h4 className="font-serif text-sm text-paper font-semibold mb-1">Titre Foncier N° {catalogData.titleDeed}</h4>
               <p className="text-paper/60 text-[11px]">Terrain purgé de tous droits de mutation, extrait disponible sur demande.</p>
             </div>
           </div>
+          )}
+          {catalogData.notaryName && catalogData.escrowBank && (
           <div className="bg-ink-card p-4 rounded-xl border border-paper/15 flex items-start gap-3">
             <Building className="w-6 h-6 text-laterite-light shrink-0 mt-0.5" />
             <div>
               <h4 className="font-serif text-sm text-paper font-semibold mb-1">Compte Séquestre Notarié</h4>
-              <p className="text-paper/60 text-[11px]">Étude Maître K. Lawson & Associés. Vos fonds sont sécurisés jusqu'aux étapes certifiées.</p>
+              <p className="text-paper/60 text-[11px]">{catalogData.notaryName}. Vos fonds sont sécurisés dans {catalogData.escrowBank}.</p>
             </div>
           </div>
+          )}
           <div className="bg-ink-card p-4 rounded-xl border border-paper/15 flex items-start gap-3">
             <Clock className="w-6 h-6 text-lagoon-light shrink-0 mt-0.5" />
             <div>

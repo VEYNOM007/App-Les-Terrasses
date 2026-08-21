@@ -362,4 +362,93 @@ describe('ProjectModule — e2e HTTP médias admin (supertest)', () => {
 
     expect(res.status).toBe(404);
   });
+
+  // ──────────────────────────────────────────────────
+  // POST /v1/admin/projects/:projectId/image/upload
+  // ──────────────────────────────────────────────────
+
+  it('POST /admin/projects/:projectId/image/upload par un ADMIN -> 201, URL B2 publique', async () => {
+    await createUserFixture({ email: 'admin-pimg1@test.tg', phone: '+22851000020', password: 'Secret123!', role: 'ADMIN' });
+    const { project } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-pimg1@test.tg', 'Secret123!');
+    const fileBuffer = Buffer.from('fake-png-plan-de-masse');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/projects/${project.id}/image/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', fileBuffer, { filename: 'plan-masse.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.url).toMatch(new RegExp(`^${PUBLIC_URL_PREFIX}project-media/[0-9a-f-]+\\.png$`));
+
+    expect(mockStorage.putObjectPublic).toHaveBeenCalledTimes(1);
+    const [key, body, contentType] = mockStorage.putObjectPublic.mock.calls[0];
+    expect(key).toMatch(/^project-media\/[0-9a-f-]+\.png$/);
+    expect(body).toEqual(fileBuffer);
+    expect(contentType).toBe('image/png');
+  });
+
+  it('POST /admin/projects/:projectId/image/upload sans JWT -> 401 Unauthorized', async () => {
+    const { project } = await createProjectWithBlockAndUnits(1);
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/projects/${project.id}/image/upload`)
+      .attach('file', Buffer.from('x'), { filename: 'p.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /admin/projects/:projectId/image/upload par un ACHETEUR -> 403 Forbidden', async () => {
+    await createUserFixture({ email: 'acheteur-pimg@test.tg', phone: '+22851000021', password: 'Secret123!' });
+    const { project } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('acheteur-pimg@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/projects/${project.id}/image/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from('x'), { filename: 'p.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(403);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
+
+  it('POST /admin/projects/:projectId/image/upload sans fichier -> 400', async () => {
+    await createUserFixture({ email: 'admin-pimg2@test.tg', phone: '+22851000022', password: 'Secret123!', role: 'ADMIN' });
+    const { project } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-pimg2@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/projects/${project.id}/image/upload`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
+
+  it('POST /admin/projects/:projectId/image/upload avec MIME interdit -> 400', async () => {
+    await createUserFixture({ email: 'admin-pimg3@test.tg', phone: '+22851000023', password: 'Secret123!', role: 'ADMIN' });
+    const { project } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-pimg3@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/projects/${project.id}/image/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from('not-an-image'), { filename: 'plan.gif', contentType: 'image/gif' });
+
+    expect(res.status).toBe(400);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
+
+  it('POST /admin/projects/:projectId/image/upload projet inexistant -> 404', async () => {
+    await createUserFixture({ email: 'admin-pimg4@test.tg', phone: '+22851000024', password: 'Secret123!', role: 'ADMIN' });
+    const token = await loginAndGetToken('admin-pimg4@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/projects/non-existent-id/image/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from('x'), { filename: 'p.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(404);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
 });

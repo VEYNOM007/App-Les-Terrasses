@@ -18,6 +18,7 @@ const createMockPrisma = () => ({
     create: jest.fn(),
     update: jest.fn(),
     findMany: jest.fn(),
+    findUnique: jest.fn(),
   },
   block: {
     create: jest.fn(),
@@ -391,6 +392,62 @@ describe('ProjectService', () => {
         'base indisponible',
       );
       expect(storage.deleteObjectPublic).toHaveBeenCalledWith(expect.stringMatching(/^unit-media\//));
+    });
+  });
+
+  describe('uploadProjectImage', () => {
+    const mkFile = (mimetype: string, filename: string) =>
+      ({
+        fieldname: 'file',
+        originalname: filename,
+        encoding: '7bit',
+        mimetype,
+        buffer: Buffer.from('fake-bytes'),
+        size: 10,
+      }) as Express.Multer.File;
+
+    it('uploade vers project-media/<uuid>.<ext> et retourne l\'URL publique', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', name: 'Test' });
+
+      const result = await service.uploadProjectImage('proj-1', mkFile('image/png', 'plan.png'));
+
+      expect(prisma.project.findUnique).toHaveBeenCalledWith({ where: { id: 'proj-1' } });
+      expect(storage.putObjectPublic).toHaveBeenCalledTimes(1);
+      const [key, body, contentType] = storage.putObjectPublic.mock.calls[0] as [string, Buffer, string];
+      expect(key).toMatch(/^project-media\/[0-9a-f-]+\.png$/);
+      expect(body).toBeInstanceOf(Buffer);
+      expect(contentType).toBe('image/png');
+      expect(result).toEqual({ url: `${PUBLIC_URL_PREFIX}${key}` });
+    });
+
+    it('rejette un MIME hors whitelist', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', name: 'Test' });
+
+      await expect(
+        service.uploadProjectImage('proj-1', mkFile('image/gif', 'plan.gif')),
+      ).rejects.toThrow('Format non supporté');
+      expect(storage.putObjectPublic).not.toHaveBeenCalled();
+    });
+
+    it('lève 404 si le projet n\'existe pas', async () => {
+      prisma.project.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.uploadProjectImage('inexistant', mkFile('image/png', 'p.png')),
+      ).rejects.toThrow('Projet introuvable');
+      expect(storage.putObjectPublic).not.toHaveBeenCalled();
+    });
+
+    it('mapping MIME correct : JPEG -> .jpg, WebP -> .webp', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', name: 'Test' });
+
+      await service.uploadProjectImage('proj-1', mkFile('image/jpeg', 'photo.jpg'));
+      const [key1] = storage.putObjectPublic.mock.calls[0] as [string];
+      expect(key1).toMatch(/\.jpg$/);
+
+      await service.uploadProjectImage('proj-1', mkFile('image/webp', 'render.webp'));
+      const [key2] = storage.putObjectPublic.mock.calls[1] as [string];
+      expect(key2).toMatch(/\.webp$/);
     });
   });
 });

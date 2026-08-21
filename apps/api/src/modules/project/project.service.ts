@@ -220,6 +220,33 @@ export class ProjectService {
   }
 
   /**
+   * Upload d'une image de niveau projet (plan de masse, vue aérienne, etc.)
+   * vers le bucket public B2. La clé interne (`project-media/<uuid>.<ext>`)
+   * est distincte de `unit-media/` pour permettre un filtrage et un audit
+   * séparés dans le bucket.
+   *
+   * Contrairement à `uploadMedia()`, aucune création en base ici : l'URL
+   * retournée sera pushée via `PATCH /admin/projects/:id` avec le champ
+   * `views` ou `siteMapImageUrl`.
+   */
+  async uploadProjectImage(projectId: string, file: Express.Multer.File) {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) {
+      throw new NotFoundException('Projet introuvable.');
+    }
+
+    const ext = MEDIA_EXT_BY_MIME[file.mimetype];
+    if (!ext) {
+      throw new BadRequestException('Format non supporté : PNG, JPG, WebP ou PDF uniquement.');
+    }
+
+    const key = `project-media/${crypto.randomUUID()}${ext}`;
+    await this.storage.putObjectPublic(key, file.buffer, file.mimetype);
+
+    return { url: this.storage.getPublicUrl(key) };
+  }
+
+  /**
    * Suppression d'un média : le delete Prisma est la source de vérité, puis
    * le blob B2 est retiré du bucket public (best-effort). Si B2 échoue après
    * le delete en base, on logge une trace au lieu de bloquer — jamais de blob

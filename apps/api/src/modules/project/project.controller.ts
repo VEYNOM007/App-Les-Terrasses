@@ -69,6 +69,16 @@ export class ProjectController {
     return this.projectService.updateProject(id, body);
   }
 
+  @Post('projects/:projectId/image/upload')
+  @UseInterceptors(unitMediaFileInterceptor)
+  uploadProjectImage(
+    @Param('projectId') projectId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) throw new BadRequestException('Fichier manquant.');
+    return this.projectService.uploadProjectImage(projectId, file);
+  }
+
   @Post('blocks')
   createBlock(@Body() body: CreateBlockDto) {
     return this.projectService.createBlock(body);

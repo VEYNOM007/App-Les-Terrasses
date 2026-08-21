@@ -316,6 +316,10 @@ model Block {
   // de la résolution réelle du fichier image).
   sitePlanPolygon Json?
 
+  // Vues du bloc dans le catalogue (plan d'étage, façade, etc.) —
+  // même structure que Project.views, hotspots avec targetType + targetId.
+  views Json?
+
   // Avancement chantier consolidé (dénormalisé, mis à jour à chaque ConstructionUpdate)
   constructionPhase ConstructionPhase @default(FONDATIONS)
   progressPercent   Int               @default(0)

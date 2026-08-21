@@ -37,7 +37,18 @@ describe('CatalogService', () => {
 
     expect(prisma.project.findMany).toHaveBeenCalledWith({
       where: { status: ProjectStatus.PUBLIE },
-      include: { blocks: { include: { units: true } } },
+      include: {
+        blocks: {
+          select: {
+            id: true, projectId: true, name: true, floors: true,
+            frontage: true, distanceFromEntranceM: true,
+            sitePlanPolygon: true, views: true,
+            constructionPhase: true, progressPercent: true,
+            launchStatus: true, createdAt: true, updatedAt: true,
+            units: true,
+          },
+        },
+      },
     });
   });
 
@@ -49,7 +60,18 @@ describe('CatalogService', () => {
     expect(result).toBeNull();
     expect(prisma.project.findFirst).toHaveBeenCalledWith({
       where: { id: 'project-draft', status: ProjectStatus.PUBLIE },
-      include: { blocks: { include: { units: true } } },
+      include: {
+        blocks: {
+          select: {
+            id: true, projectId: true, name: true, floors: true,
+            frontage: true, distanceFromEntranceM: true,
+            sitePlanPolygon: true, views: true,
+            constructionPhase: true, progressPercent: true,
+            launchStatus: true, createdAt: true, updatedAt: true,
+            units: true,
+          },
+        },
+      },
     });
   });
 
@@ -60,6 +82,13 @@ describe('CatalogService', () => {
 
     expect(prisma.block.findMany).toHaveBeenCalledWith({
       where: { project: { id: 'project-1', status: ProjectStatus.PUBLIE } },
+      select: {
+        id: true, projectId: true, name: true, floors: true,
+        frontage: true, distanceFromEntranceM: true,
+        sitePlanPolygon: true, views: true,
+        constructionPhase: true, progressPercent: true,
+        launchStatus: true, createdAt: true, updatedAt: true,
+      },
       orderBy: { name: 'asc' },
     });
   });
@@ -108,10 +137,8 @@ describe('CatalogService', () => {
       },
       include: {
         block: {
-          include: {
-            project: {
-              select: { id: true, name: true, marketingInfo: true, siteMapImageUrl: true },
-            },
+          select: {
+            id: true, name: true, frontage: true,
           },
         },
         media: { orderBy: { sortOrder: 'asc' } },

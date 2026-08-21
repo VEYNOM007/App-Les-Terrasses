@@ -15,14 +15,36 @@ export class CatalogService {
   async listProjects() {
     return this.prisma.project.findMany({
       where: { status: ProjectStatus.PUBLIE },
-      include: { blocks: { include: { units: true } } },
+      include: {
+        blocks: {
+          select: {
+            id: true, projectId: true, name: true, floors: true,
+            frontage: true, distanceFromEntranceM: true,
+            sitePlanPolygon: true, views: true,
+            constructionPhase: true, progressPercent: true,
+            launchStatus: true, createdAt: true, updatedAt: true,
+            units: true,
+          },
+        },
+      },
     });
   }
 
   async getProject(id: string) {
     return this.prisma.project.findFirst({
       where: { id, status: ProjectStatus.PUBLIE },
-      include: { blocks: { include: { units: true } } },
+      include: {
+        blocks: {
+          select: {
+            id: true, projectId: true, name: true, floors: true,
+            frontage: true, distanceFromEntranceM: true,
+            sitePlanPolygon: true, views: true,
+            constructionPhase: true, progressPercent: true,
+            launchStatus: true, createdAt: true, updatedAt: true,
+            units: true,
+          },
+        },
+      },
     });
   }
 
@@ -33,6 +55,13 @@ export class CatalogService {
   async getProjectBlocks(projectId: string) {
     return this.prisma.block.findMany({
       where: { project: { id: projectId, status: ProjectStatus.PUBLIE } },
+      select: {
+        id: true, projectId: true, name: true, floors: true,
+        frontage: true, distanceFromEntranceM: true,
+        sitePlanPolygon: true, views: true,
+        constructionPhase: true, progressPercent: true,
+        launchStatus: true, createdAt: true, updatedAt: true,
+      },
       orderBy: { name: 'asc' },
     });
   }
@@ -80,10 +109,8 @@ export class CatalogService {
       },
       include: {
         block: {
-          include: {
-            project: {
-              select: { id: true, name: true, marketingInfo: true, siteMapImageUrl: true },
-            },
+          select: {
+            id: true, name: true, frontage: true,
           },
         },
         media: { orderBy: { sortOrder: 'asc' } },

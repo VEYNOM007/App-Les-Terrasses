@@ -151,6 +151,25 @@ export interface CatalogProjectView {
   hotspots?: CatalogProjectHotspot[];
 }
 
+export interface CatalogBlockHotspot {
+  id: string;
+  label: string;
+  targetType: 'BLOCK' | 'UNIT';
+  targetId: string;
+  top: string;
+  left: string;
+}
+
+export interface CatalogBlockView {
+  id: string;
+  title: string;
+  category: 'masterplan' | 'aerial' | 'facade' | 'garden' | 'amenities';
+  imageUrl: string;
+  subtitle?: string;
+  description?: string;
+  hotspots?: CatalogBlockHotspot[];
+}
+
 export interface CatalogProjectMarketingInfo {
   name?: string;
   location?: string;
@@ -171,6 +190,7 @@ export interface CatalogProjectBlock {
   id: string;
   name: string;
   units: CatalogProjectUnit[];
+  views: CatalogBlockView[] | null;
 }
 
 export interface CatalogProject {

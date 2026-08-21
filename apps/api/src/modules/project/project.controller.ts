@@ -27,6 +27,7 @@ import {
   UpdateUnitMediaDto,
   UploadUnitMediaDto,
 } from './dto/unit-media.dto';
+import { UpdateBlockViewsDto } from './dto/update-block-views.dto';
 
 const MEDIA_MAX_SIZE = 15 * 1024 * 1024; // 15 Mo
 const MEDIA_ALLOWED_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'application/pdf']);
@@ -82,6 +83,29 @@ export class ProjectController {
   @Post('blocks')
   createBlock(@Body() body: CreateBlockDto) {
     return this.projectService.createBlock(body);
+  }
+
+  @Get('blocks/:blockId/views')
+  getBlockViews(@Param('blockId') blockId: string) {
+    return this.projectService.getBlockViews(blockId);
+  }
+
+  @Patch('blocks/:blockId/views')
+  updateBlockViews(
+    @Param('blockId') blockId: string,
+    @Body() body: UpdateBlockViewsDto,
+  ) {
+    return this.projectService.updateBlockViews(blockId, body);
+  }
+
+  @Post('blocks/:blockId/image/upload')
+  @UseInterceptors(unitMediaFileInterceptor)
+  uploadBlockImage(
+    @Param('blockId') blockId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    if (!file) throw new BadRequestException('Fichier manquant.');
+    return this.projectService.uploadBlockImage(blockId, file);
   }
 
   @Post('units')

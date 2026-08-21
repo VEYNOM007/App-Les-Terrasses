@@ -19,6 +19,7 @@ import {
   UpdateUnitMediaDto,
   UploadUnitMediaDto,
 } from './dto/unit-media.dto';
+import { UpdateBlockViewsDto } from './dto/update-block-views.dto';
 
 /** Extension de clé interne dérivée du MIME, jamais du nom client. */
 const MEDIA_EXT_BY_MIME: Record<string, string> = {
@@ -233,6 +234,44 @@ export class ProjectService {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
       throw new NotFoundException('Projet introuvable.');
+    }
+
+    const ext = MEDIA_EXT_BY_MIME[file.mimetype];
+    if (!ext) {
+      throw new BadRequestException('Format non supporté : PNG, JPG, WebP ou PDF uniquement.');
+    }
+
+    const key = `project-media/${crypto.randomUUID()}${ext}`;
+    await this.storage.putObjectPublic(key, file.buffer, file.mimetype);
+
+    return { url: this.storage.getPublicUrl(key) };
+  }
+
+  // ------------- Vues par bloc (admin) -------------
+
+  async getBlockViews(blockId: string) {
+    const block = await this.prisma.block.findUnique({ where: { id: blockId } });
+    if (!block) {
+      throw new NotFoundException('Bloc introuvable.');
+    }
+    return block.views;
+  }
+
+  async updateBlockViews(blockId: string, data: UpdateBlockViewsDto) {
+    const block = await this.prisma.block.findUnique({ where: { id: blockId } });
+    if (!block) {
+      throw new NotFoundException('Bloc introuvable.');
+    }
+    return this.prisma.block.update({
+      where: { id: blockId },
+      data: { views: data.views as unknown as Prisma.InputJsonValue },
+    });
+  }
+
+  async uploadBlockImage(blockId: string, file: Express.Multer.File) {
+    const block = await this.prisma.block.findUnique({ where: { id: blockId } });
+    if (!block) {
+      throw new NotFoundException('Bloc introuvable.');
     }
 
     const ext = MEDIA_EXT_BY_MIME[file.mimetype];

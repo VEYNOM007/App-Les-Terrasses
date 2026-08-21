@@ -12,6 +12,7 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateBlockDto } from './dto/create-block.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { CreateUnitMediaDto, UploadUnitMediaDto } from './dto/unit-media.dto';
+import { UpdateBlockViewsDto } from './dto/update-block-views.dto';
 
 const createMockPrisma = () => ({
   project: {
@@ -22,6 +23,8 @@ const createMockPrisma = () => ({
   },
   block: {
     create: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
   },
   unit: {
     create: jest.fn(),
@@ -448,6 +451,85 @@ describe('ProjectService', () => {
       await service.uploadProjectImage('proj-1', mkFile('image/webp', 'render.webp'));
       const [key2] = storage.putObjectPublic.mock.calls[1] as [string];
       expect(key2).toMatch(/\.webp$/);
+    });
+  });
+
+  describe('getBlockViews', () => {
+    it('retourne les vues d\'un bloc existant', async () => {
+      const views = [{ id: 'v1', title: 'Plan étage', hotspots: [] }];
+      prisma.block.findUnique.mockResolvedValue({ id: 'block-1', views });
+
+      const result = await service.getBlockViews('block-1');
+
+      expect(prisma.block.findUnique).toHaveBeenCalledWith({ where: { id: 'block-1' } });
+      expect(result).toEqual(views);
+    });
+
+    it('lève 404 si le bloc n\'existe pas', async () => {
+      prisma.block.findUnique.mockResolvedValue(null);
+
+      await expect(service.getBlockViews('inexistant')).rejects.toThrow('Bloc introuvable.');
+    });
+  });
+
+  describe('updateBlockViews', () => {
+    it('remplace le tableau de vues du bloc', async () => {
+      const views = [{ id: 'v1', title: 'Plan étage', subtitle: 'Niveau 1', category: 'floorplan', imageUrl: 'https://example.com/img.png', description: 'Disposition', hotspots: [] }];
+      prisma.block.findUnique.mockResolvedValue({ id: 'block-1', name: 'Bloc A' });
+      prisma.block.update.mockResolvedValue({ id: 'block-1', views });
+
+      const result = await service.updateBlockViews('block-1', { views } as UpdateBlockViewsDto);
+
+      expect(prisma.block.findUnique).toHaveBeenCalledWith({ where: { id: 'block-1' } });
+      expect(prisma.block.update).toHaveBeenCalledWith({
+        where: { id: 'block-1' },
+        data: { views },
+      });
+      expect(result.views).toEqual(views);
+    });
+
+    it('lève 404 si le bloc n\'existe pas', async () => {
+      prisma.block.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateBlockViews('inexistant', { views: [] } as UpdateBlockViewsDto),
+      ).rejects.toThrow('Bloc introuvable.');
+      expect(prisma.block.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('uploadBlockImage', () => {
+    const mkFile = (mimetype: string, filename: string) =>
+      ({
+        fieldname: 'file',
+        originalname: filename,
+        encoding: '7bit',
+        mimetype,
+        buffer: Buffer.from('fake-bytes'),
+        size: 10,
+      }) as Express.Multer.File;
+
+    it('uploade vers project-media/<uuid>.<ext> pour un bloc existant', async () => {
+      prisma.block.findUnique.mockResolvedValue({ id: 'block-1', name: 'Bloc A' });
+
+      const result = await service.uploadBlockImage('block-1', mkFile('image/png', 'floorplan.png'));
+
+      expect(prisma.block.findUnique).toHaveBeenCalledWith({ where: { id: 'block-1' } });
+      expect(storage.putObjectPublic).toHaveBeenCalledTimes(1);
+      const [key, body, contentType] = storage.putObjectPublic.mock.calls[0] as [string, Buffer, string];
+      expect(key).toMatch(/^project-media\/[0-9a-f-]+\.png$/);
+      expect(body).toBeInstanceOf(Buffer);
+      expect(contentType).toBe('image/png');
+      expect(result).toEqual({ url: `${PUBLIC_URL_PREFIX}${key}` });
+    });
+
+    it('lève 404 si le bloc n\'existe pas', async () => {
+      prisma.block.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.uploadBlockImage('inexistant', mkFile('image/png', 'p.png')),
+      ).rejects.toThrow('Bloc introuvable.');
+      expect(storage.putObjectPublic).not.toHaveBeenCalled();
     });
   });
 });

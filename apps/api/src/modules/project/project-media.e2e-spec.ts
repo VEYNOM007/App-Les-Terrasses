@@ -451,4 +451,205 @@ describe('ProjectModule — e2e HTTP médias admin (supertest)', () => {
     expect(res.status).toBe(404);
     expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
   });
+
+  // ──────────────────────────────────────────────────
+  // GET /v1/admin/blocks/:blockId/views
+  // ──────────────────────────────────────────────────
+
+  it('GET /admin/blocks/:blockId/views sans JWT -> 401 Unauthorized', async () => {
+    const { block } = await createProjectWithBlockAndUnits(1);
+
+    const res = await request(app.getHttpServer())
+      .get(`/${API_PREFIX}/admin/blocks/${block.id}/views`);
+
+    expect(res.status).toBe(401);
+  });
+
+  it('GET /admin/blocks/:blockId/views par un ACHETEUR -> 403 Forbidden', async () => {
+    await createUserFixture({ email: 'acheteur-bviews@test.tg', phone: '+22851000030', password: 'Secret123!' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('acheteur-bviews@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .get(`/${API_PREFIX}/admin/blocks/${block.id}/views`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /admin/blocks/:blockId/views par un ADMIN -> 200, views null pour un bloc neuf', async () => {
+    await createUserFixture({ email: 'admin-bviews1@test.tg', phone: '+22851000031', password: 'Secret123!', role: 'ADMIN' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-bviews1@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .get(`/${API_PREFIX}/admin/blocks/${block.id}/views`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({});
+  });
+
+  // ──────────────────────────────────────────────────
+  // PATCH /v1/admin/blocks/:blockId/views
+  // ──────────────────────────────────────────────────
+
+  it('PATCH /admin/blocks/:blockId/views sans JWT -> 401 Unauthorized', async () => {
+    const { block } = await createProjectWithBlockAndUnits(1);
+
+    const res = await request(app.getHttpServer())
+      .patch(`/${API_PREFIX}/admin/blocks/${block.id}/views`)
+      .send({ views: [] });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('PATCH /admin/blocks/:blockId/views par un ACHETEUR -> 403 Forbidden', async () => {
+    await createUserFixture({ email: 'acheteur-bviews2@test.tg', phone: '+22851000032', password: 'Secret123!' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('acheteur-bviews2@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .patch(`/${API_PREFIX}/admin/blocks/${block.id}/views`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ views: [] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('PATCH /admin/blocks/:blockId/views par un ADMIN -> 200, vues enregistrées', async () => {
+    await createUserFixture({ email: 'admin-bviews2@test.tg', phone: '+22851000033', password: 'Secret123!', role: 'ADMIN' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-bviews2@test.tg', 'Secret123!');
+
+    const views = [
+      {
+        id: 'view-floor-1',
+        title: 'Plan Étage 1',
+        subtitle: 'Vue du premier niveau',
+        category: 'floorplan',
+        imageUrl: 'https://b2.example.com/project-media/test.png',
+        description: 'Disposition des appartements au R+1',
+        hotspots: [
+          { id: 'hs-1', label: 'T2 Nord', targetType: 'UNIT', targetId: 'unit-x', top: '40%', left: '30%' },
+        ],
+      },
+    ];
+
+    const res = await request(app.getHttpServer())
+      .patch(`/${API_PREFIX}/admin/blocks/${block.id}/views`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ views });
+
+    expect(res.status).toBe(200);
+    expect(res.body.views).toHaveLength(1);
+    expect(res.body.views[0].id).toBe('view-floor-1');
+    expect(res.body.views[0].hotspots[0].targetType).toBe('UNIT');
+
+    const inDb = await testPrisma.block.findUniqueOrThrow({ where: { id: block.id } });
+    expect(inDb.views).not.toBeNull();
+  });
+
+  it('PATCH /admin/blocks/:blockId/views avec targetType invalide -> 400 (validation DTO)', async () => {
+    await createUserFixture({ email: 'admin-bviews3@test.tg', phone: '+22851000034', password: 'Secret123!', role: 'ADMIN' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-bviews3@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .patch(`/${API_PREFIX}/admin/blocks/${block.id}/views`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        views: [
+          {
+            id: 'v1', title: 'T', subtitle: 'S', category: 'floorplan',
+            imageUrl: 'https://example.com/img.png', description: 'D',
+            hotspots: [{ id: 'hs', label: 'X', targetType: 'FOO', targetId: 'y', top: '10%', left: '10%' }],
+          },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('PATCH /admin/blocks/:blockId/views avec champ requis manquant (imageUrl) -> 400', async () => {
+    await createUserFixture({ email: 'admin-bviews4@test.tg', phone: '+22851000035', password: 'Secret123!', role: 'ADMIN' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-bviews4@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .patch(`/${API_PREFIX}/admin/blocks/${block.id}/views`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        views: [
+          {
+            id: 'v1', title: 'T', subtitle: 'S', category: 'floorplan',
+            description: 'D',
+          },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  // ──────────────────────────────────────────────────
+  // POST /v1/admin/blocks/:blockId/image/upload
+  // ──────────────────────────────────────────────────
+
+  it('POST /admin/blocks/:blockId/image/upload par un ADMIN -> 201, URL B2 publique', async () => {
+    await createUserFixture({ email: 'admin-bimg1@test.tg', phone: '+22851000040', password: 'Secret123!', role: 'ADMIN' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-bimg1@test.tg', 'Secret123!');
+    const fileBuffer = Buffer.from('fake-png-floorplan');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/blocks/${block.id}/image/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', fileBuffer, { filename: 'floorplan.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.url).toMatch(new RegExp(`^${PUBLIC_URL_PREFIX}project-media/[0-9a-f-]+\\.png$`));
+
+    expect(mockStorage.putObjectPublic).toHaveBeenCalledTimes(1);
+    const [key, body, contentType] = mockStorage.putObjectPublic.mock.calls[0];
+    expect(key).toMatch(/^project-media\/[0-9a-f-]+\.png$/);
+    expect(body).toEqual(fileBuffer);
+    expect(contentType).toBe('image/png');
+  });
+
+  it('POST /admin/blocks/:blockId/image/upload sans JWT -> 401 Unauthorized', async () => {
+    const { block } = await createProjectWithBlockAndUnits(1);
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/blocks/${block.id}/image/upload`)
+      .attach('file', Buffer.from('x'), { filename: 'p.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /admin/blocks/:blockId/image/upload par un ACHETEUR -> 403 Forbidden', async () => {
+    await createUserFixture({ email: 'acheteur-bimg@test.tg', phone: '+22851000041', password: 'Secret123!' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('acheteur-bimg@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/blocks/${block.id}/image/upload`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from('x'), { filename: 'p.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(403);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
+
+  it('POST /admin/blocks/:blockId/image/upload sans fichier -> 400', async () => {
+    await createUserFixture({ email: 'admin-bimg2@test.tg', phone: '+22851000042', password: 'Secret123!', role: 'ADMIN' });
+    const { block } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-bimg2@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/admin/blocks/${block.id}/image/upload`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+    expect(mockStorage.putObjectPublic).not.toHaveBeenCalled();
+  });
 });

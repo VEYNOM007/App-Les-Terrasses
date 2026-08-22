@@ -1,5 +1,7 @@
-import { IsArray, IsEnum, IsObject, IsOptional, IsString, IsUrl } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsEnum, IsObject, IsOptional, IsString, IsUrl, ValidateNested } from 'class-validator';
 import { ProjectStatus } from '@prisma/client';
+import { BlockViewDto } from './update-block-views.dto';
 
 /**
  * Création d'un projet par un admin (`POST /admin/projects`).
@@ -38,8 +40,9 @@ export class CreateProjectDto {
   /** Vues du catalogue (galerie, plan de masse, vue aérienne, …). */
   @IsOptional()
   @IsArray()
-  @IsObject({ each: true })
-  views?: Record<string, unknown>[];
+  @ValidateNested({ each: true })
+  @Type(() => BlockViewDto)
+  views?: BlockViewDto[];
 
   @IsOptional()
   @IsEnum(ProjectStatus)

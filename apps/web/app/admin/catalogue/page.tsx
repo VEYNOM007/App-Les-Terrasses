@@ -9,11 +9,14 @@ import {
   adminCreateUnit,
   adminDeleteMedia,
   adminDeleteUnit,
+  adminGetBlockViews,
+  adminUpdateBlockViews,
   adminUpdateProject,
   adminUpdateMedia,
   adminUpdateUnit,
   fetchAdminProjects,
   uploadUnitMedia,
+  CatalogBlockView,
   CatalogUnit,
   UnitMedia,
   UnitMediaType,
@@ -21,6 +24,7 @@ import {
   UnitType,
   AdminProject,
 } from '../../../lib/api';
+import { createHotspot } from '../../../lib/catalog/viewer-hotspots';
 import {
   Save,
   Plus,
@@ -116,6 +120,7 @@ export default function AdminCataloguePage() {
   const [addUnitError, setAddUnitError] = useState('');
   const [addUnitSuccess, setAddUnitSuccess] = useState('');
   const [deletingUnit, setDeletingUnit] = useState(false);
+  const [blockViews, setBlockViews] = useState<Record<string, CatalogBlockView[] | null>>({});
 
   const loadApiUnits = useCallback(async () => {
     setLoadingUnits(true);
@@ -146,6 +151,12 @@ export default function AdminCataloguePage() {
       // ARCHIVE (restauration en un clic) et les blocs réels du formulaire
       // d'ajout — le catalogue public exclut les deux.
       setUnits(flattenAdminUnits(projects));
+      const blockViewEntries = await Promise.all(
+        projects.flatMap((project) =>
+          project.blocks.map(async (block) => [block.id, await adminGetBlockViews(block.id)] as const),
+        ),
+      );
+      setBlockViews(Object.fromEntries(blockViewEntries));
     } catch (e) {
       setUnitsError(e instanceof Error ? e.message : 'Impossible de charger les unités.');
     } finally {
@@ -186,6 +197,14 @@ export default function AdminCataloguePage() {
       },
       views: data.views,
     });
+    for (const project of adminProjects) {
+      for (const block of project.blocks) {
+        const views = blockViews[block.id];
+        if (!views) continue;
+        const updated = await adminUpdateBlockViews(block.id, { views });
+        setBlockViews((prev) => ({ ...prev, [block.id]: updated.views }));
+      }
+    }
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };
@@ -470,7 +489,7 @@ export default function AdminCataloguePage() {
 
             <button
               onClick={handleSaveAll}
-              title="Sauvegarde locale (aperçu) — utilisez la section « Unités de la base (API) » pour persister en base."
+              title="Persiste en base via l'API : informations générales, vues du complexe et vues par bloc."
               className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs font-bold px-5 py-2.5 rounded-lg inline-flex items-center gap-2 transition-all shadow-lg"
             >
               <Save className="w-4 h-4" /> Enregistrer les Modifications
@@ -1045,7 +1064,7 @@ export default function AdminCataloguePage() {
               <h3 className="font-serif text-2xl font-semibold text-paper flex items-center gap-2">
                 <Layers className="w-6 h-6 text-sand" /> Vues du Complexe & Boutons Interactifs ({data.views.length})
                 <span className="text-[10px] font-mono bg-paper/10 text-paper/60 border border-paper/20 px-2 py-0.5 rounded uppercase">
-                  Aperçu local (non persistant)
+                  Vues sauvegardées par bloc
                 </span>
               </h3>
               <p className="text-xs font-mono text-paper/60">
@@ -1163,14 +1182,14 @@ export default function AdminCataloguePage() {
                     onClick={() => {
                       const newHotspots = [
                         ...(editingView.hotspots || []),
-                        {
+                        createHotspot({
                           id: 'hs-' + Date.now(),
                           label: 'Nouveau Bouton Bloc',
-                          targetType: 'UNIT' as const,
-                          targetId: 'unit-studio',
                           top: '50%',
                           left: '50%',
-                        },
+                          targetType: 'UNIT',
+                          targetId: 'unit-studio',
+                        }),
                       ];
                       handleUpdateViewField(editingView.id, 'hotspots', newHotspots);
                     }}

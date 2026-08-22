@@ -8,7 +8,8 @@ export interface ComplexView {
   hotspots?: {
     id: string;
     label: string;
-    targetBlockId: string;
+    targetType: 'BLOCK' | 'UNIT';
+    targetId: string;
     top: string; // percentage
     left: string; // percentage
   }[];
@@ -98,11 +99,11 @@ export const DEFAULT_COMPLEX_DATA: ComplexInfo = {
       imageUrl: '/masterplan-les-terrasses.jpg',
       description: 'Plan de masse vectoriel officiel à l\'échelle 1/500. Cliquez sur les Blocs Nord 1 & 2, Blocs Sud 1 & 2 ou Boutiques pour explorer les appartements.',
       hotspots: [
-        { id: 'hs-mp-nord-1', label: 'BLOC NORD 1 · Studios & T2', targetBlockId: 'unit-studio', top: '30%', left: '35%' },
-        { id: 'hs-mp-nord-2', label: 'BLOC NORD 2 · T2 Spacieux', targetBlockId: 'unit-t2', top: '30%', left: '65%' },
-        { id: 'hs-mp-sud-1', label: 'BLOC SUD 1 · T3 Familial', targetBlockId: 'unit-t3', top: '65%', left: '35%' },
-        { id: 'hs-mp-sud-2', label: 'BLOC SUD 2 · Penthouse T5', targetBlockId: 'unit-t5', top: '65%', left: '65%' },
-        { id: 'hs-mp-commerce', label: 'Façade Boutiques Nord', targetBlockId: 'unit-commerce', top: '15%', left: '50%' },
+        { id: 'hs-mp-nord-1', label: 'BLOC NORD 1 · Studios & T2', targetType: 'UNIT', targetId: 'unit-studio', top: '30%', left: '35%' },
+        { id: 'hs-mp-nord-2', label: 'BLOC NORD 2 · T2 Spacieux', targetType: 'UNIT', targetId: 'unit-t2', top: '30%', left: '65%' },
+        { id: 'hs-mp-sud-1', label: 'BLOC SUD 1 · T3 Familial', targetType: 'UNIT', targetId: 'unit-t3', top: '65%', left: '35%' },
+        { id: 'hs-mp-sud-2', label: 'BLOC SUD 2 · Penthouse T5', targetType: 'UNIT', targetId: 'unit-t5', top: '65%', left: '65%' },
+        { id: 'hs-mp-commerce', label: 'Façade Boutiques Nord', targetType: 'UNIT', targetId: 'unit-commerce', top: '15%', left: '50%' },
       ],
     },
     {
@@ -113,11 +114,11 @@ export const DEFAULT_COMPLEX_DATA: ComplexInfo = {
       imageUrl: '/masterplan-les-terrasses.jpg',
       description: 'Vue aérienne officielle. Survolez et cliquez sur les boutons interactifs placés sur les bâtiments pour réserver votre bien.',
       hotspots: [
-        { id: 'hs-aerial-nord-1', label: 'BLOC NORD 1 · Studios & T2', targetBlockId: 'unit-studio', top: '31%', left: '38%' },
-        { id: 'hs-aerial-nord-2', label: 'BLOC NORD 2 · T2 Spacieux', targetBlockId: 'unit-t2', top: '31%', left: '68%' },
-        { id: 'hs-aerial-sud-1', label: 'BLOC SUD 1 · T3 Familial', targetBlockId: 'unit-t3', top: '62%', left: '34%' },
-        { id: 'hs-aerial-sud-2', label: 'BLOC SUD 2 · Penthouse T5', targetBlockId: 'unit-t5', top: '62%', left: '68%' },
-        { id: 'hs-aerial-commerce', label: 'Façade Boutiques Nord', targetBlockId: 'unit-commerce', top: '14%', left: '50%' },
+        { id: 'hs-aerial-nord-1', label: 'BLOC NORD 1 · Studios & T2', targetType: 'UNIT', targetId: 'unit-studio', top: '31%', left: '38%' },
+        { id: 'hs-aerial-nord-2', label: 'BLOC NORD 2 · T2 Spacieux', targetType: 'UNIT', targetId: 'unit-t2', top: '31%', left: '68%' },
+        { id: 'hs-aerial-sud-1', label: 'BLOC SUD 1 · T3 Familial', targetType: 'UNIT', targetId: 'unit-t3', top: '62%', left: '34%' },
+        { id: 'hs-aerial-sud-2', label: 'BLOC SUD 2 · Penthouse T5', targetType: 'UNIT', targetId: 'unit-t5', top: '62%', left: '68%' },
+        { id: 'hs-aerial-commerce', label: 'Façade Boutiques Nord', targetType: 'UNIT', targetId: 'unit-commerce', top: '14%', left: '50%' },
       ],
     },
     {

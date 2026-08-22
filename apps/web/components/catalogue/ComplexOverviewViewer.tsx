@@ -48,7 +48,7 @@ function AerialPhotoView({
         {view.hotspots && view.hotspots.length > 0 && (
           <div className="absolute inset-0">
             {view.hotspots.map((hs) => {
-              const matchedTarget = resolveHotspotTarget(hs.targetBlockId, blockTargets);
+              const matchedTarget = resolveHotspotTarget(hs.targetId, blockTargets);
               if (!matchedTarget) return null;
               return (
                 <div

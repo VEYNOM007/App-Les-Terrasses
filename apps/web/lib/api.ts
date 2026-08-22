@@ -136,7 +136,8 @@ export interface SitePlanResponse {
 export interface CatalogProjectHotspot {
   id: string;
   label: string;
-  targetBlockId: string;
+  targetType: 'BLOCK' | 'UNIT';
+  targetId: string;
   top: string;
   left: string;
 }

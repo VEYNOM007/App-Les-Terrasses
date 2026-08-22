@@ -1166,7 +1166,8 @@ export default function AdminCataloguePage() {
                         {
                           id: 'hs-' + Date.now(),
                           label: 'Nouveau Bouton Bloc',
-                          targetBlockId: 'unit-studio',
+                          targetType: 'UNIT' as const,
+                          targetId: 'unit-studio',
                           top: '50%',
                           left: '50%',
                         },

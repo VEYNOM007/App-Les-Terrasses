@@ -492,6 +492,46 @@ export function adminUpdateProject(id: string, body: AdminProjectUpdate): Promis
   });
 }
 
+// ────────────────────────────────────────────────────────────
+// Vues par bloc (GET / PATCH / upload image)
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Récupère les vues d'un bloc (tableau de CatalogBlockView ou null
+ * si le bloc n'a pas encore de vues configurées).
+ */
+export function adminGetBlockViews(blockId: string): Promise<CatalogBlockView[] | null> {
+  return apiFetch<CatalogBlockView[] | null>(`/v1/admin/blocks/${blockId}/views`);
+}
+
+export interface AdminBlockUpdate {
+  views: CatalogBlockView[];
+}
+
+/**
+ * Remplace les vues d'un bloc (PATCH). Le DTO côté API valide le
+ * format targetType/targetId — un ancien targetBlockId sera rejeté à 400.
+ */
+export function adminUpdateBlockViews(blockId: string, body: AdminBlockUpdate): Promise<{ views: CatalogBlockView[] }> {
+  return apiFetch<{ views: CatalogBlockView[] }>(`/v1/admin/blocks/${blockId}/views`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Upload d'une image de vue (plan de masse, vue aérienne, …) vers le
+ * bucket B2 via l'endpoint bloc image. Même pattern que uploadUnitMedia.
+ */
+export function adminUploadBlockImage(blockId: string, file: File): Promise<{ url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiFetch<{ url: string }>(`/v1/admin/blocks/${blockId}/image/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
 export interface AdminUnitCreate {
   blockId: string;
   type: UnitType;

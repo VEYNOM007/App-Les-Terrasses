@@ -1247,6 +1247,7 @@ export default function AdminCataloguePage() {
                   </h4>
                   <button
                     onClick={() => {
+                      const firstBlockId = adminProjects[0]?.blocks[0]?.id ?? '';
                       const newHotspots = [
                         ...(editingView.hotspots || []),
                         createHotspot({
@@ -1254,8 +1255,8 @@ export default function AdminCataloguePage() {
                           label: 'Nouveau Bouton Bloc',
                           top: '50%',
                           left: '50%',
-                          targetType: 'UNIT',
-                          targetId: 'unit-studio',
+                          targetType: 'BLOCK',
+                          targetId: firstBlockId,
                         }),
                       ];
                       handleUpdateViewField(editingView.id, 'hotspots', newHotspots);
@@ -1307,6 +1308,55 @@ export default function AdminCataloguePage() {
                           }}
                           className="w-full bg-ink border border-paper/20 rounded p-1.5 text-paper"
                         />
+                      </div>
+                      <div className="w-24 space-y-1">
+                        <label className="text-[10px] text-paper/50 block">Cible Type</label>
+                        <select
+                          value={hs.targetType}
+                          onChange={(e) => {
+                            const newType = e.target.value as 'BLOCK' | 'UNIT';
+                            const updated = [...(editingView.hotspots || [])];
+                            updated[hsIdx].targetType = newType;
+                            const firstOption = newType === 'BLOCK'
+                              ? adminProjects[0]?.blocks[0]?.id ?? ''
+                              : adminProjects[0]?.blocks[0]?.units[0]?.id ?? '';
+                            updated[hsIdx].targetId = firstOption;
+                            handleUpdateViewField(editingView.id, 'hotspots', updated);
+                          }}
+                          className="w-full bg-ink border border-paper/20 rounded p-1.5 text-paper"
+                        >
+                          <option value="BLOCK">Bloc</option>
+                          <option value="UNIT">Unité</option>
+                        </select>
+                      </div>
+                      <div className="flex-1 space-y-1 min-w-0">
+                        <label className="text-[10px] text-paper/50 block">Cible</label>
+                        <select
+                          value={hs.targetId}
+                          onChange={(e) => {
+                            const updated = [...(editingView.hotspots || [])];
+                            updated[hsIdx].targetId = e.target.value;
+                            handleUpdateViewField(editingView.id, 'hotspots', updated);
+                          }}
+                          className="w-full bg-ink border border-paper/20 rounded p-1.5 text-paper truncate"
+                        >
+                          {(hs.targetType === 'BLOCK'
+                            ? (adminProjects[0]?.blocks ?? []).map((b) => ({
+                                value: b.id,
+                                label: b.name,
+                              }))
+                            : (adminProjects[0]?.blocks ?? []).flatMap((b) =>
+                                b.units.map((u) => ({
+                                  value: u.id,
+                                  label: `${u.type} · ${b.name} · Étage ${u.floor}`,
+                                })),
+                              )
+                          ).map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <button
                         onClick={() => {

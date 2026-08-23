@@ -438,6 +438,12 @@ export default function AdminCataloguePage() {
         views: prev.views.map((v) => (v.id === viewId ? { ...v, [field]: value } : v)),
       };
     });
+    setEditingView((prev) => {
+      if (prev && prev.id === viewId) {
+        return { ...prev, [field]: value };
+      }
+      return prev;
+    });
   };
 
   const handleUploadViewImage = async () => {
@@ -453,7 +459,6 @@ export default function AdminCataloguePage() {
     try {
       const { url } = await adminUploadBlockImage(blockId, viewImageFile);
       handleUpdateViewField(editingView.id, 'imageUrl', url);
-      setEditingView((prev) => (prev && prev.id === editingView.id ? { ...prev, imageUrl: url } : prev));
       setViewImageFile(null);
     } catch (e) {
       setViewImageError(e instanceof Error ? e.message : 'Impossible d’uploader l’image.');

@@ -10,6 +10,7 @@ import CatalogueGrid from '../../components/catalogue/CatalogueGrid';
 import { DEFAULT_COMPLEX_DATA, ComplexInfo } from '../../lib/catalogData';
 import { fetchCatalogProjects, fetchTypologies, fetchUnit, CatalogProject, TypologyGroup } from '../../lib/api';
 import { buildUnitDetailView, UnitDetailView } from '../../lib/catalog/unit-detail';
+import { buildBlockViewsMap } from '../../lib/catalog/overview-view';
 import {
   Building,
   ArrowRight,
@@ -82,6 +83,8 @@ export default function CataloguePage() {
     return representative ? [{ id: block.id, unitId: representative.id }] : [];
   }) ?? [];
 
+  const blockViewsMap = buildBlockViewsMap(project?.blocks ?? null);
+
   return (
     <main className="min-h-screen bg-ink text-paper selection:bg-laterite selection:text-paper font-sans">
       {/* Top Navbar */}
@@ -127,13 +130,14 @@ export default function CataloguePage() {
       </section>
 
       {/* Main Complex Interactive Overview Section — masqué tant qu'aucune vue réelle n'existe */}
-      {project !== null && catalogData.views.length > 0 && (
+      {project !== null && (catalogData.views.length > 0 || Object.keys(blockViewsMap).length > 0) && (
       <section className="py-12 bg-ink border-b border-paper/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <ComplexOverviewViewer
             views={catalogData.views}
             units={catalogData.units}
             blockTargets={blockTargets}
+            blockViewsMap={blockViewsMap}
             residenceInfo={catalogData}
             onSelectUnit={openUnitDetail}
           />

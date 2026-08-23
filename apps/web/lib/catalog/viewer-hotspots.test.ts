@@ -62,4 +62,32 @@ describe('createHotspot', () => {
 
     expect(hotspot.targetId).toBe('');
   });
+
+  it('crée un hotspot avec targetType BLOCK et targetId explicite', () => {
+    const hotspot = createHotspot({
+      id: 'hs-2',
+      label: 'Bloc A',
+      top: '20%',
+      left: '30%',
+      targetType: 'BLOCK',
+      targetId: 'bloc-a-id',
+    });
+
+    expect(hotspot.targetType).toBe('BLOCK');
+    expect(hotspot.targetId).toBe('bloc-a-id');
+  });
+
+  it('crée un hotspot avec targetType UNIT et targetId explicite', () => {
+    const hotspot = createHotspot({
+      id: 'hs-3',
+      label: 'Unité T2',
+      top: '40%',
+      left: '60%',
+      targetType: 'UNIT',
+      targetId: 'unit-t2-id',
+    });
+
+    expect(hotspot.targetType).toBe('UNIT');
+    expect(hotspot.targetId).toBe('unit-t2-id');
+  });
 });

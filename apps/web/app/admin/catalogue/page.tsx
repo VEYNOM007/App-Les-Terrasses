@@ -9,11 +9,15 @@ import {
   adminCreateUnit,
   adminDeleteMedia,
   adminDeleteUnit,
+  adminGetBlockViews,
+  adminUpdateBlockViews,
   adminUpdateProject,
   adminUpdateMedia,
   adminUpdateUnit,
+  adminUploadBlockImage,
   fetchAdminProjects,
   uploadUnitMedia,
+  CatalogBlockView,
   CatalogUnit,
   UnitMedia,
   UnitMediaType,
@@ -21,6 +25,7 @@ import {
   UnitType,
   AdminProject,
 } from '../../../lib/api';
+import { createHotspot } from '../../../lib/catalog/viewer-hotspots';
 import {
   Save,
   Plus,
@@ -75,6 +80,9 @@ export default function AdminCataloguePage() {
   const [data, setData] = useState<ComplexInfo | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [editingView, setEditingView] = useState<ComplexView | null>(null);
+  const [viewImageFile, setViewImageFile] = useState<File | null>(null);
+  const [uploadingViewImage, setUploadingViewImage] = useState(false);
+  const [viewImageError, setViewImageError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
   useEffect(() => {
@@ -116,6 +124,7 @@ export default function AdminCataloguePage() {
   const [addUnitError, setAddUnitError] = useState('');
   const [addUnitSuccess, setAddUnitSuccess] = useState('');
   const [deletingUnit, setDeletingUnit] = useState(false);
+  const [blockViews, setBlockViews] = useState<Record<string, CatalogBlockView[] | null>>({});
 
   const loadApiUnits = useCallback(async () => {
     setLoadingUnits(true);
@@ -146,6 +155,12 @@ export default function AdminCataloguePage() {
       // ARCHIVE (restauration en un clic) et les blocs réels du formulaire
       // d'ajout — le catalogue public exclut les deux.
       setUnits(flattenAdminUnits(projects));
+      const blockViewEntries = await Promise.all(
+        projects.flatMap((project) =>
+          project.blocks.map(async (block) => [block.id, await adminGetBlockViews(block.id)] as const),
+        ),
+      );
+      setBlockViews(Object.fromEntries(blockViewEntries));
     } catch (e) {
       setUnitsError(e instanceof Error ? e.message : 'Impossible de charger les unités.');
     } finally {
@@ -186,6 +201,14 @@ export default function AdminCataloguePage() {
       },
       views: data.views,
     });
+    for (const project of adminProjects) {
+      for (const block of project.blocks) {
+        const views = blockViews[block.id];
+        if (!views) continue;
+        const updated = await adminUpdateBlockViews(block.id, { views });
+        setBlockViews((prev) => ({ ...prev, [block.id]: updated.views }));
+      }
+    }
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };
@@ -417,6 +440,28 @@ export default function AdminCataloguePage() {
     });
   };
 
+  const handleUploadViewImage = async () => {
+    if (!editingView) return;
+    const blockId = adminProjects[0]?.blocks[0]?.id;
+    if (!blockId) {
+      setViewImageError('Aucun bloc disponible pour rattacher le téléversement.');
+      return;
+    }
+    if (!viewImageFile) return;
+    setUploadingViewImage(true);
+    setViewImageError('');
+    try {
+      const { url } = await adminUploadBlockImage(blockId, viewImageFile);
+      handleUpdateViewField(editingView.id, 'imageUrl', url);
+      setEditingView((prev) => (prev && prev.id === editingView.id ? { ...prev, imageUrl: url } : prev));
+      setViewImageFile(null);
+    } catch (e) {
+      setViewImageError(e instanceof Error ? e.message : 'Impossible d’uploader l’image.');
+    } finally {
+      setUploadingViewImage(false);
+    }
+  };
+
   const handleAddNewView = () => {
     const newId = 'view-' + Date.now();
     const newView: ComplexView = {
@@ -470,7 +515,7 @@ export default function AdminCataloguePage() {
 
             <button
               onClick={handleSaveAll}
-              title="Sauvegarde locale (aperçu) — utilisez la section « Unités de la base (API) » pour persister en base."
+              title="Persiste en base via l'API : informations générales, vues du complexe et vues par bloc."
               className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs font-bold px-5 py-2.5 rounded-lg inline-flex items-center gap-2 transition-all shadow-lg"
             >
               <Save className="w-4 h-4" /> Enregistrer les Modifications
@@ -1045,7 +1090,7 @@ export default function AdminCataloguePage() {
               <h3 className="font-serif text-2xl font-semibold text-paper flex items-center gap-2">
                 <Layers className="w-6 h-6 text-sand" /> Vues du Complexe & Boutons Interactifs ({data.views.length})
                 <span className="text-[10px] font-mono bg-paper/10 text-paper/60 border border-paper/20 px-2 py-0.5 rounded uppercase">
-                  Aperçu local (non persistant)
+                  Vues sauvegardées par bloc
                 </span>
               </h3>
               <p className="text-xs font-mono text-paper/60">
@@ -1134,7 +1179,48 @@ export default function AdminCataloguePage() {
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-paper/70 mb-1">URL de l'image (Ex: /masterplan-les-terrasses.jpg ou HTTPS)</label>
+                  <div className="border-t border-paper/15 pt-3 space-y-2">
+                    <label className="block text-paper/70 font-mono text-xs">
+                      Upload depuis l'ordinateur (image de la vue — PNG, JPG, WebP)
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(e) => setViewImageFile(e.target.files?.[0] ?? null)}
+                      className="w-full text-xs text-paper/70 font-mono file:mr-3 file:rounded-lg file:border file:border-sand/40 file:bg-ink-card file:px-3 file:py-2 file:text-paper file:font-mono file:cursor-pointer hover:file:bg-ink"
+                    />
+                    {viewImageFile && (
+                      <p className="text-[11px] font-mono text-lagoon-light break-all">
+                        {viewImageFile.name} — {(viewImageFile.size / (1024 * 1024)).toFixed(2)} Mo
+                      </p>
+                    )}
+                    {viewImageError && (
+                      <p className="text-[11px] font-mono text-laterite-light">{viewImageError}</p>
+                    )}
+                    <button
+                      onClick={() => void handleUploadViewImage()}
+                      disabled={uploadingViewImage || !viewImageFile || !adminProjects[0]?.blocks[0]?.id}
+                      className="w-full bg-sand/20 hover:bg-sand/30 text-sand font-mono text-xs font-bold py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all disabled:opacity-60 border border-sand/40"
+                    >
+                      {uploadingViewImage ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Upload…
+                        </>
+                      ) : (
+                        <>
+                          <Image className="w-4 h-4" /> Uploader l'image
+                        </>
+                      )}
+                    </button>
+                    {editingView.imageUrl && (
+                      <img
+                        src={editingView.imageUrl}
+                        alt={editingView.title}
+                        className="w-full max-h-64 object-contain rounded-lg border border-paper/20 bg-ink-card"
+                      />
+                    )}
+                  </div>
+                  <label className="block text-paper/70 mb-1 mt-3">URL de l'image (Ex: /masterplan-les-terrasses.jpg ou HTTPS)</label>
                   <input
                     type="text"
                     value={editingView.imageUrl}
@@ -1163,13 +1249,14 @@ export default function AdminCataloguePage() {
                     onClick={() => {
                       const newHotspots = [
                         ...(editingView.hotspots || []),
-                        {
+                        createHotspot({
                           id: 'hs-' + Date.now(),
                           label: 'Nouveau Bouton Bloc',
-                          targetBlockId: 'unit-studio',
                           top: '50%',
                           left: '50%',
-                        },
+                          targetType: 'UNIT',
+                          targetId: 'unit-studio',
+                        }),
                       ];
                       handleUpdateViewField(editingView.id, 'hotspots', newHotspots);
                     }}

@@ -591,6 +591,27 @@ describe('ProjectModule — e2e HTTP médias admin (supertest)', () => {
     expect(res.status).toBe(400);
   });
 
+  it('PATCH /admin/projects/:id avec targetBlockId dans views -> 400 (rejet ancien format)', async () => {
+    await createUserFixture({ email: 'admin-pviews1@test.tg', phone: '+22851000050', password: 'Secret123!', role: 'ADMIN' });
+    const { project } = await createProjectWithBlockAndUnits(1);
+    const token = await loginAndGetToken('admin-pviews1@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .patch(`/${API_PREFIX}/admin/projects/${project.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        views: [
+          {
+            id: 'v1', title: 'T', subtitle: 'S', category: 'masterplan',
+            imageUrl: 'https://example.com/img.png', description: 'D',
+            hotspots: [{ id: 'hs', label: 'X', targetBlockId: 'unit-a', top: '10%', left: '10%' }],
+          },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+  });
+
   // ──────────────────────────────────────────────────
   // POST /v1/admin/blocks/:blockId/image/upload
   // ──────────────────────────────────────────────────

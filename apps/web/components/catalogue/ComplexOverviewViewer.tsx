@@ -9,13 +9,15 @@ import {
   Sparkles,
   Building,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  LayoutGrid,
 } from 'lucide-react';
 
 interface ComplexOverviewViewerProps {
   views: ComplexView[];
   units: Unit3DDetails[];
   blockTargets: { id: string; unitId: string }[];
+  blockViewsMap: Record<string, ComplexView[]>;
   residenceInfo: Pick<ComplexInfo, 'titleDeed' | 'totalLandArea' | 'deliveryDate' | 'notaryName' | 'escrowBank'>;
   onSelectUnit: (unitId: string) => void;
 }
@@ -28,11 +30,15 @@ function AerialPhotoView({
   blockTargets,
   titleDeed,
   onSelectUnit,
+  onSelectBlock,
+  activeBlockIds,
 }: {
   view: ComplexView;
   blockTargets: { id: string; unitId: string }[];
   titleDeed: string;
   onSelectUnit: (unitId: string) => void;
+  onSelectBlock: (blockId: string) => void;
+  activeBlockIds: string[];
 }) {
   return (
     <div className="relative w-full bg-ink-dark flex flex-col items-center p-3 sm:p-6">
@@ -48,6 +54,30 @@ function AerialPhotoView({
         {view.hotspots && view.hotspots.length > 0 && (
           <div className="absolute inset-0">
             {view.hotspots.map((hs) => {
+              if (hs.targetType === 'BLOCK') {
+                if (!activeBlockIds.includes(hs.targetId)) return null;
+                return (
+                  <div
+                    key={hs.id}
+                    style={{ top: hs.top, left: hs.left }}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 z-20"
+                  >
+                    <button
+                      onClick={() => onSelectBlock(hs.targetId)}
+                      className="relative group/hs flex items-center gap-2 bg-ink/90 hover:bg-lagoon text-paper border-2 border-lagoon hover:border-paper px-3 py-1.5 rounded-full text-xs font-mono shadow-2xl transition-all hover:scale-110"
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full bg-lagoon-light animate-ping absolute -left-1 -top-1" />
+                      <LayoutGrid className="w-3.5 h-3.5 text-lagoon group-hover/hs:text-paper" />
+                      <span className="font-semibold hidden sm:inline">{hs.label}</span>
+                      <ChevronRight className="w-3 h-3 text-lagoon group-hover/hs:translate-x-0.5 transition-transform" />
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 hidden group-hover/hs:flex flex-col bg-ink border border-paper/30 p-3 rounded-lg w-56 text-left shadow-2xl pointer-events-none z-30">
+                        <div className="font-serif text-sm font-semibold text-paper mb-1">{hs.label}</div>
+                      </div>
+                    </button>
+                  </div>
+                );
+              }
+
               const matchedTarget = resolveHotspotTarget(hs.targetId, blockTargets);
               if (!matchedTarget) return null;
               return (
@@ -93,9 +123,32 @@ function AerialPhotoView({
 // ─────────────────────────────────────────────────────────────
 // MAIN VIEWER COMPONENT
 // ─────────────────────────────────────────────────────────────
-export default function ComplexOverviewViewer({ views, units, blockTargets, residenceInfo, onSelectUnit }: ComplexOverviewViewerProps) {
+export default function ComplexOverviewViewer({ views, units, blockTargets, blockViewsMap, residenceInfo, onSelectUnit }: ComplexOverviewViewerProps) {
+  const [activeTab, setActiveTab] = useState<string>('overview');
   const [activeViewId, setActiveViewId] = useState<string>('view-masterplan');
-  const activeView = selectActiveView(views, activeViewId);
+
+  const blockEntries = Object.entries(blockViewsMap);
+  const hasBlockTabs = blockEntries.length > 0;
+
+  const currentViews = activeTab === 'overview' ? views : (blockViewsMap[activeTab] ?? []);
+  const activeView = selectActiveView(currentViews, activeViewId);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    const viewsForTab = tabId === 'overview' ? views : (blockViewsMap[tabId] ?? []);
+    setActiveViewId(viewsForTab[0]?.id ?? '');
+  };
+
+  const handleSelectBlock = (blockId: string) => {
+    if (blockViewsMap[blockId]) {
+      handleTabChange(blockId);
+    }
+  };
+
+  const blockLabels: Record<string, string> = {};
+  for (const [id, blockViews] of blockEntries) {
+    blockLabels[id] = blockViews[0]?.title?.split(' ')[0] ?? id;
+  }
 
   if (!activeView) {
     return (
@@ -107,12 +160,47 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, resi
 
   return (
     <div className="bg-ink-card border border-paper/20 rounded-2xl overflow-hidden shadow-2xl">
-      {/* Header & Tab switcher */}
+      {/* Block tabs (if any block has views) */}
+      {hasBlockTabs && (
+        <div className="bg-ink/95 border-b border-paper/15 px-4 sm:px-5 pt-3 pb-0 flex flex-wrap gap-1.5">
+          <button
+            onClick={() => handleTabChange('overview')}
+            className={`px-3 py-1.5 rounded-t-lg text-[11px] font-mono transition-all ${
+              activeTab === 'overview'
+                ? 'bg-ink-card text-paper border border-paper/15 border-b-ink-card font-bold'
+                : 'text-paper/50 hover:text-paper hover:bg-paper/5'
+            }`}
+          >
+            <LayoutGrid className="w-3 h-3 inline mr-1.5 -mt-0.5" />
+            Vue d'ensemble
+          </button>
+          {blockEntries.map(([id]) => (
+            <button
+              key={id}
+              onClick={() => handleTabChange(id)}
+              className={`px-3 py-1.5 rounded-t-lg text-[11px] font-mono transition-all ${
+                activeTab === id
+                  ? 'bg-ink-card text-paper border border-paper/15 border-b-ink-card font-bold'
+                  : 'text-paper/50 hover:text-paper hover:bg-paper/5'
+              }`}
+            >
+              <Building className="w-3 h-3 inline mr-1.5 -mt-0.5" />
+              {blockLabels[id]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Header & View switcher */}
       <div className="bg-ink/95 border-b border-paper/15 p-4 sm:p-5 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <div className="inline-flex items-center gap-2 text-xs font-mono text-sand uppercase tracking-wider mb-1">
             <Sparkles className="w-4 h-4 text-laterite-light" />
-            Vue d'ensemble · {residenceInfo.titleDeed} · {residenceInfo.totalLandArea}
+            {activeTab === 'overview' ? (
+              <>Vue d'ensemble · {residenceInfo.titleDeed} · {residenceInfo.totalLandArea}</>
+            ) : (
+              <>{blockLabels[activeTab]} · {residenceInfo.titleDeed}</>
+            )}
           </div>
           <h2 className="font-serif text-xl sm:text-2xl font-semibold text-paper">
             {activeView.title}
@@ -120,7 +208,7 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, resi
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {views.map((v) => (
+          {currentViews.map((v) => (
             <button
               key={v.id}
               onClick={() => setActiveViewId(v.id)}
@@ -143,6 +231,8 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, resi
         blockTargets={blockTargets}
         titleDeed={residenceInfo.titleDeed}
         onSelectUnit={onSelectUnit}
+        onSelectBlock={handleSelectBlock}
+        activeBlockIds={blockEntries.map(([id]) => id)}
       />
 
       {/* Metrics bar */}

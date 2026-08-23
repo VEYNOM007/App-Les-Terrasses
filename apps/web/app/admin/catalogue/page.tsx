@@ -84,6 +84,7 @@ export default function AdminCataloguePage() {
   const [uploadingViewImage, setUploadingViewImage] = useState(false);
   const [viewImageError, setViewImageError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setData(DEFAULT_COMPLEX_DATA);
@@ -147,7 +148,7 @@ export default function AdminCataloguePage() {
             deliveryDate: marketing?.deliveryDate ?? previous.deliveryDate,
             notaryName: marketing?.notaryName ?? previous.notaryName,
             escrowBank: marketing?.escrowBank ?? previous.escrowBank,
-            views: project.views ?? previous.views,
+            views: project.views ?? [],
           };
         });
       }
@@ -185,32 +186,50 @@ export default function AdminCataloguePage() {
 
   if (!data) return null;
 
-  const handleSaveAll = async () => {
-    if (!projectId) return;
-    await adminUpdateProject(projectId, {
-      name: data.name,
-      location: data.location,
-      marketingInfo: {
+  const handleSaveAll = async (): Promise<boolean> => {
+    if (!projectId) return false;
+    setSaveError(null);
+    try {
+      await adminUpdateProject(projectId, {
         name: data.name,
         location: data.location,
-        titleDeed: data.titleDeed,
-        totalLandArea: data.totalLandArea,
-        deliveryDate: data.deliveryDate,
-        notaryName: data.notaryName,
-        escrowBank: data.escrowBank,
-      },
-      views: data.views,
-    });
+        marketingInfo: {
+          name: data.name,
+          location: data.location,
+          titleDeed: data.titleDeed,
+          totalLandArea: data.totalLandArea,
+          deliveryDate: data.deliveryDate,
+          notaryName: data.notaryName,
+          escrowBank: data.escrowBank,
+        },
+        views: data.views,
+      });
+    } catch (e) {
+      console.error('[handleSaveAll] adminUpdateProject failed:', e);
+      setSaveError(
+        `Échec de la sauvegarde du projet : ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return false;
+    }
     for (const project of adminProjects) {
       for (const block of project.blocks) {
         const views = blockViews[block.id];
         if (!views) continue;
-        const updated = await adminUpdateBlockViews(block.id, { views });
-        setBlockViews((prev) => ({ ...prev, [block.id]: updated.views }));
+        try {
+          const updated = await adminUpdateBlockViews(block.id, { views });
+          setBlockViews((prev) => ({ ...prev, [block.id]: updated.views }));
+        } catch (e) {
+          console.error(`[handleSaveAll] adminUpdateBlockViews failed for block ${block.id}:`, e);
+          setSaveError(
+            `Échec de la sauvegarde du bloc ${block.name ?? block.id} : ${e instanceof Error ? e.message : String(e)}`,
+          );
+          return false;
+        }
       }
     }
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
+    return true;
   };
 
   const UNIT_STATUS_OPTIONS: UnitStatus[] = ['DISPONIBLE', 'RESERVE', 'VENDU', 'LIVRE', 'ARCHIVE'];
@@ -534,6 +553,14 @@ export default function AdminCataloguePage() {
         <div className="bg-lagoon text-paper p-4 text-center font-mono text-xs flex items-center justify-center gap-2 font-bold transition-all">
           <CheckCircle className="w-5 h-5 text-paper" />
           Modifications enregistrées avec succès ! Le catalogue public s'est mis à jour.
+        </div>
+      )}
+
+      {/* Error Notification Alert */}
+      {saveError && (
+        <div className="bg-laterite text-paper p-4 text-center font-mono text-xs flex items-center justify-center gap-2 font-bold transition-all">
+          <AlertCircle className="w-5 h-5 text-paper" />
+          {saveError}
         </div>
       )}
 
@@ -1111,6 +1138,11 @@ export default function AdminCataloguePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {data.views.length === 0 && (
+              <div className="col-span-full text-center py-8 text-paper/50 font-mono text-xs border border-dashed border-paper/20 rounded-xl">
+                Aucune vue pour ce projet — cliquez sur &quot;Ajouter une Vue HD&quot; pour commencer.
+              </div>
+            )}
             {data.views.map((view) => (
               <div
                 key={view.id}
@@ -1380,9 +1412,9 @@ export default function AdminCataloguePage() {
 
               <div className="pt-4 border-t border-paper/15 flex justify-end gap-3">
                 <button
-                  onClick={() => {
-                    handleSaveAll();
-                    setEditingView(null);
+                  onClick={async () => {
+                    const ok = await handleSaveAll();
+                    if (ok) setEditingView(null);
                   }}
                   className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs font-bold px-6 py-3 rounded-lg shadow-lg"
                 >

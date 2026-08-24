@@ -25,8 +25,10 @@ import {
   fetchPortalDocuments,
   downloadDocument,
   signContract,
+  fetchPaymentSchedule,
   PortalDashboard,
   PortalDocument,
+  PaymentScheduleResponse,
 } from '../../lib/api';
 
 function formatXOF(value: string | number): string {
@@ -79,6 +81,10 @@ export default function SuiviAcquereur() {
   const [signingDocumentId, setSigningDocumentId] = useState<string | null>(null);
   const [signingError, setSigningError] = useState('');
 
+  const [schedulesMap, setSchedulesMap] = useState<Record<string, PaymentScheduleResponse>>({});
+  const [scheduleLoadingMap, setScheduleLoadingMap] = useState<Record<string, boolean>>({});
+  const [scheduleErrorMap, setScheduleErrorMap] = useState<Record<string, string>>({});
+
   useEffect(() => {
     if (isLoading) return;
     if (!user) {
@@ -102,6 +108,29 @@ export default function SuiviAcquereur() {
   useEffect(() => {
     if (user) void load();
   }, [user, load]);
+
+  const loadScheduleForReservation = useCallback(async (reservationId: string) => {
+    setScheduleLoadingMap((prev) => ({ ...prev, [reservationId]: true }));
+    setScheduleErrorMap((prev) => ({ ...prev, [reservationId]: '' }));
+    try {
+      const schedule = await fetchPaymentSchedule(reservationId);
+      setSchedulesMap((prev) => ({ ...prev, [reservationId]: schedule }));
+    } catch (err) {
+      setScheduleErrorMap((prev) => ({
+        ...prev,
+        [reservationId]:
+          err instanceof Error ? err.message : 'Impossible de charger votre échéancier VEFA.',
+      }));
+    } finally {
+      setScheduleLoadingMap((prev) => ({ ...prev, [reservationId]: false }));
+    }
+  }, []);
+
+  useEffect(() => {
+    dashboards.forEach((d) => {
+      void loadScheduleForReservation(d.reservationId);
+    });
+  }, [dashboards, loadScheduleForReservation]);
 
   const loadDocuments = useCallback(async () => {
     setDocumentsLoading(true);
@@ -333,37 +362,65 @@ export default function SuiviAcquereur() {
                   <div className="lg:col-span-8 space-y-6">
                     <div className="bg-ink-card border border-paper/20 rounded-md p-6">
                       <h3 className="font-serif text-xl font-semibold text-paper mb-4 flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-sand" /> Prochaine Échéance (XOF)
+                        <Calendar className="w-5 h-5 text-sand" /> Échéancier de Paiement VEFA
                       </h3>
 
-                      {nextInstallment ? (
-                        <div className="space-y-3 font-mono text-xs">
-                          <div className="p-3.5 bg-paper/5 border border-paper/10 rounded flex justify-between items-center">
-                            <div>
-                              <div className="font-bold text-paper text-sm">{nextInstallment.label}</div>
-                              <div className="text-paper/50">Échéance : {formatDate(nextInstallment.dueDate)}</div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-bold text-laterite-light text-sm mb-1">
-                                {formatXOF(nextInstallment.amount)} XOF
-                              </div>
-                              <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border ${
-                                  nextInstallment.status === 'PAYE'
-                                    ? 'text-lagoon-light bg-lagoon/20 border-lagoon/40'
-                                    : 'text-paper/50 bg-paper/10 border-paper/20'
-                                }`}
-                              >
-                                {nextInstallment.status === 'PAYE' && <CheckCircle2 className="w-3 h-3" />}
-                                {installmentStatusLabel(nextInstallment.status)}
-                              </span>
-                            </div>
-                          </div>
+                      {scheduleLoadingMap[d.reservationId] ? (
+                        <div
+                          className="flex items-center gap-3 font-mono text-xs text-paper/60 py-6"
+                          data-testid="schedule-loading"
+                        >
+                          <Loader2 className="w-4 h-4 animate-spin text-laterite-light" /> Chargement de votre échéancier VEFA…
                         </div>
-                      ) : (
-                        <p className="text-xs text-paper/60 font-mono">
-                          Toutes vos échéances sont réglées. Félicitations — plus aucun paiement en attente.
+                      ) : scheduleErrorMap[d.reservationId] ? (
+                        <div
+                          className="bg-laterite/15 border border-laterite/40 rounded p-4 flex items-center justify-between gap-3"
+                          data-testid="schedule-error"
+                        >
+                          <div className="flex items-center gap-2 text-xs font-mono text-paper">
+                            <AlertCircle className="w-4 h-4 text-laterite-light shrink-0" />
+                            <span>{scheduleErrorMap[d.reservationId]}</span>
+                          </div>
+                          <button
+                            onClick={() => void loadScheduleForReservation(d.reservationId)}
+                            className="bg-paper/10 hover:bg-paper/20 text-paper font-mono text-xs px-3 py-1.5 rounded transition-all shrink-0"
+                          >
+                            Réessayer
+                          </button>
+                        </div>
+                      ) : !schedulesMap[d.reservationId] || schedulesMap[d.reservationId].installments.length === 0 ? (
+                        <p className="text-xs text-paper/60 font-mono" data-testid="schedule-empty">
+                          Aucune échéance enregistrée pour le moment.
                         </p>
+                      ) : (
+                        <div className="space-y-3 font-mono text-xs" data-testid="schedule-populated">
+                          {schedulesMap[d.reservationId].installments.map((inst) => (
+                            <div
+                              key={inst.id}
+                              className="p-3.5 bg-paper/5 border border-paper/10 rounded flex justify-between items-center"
+                            >
+                              <div>
+                                <div className="font-bold text-paper text-sm">{inst.label}</div>
+                                <div className="text-paper/50">Échéance : {formatDate(inst.dueDate)}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-laterite-light text-sm mb-1">
+                                  {formatXOF(inst.amount)} XOF
+                                </div>
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border ${
+                                    inst.status === 'PAYE'
+                                      ? 'text-lagoon-light bg-lagoon/20 border-lagoon/40'
+                                      : 'text-paper/50 bg-paper/10 border-paper/20'
+                                  }`}
+                                >
+                                  {inst.status === 'PAYE' && <CheckCircle2 className="w-3 h-3" />}
+                                  {installmentStatusLabel(inst.status)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
 

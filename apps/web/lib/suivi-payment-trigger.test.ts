@@ -11,6 +11,7 @@ describe('SuiviAcquereur — Déclenchement Stripe Checkout (R6)', () => {
     it('devrait appeler payInstallment avec installmentId et provider STRIPE', async () => {
       const mockResponse: PayInstallmentResponse = {
         paymentUrl: 'https://checkout.stripe.com/pay/cs_test_abc123',
+        transactionId: 'txn_test_abc123',
         provider: 'STRIPE',
       };
       const spy = vi.fn().mockResolvedValue(mockResponse);
@@ -45,15 +46,16 @@ describe('SuiviAcquereur — Déclenchement Stripe Checkout (R6)', () => {
   describe('3. Redirection vers paymentUrl', () => {
     it('devrait affecter window.location.href à la paymentUrl retournée', async () => {
       const expectedUrl = 'https://checkout.stripe.com/pay/cs_test_xyz789';
-      const spy = vi.fn().mockResolvedValue({
+      const fetchSpy = vi.fn().mockResolvedValue({
         paymentUrl: expectedUrl,
+        transactionId: 'txn_test_xyz789',
         provider: 'STRIPE',
       });
 
       // Simule le comportement du handler
       let redirectedTo = '';
       const handlePayInstallment = async (installmentId: string) => {
-        const res = await spy(installmentId, 'STRIPE');
+        const res = await fetchSpy(installmentId, 'STRIPE');
         if (!res || !res.paymentUrl) throw new Error('URL de redirection Stripe non reçue.');
         redirectedTo = res.paymentUrl; // Simule window.location.href
       };

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Logger, BadRequestException, forwardRef } from '@nestjs/common';
 import type Stripe from 'stripe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
@@ -29,6 +29,7 @@ export class PaymentService {
 
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => ReservationService))
     private readonly reservationService: ReservationService,
     private readonly notifications: NotificationService,
     private readonly cinetPayClient: CinetPayClient,

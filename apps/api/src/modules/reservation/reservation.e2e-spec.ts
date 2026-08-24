@@ -127,7 +127,7 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('POST /reservations avec JWT valide -> 201, reservation créée en DB', async () => {
+  it('POST /reservations avec JWT valide -> 201, reservation + échéancier créés en DB', async () => {
     const user = await createUserFixture({ email: 'e2e@test.tg', phone: '+22810101010', password: 'Secret123!' });
     const { units } = await createProjectWithBlockAndUnits(1);
     const token = await loginAndGetToken('e2e@test.tg', 'Secret123!');
@@ -138,10 +138,12 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
       .send({ unitId: units[0].id });
 
     expect(res.status).toBe(201);
-    expect(res.body).toHaveProperty('id');
-    expect(res.body.status).toBe('EN_ATTENTE');
-    expect(res.body.unitId).toBe(units[0].id);
-    expect(res.body.userId).toBe(user.id);
+    expect(res.body.reservation).toHaveProperty('id');
+    expect(res.body.reservation.status).toBe('EN_ATTENTE');
+    expect(res.body.reservation.unitId).toBe(units[0].id);
+    expect(res.body.reservation.userId).toBe(user.id);
+    expect(res.body.schedule).toHaveProperty('id');
+    expect(generateSchedule).toHaveBeenCalledWith(res.body.reservation.id);
 
     // Unit passée à RESERVE
     const unit = await testPrisma.unit.findUniqueOrThrow({ where: { id: units[0].id } });
@@ -186,8 +188,9 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
       .send({ unitId: units[0].id });
     expect(createRes.status).toBe(201);
 
+    const reservationId = createRes.body.reservation.id;
     const deleteRes = await request(app.getHttpServer())
-      .delete(`/${API_PREFIX}/reservations/${createRes.body.id}`)
+      .delete(`/${API_PREFIX}/reservations/${reservationId}`)
       .set('Authorization', `Bearer ${token}`);
     expect(deleteRes.status).toBe(200);
 
@@ -210,8 +213,9 @@ describe('ReservationModule — e2e HTTP (supertest)', () => {
       .send({ unitId: units[0].id });
     expect(createRes.status).toBe(201);
 
+    const reservationId = createRes.body.reservation.id;
     const deleteRes = await request(app.getHttpServer())
-      .delete(`/${API_PREFIX}/reservations/${createRes.body.id}`)
+      .delete(`/${API_PREFIX}/reservations/${reservationId}`)
       .set('Authorization', `Bearer ${tokenIntruder}`);
     expect(deleteRes.status).toBe(403);
   });

@@ -6,6 +6,7 @@ import { ReservationService } from './reservation.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisLockService } from '../../common/redis/redis-lock.service';
 import { LaunchService } from '../launch/launch.service';
+import { PaymentService } from '../payment/payment.service';
 import {
   cleanupTestDatabase,
   createUserFixture,
@@ -37,6 +38,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
   let module: TestingModule;
   let launchService: { checkFundingThreshold: jest.Mock };
   let queue: { add: jest.Mock };
+  let paymentService: { generateSchedule: jest.Mock };
 
   // Prisma pointant sur la DB de test (singleton via helper)
   const testPrisma = getTestPrisma();
@@ -44,6 +46,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
   beforeAll(async () => {
     launchService = { checkFundingThreshold: jest.fn().mockResolvedValue(undefined) };
     queue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
+    paymentService = { generateSchedule: jest.fn().mockResolvedValue([{ id: 'inst-1' }]) };
 
     module = await Test.createTestingModule({
       providers: [
@@ -53,6 +56,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
         { provide: 'REDIS_CLIENT', useValue: testPrisma }, // placeholder, écrasé ci-dessous
         { provide: LaunchService, useValue: launchService },
         { provide: getQueueToken('reservation-expiration'), useValue: queue },
+        { provide: PaymentService, useValue: paymentService },
       ],
     })
       .overrideProvider('REDIS_CLIENT')
@@ -108,7 +112,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
     const { units } = await createProjectWithBlockAndUnits(1);
     const unit = units[0];
 
-    const reservation = await service.reserveUnit(unit.id, user.id);
+    const { reservation } = await service.reserveUnit(unit.id, user.id);
 
     expect(reservation).toBeDefined();
     expect(reservation.status).toBe(ReservationStatus.EN_ATTENTE);
@@ -133,6 +137,9 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
         jobId: reservation.id,
       }),
     );
+
+    // Échéancier généré
+    expect(paymentService.generateSchedule).toHaveBeenCalledWith(reservation.id);
   });
 
   // ──────────────────────────────────────────────────
@@ -193,7 +200,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
   it('confirmReservation doit passer la réservation en CONFIRMEE et l\'unit en VENDU + déclencher checkFundingThreshold', async () => {
     const user = await createUserFixture();
     const { block, units } = await createProjectWithBlockAndUnits(1);
-    const reservation = await service.reserveUnit(units[0].id, user.id);
+    const { reservation } = await service.reserveUnit(units[0].id, user.id);
 
     await service.confirmReservation(reservation.id);
 
@@ -213,7 +220,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
   it('cancelReservation doit annuler et libérer l\'unit si owner et statut EN_ATTENTE', async () => {
     const user = await createUserFixture();
     const { units } = await createProjectWithBlockAndUnits(1);
-    const reservation = await service.reserveUnit(units[0].id, user.id);
+    const { reservation } = await service.reserveUnit(units[0].id, user.id);
 
     await service.cancelReservation(reservation.id, user.id);
 
@@ -228,7 +235,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
     const user = await createUserFixture();
     const intruder = await createUserFixture({ email: 'intruder@test.tg', phone: '+22844444444' });
     const { units } = await createProjectWithBlockAndUnits(1);
-    const reservation = await service.reserveUnit(units[0].id, user.id);
+    const { reservation } = await service.reserveUnit(units[0].id, user.id);
 
     await expect(service.cancelReservation(reservation.id, intruder.id)).rejects.toThrow(
       ForbiddenException,
@@ -242,7 +249,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
   it('cancelReservation doit lever ConflictException si deja CONFIRMEE', async () => {
     const user = await createUserFixture();
     const { units } = await createProjectWithBlockAndUnits(1);
-    const reservation = await service.reserveUnit(units[0].id, user.id);
+    const { reservation } = await service.reserveUnit(units[0].id, user.id);
     await service.confirmReservation(reservation.id);
 
     await expect(service.cancelReservation(reservation.id, user.id)).rejects.toThrow(

@@ -586,15 +586,23 @@ export interface ReservationResponse {
   createdAt: string;
 }
 
+export interface ReservationCreatePayload {
+  reservation: ReservationResponse;
+  schedule: { id: string };
+}
+
 /**
  * Crée une réservation (verrou 48h) sur une unité.
  * Authentification via cookie httpOnly (JwtStrategy lit access_token).
+ * L'API retourne { reservation, schedule } — on extrait la réservation
+ * pour maintenir la compatibilité avec les composants existants.
  */
 export async function createReservation(unitId: string): Promise<ReservationResponse> {
-  return apiFetch<ReservationResponse>('/v1/reservations', {
+  const payload = await apiFetch<ReservationCreatePayload>('/v1/reservations', {
     method: 'POST',
     body: JSON.stringify({ unitId } satisfies ReservationRequest),
   });
+  return payload.reservation;
 }
 
 // ────────────────────────────────────────────────────────────

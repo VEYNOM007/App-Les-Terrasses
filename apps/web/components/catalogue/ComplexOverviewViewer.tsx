@@ -232,7 +232,7 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, bloc
         titleDeed={residenceInfo.titleDeed}
         onSelectUnit={onSelectUnit}
         onSelectBlock={handleSelectBlock}
-        activeBlockIds={blockEntries.map(([id]) => id)}
+        activeBlockIds={blockTargets.map((t) => t.id)}
       />
 
       {/* Metrics bar */}

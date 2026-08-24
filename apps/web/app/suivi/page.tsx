@@ -17,6 +17,7 @@ import {
   PenLine,
   Sparkles,
   ExternalLink,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import SignaturePad from '../../components/SignaturePad';
@@ -26,6 +27,7 @@ import {
   downloadDocument,
   signContract,
   fetchPaymentSchedule,
+  payInstallment,
   PortalDashboard,
   PortalDocument,
   PaymentScheduleResponse,
@@ -85,6 +87,9 @@ export default function SuiviAcquereur() {
   const [scheduleLoadingMap, setScheduleLoadingMap] = useState<Record<string, boolean>>({});
   const [scheduleErrorMap, setScheduleErrorMap] = useState<Record<string, string>>({});
 
+  const [payingInstallmentId, setPayingInstallmentId] = useState<string | null>(null);
+  const [paymentErrorMap, setPaymentErrorMap] = useState<Record<string, string>>({});
+
   useEffect(() => {
     if (isLoading) return;
     if (!user) {
@@ -131,6 +136,26 @@ export default function SuiviAcquereur() {
       void loadScheduleForReservation(d.reservationId);
     });
   }, [dashboards, loadScheduleForReservation]);
+
+  const handlePayInstallment = async (installmentId: string) => {
+    if (payingInstallmentId) return; // Garde-fou anti double-clic
+    setPayingInstallmentId(installmentId);
+    setPaymentErrorMap((prev) => ({ ...prev, [installmentId]: '' }));
+    try {
+      const res = await payInstallment(installmentId, 'STRIPE');
+      if (!res || !res.paymentUrl) {
+        throw new Error('URL de redirection Stripe non reçue.');
+      }
+      window.location.href = res.paymentUrl;
+    } catch (err) {
+      setPaymentErrorMap((prev) => ({
+        ...prev,
+        [installmentId]:
+          err instanceof Error ? err.message : 'Impossible d\'initialiser le paiement Stripe.',
+      }));
+      setPayingInstallmentId(null);
+    }
+  };
 
   const loadDocuments = useCallback(async () => {
     setDocumentsLoading(true);
@@ -397,27 +422,61 @@ export default function SuiviAcquereur() {
                           {schedulesMap[d.reservationId].installments.map((inst) => (
                             <div
                               key={inst.id}
-                              className="p-3.5 bg-paper/5 border border-paper/10 rounded flex justify-between items-center"
+                              className="p-3.5 bg-paper/5 border border-paper/10 rounded space-y-2"
                             >
-                              <div>
-                                <div className="font-bold text-paper text-sm">{inst.label}</div>
-                                <div className="text-paper/50">Échéance : {formatDate(inst.dueDate)}</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-bold text-laterite-light text-sm mb-1">
-                                  {formatXOF(inst.amount)} XOF
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <div className="font-bold text-paper text-sm">{inst.label}</div>
+                                  <div className="text-paper/50">Échéance : {formatDate(inst.dueDate)}</div>
                                 </div>
-                                <span
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border ${
-                                    inst.status === 'PAYE'
-                                      ? 'text-lagoon-light bg-lagoon/20 border-lagoon/40'
-                                      : 'text-paper/50 bg-paper/10 border-paper/20'
-                                  }`}
-                                >
-                                  {inst.status === 'PAYE' && <CheckCircle2 className="w-3 h-3" />}
-                                  {installmentStatusLabel(inst.status)}
-                                </span>
+                                <div className="text-right">
+                                  <div className="font-bold text-laterite-light text-sm mb-1">
+                                    {formatXOF(inst.amount)} XOF
+                                  </div>
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border ${
+                                      inst.status === 'PAYE'
+                                        ? 'text-lagoon-light bg-lagoon/20 border-lagoon/40'
+                                        : 'text-paper/50 bg-paper/10 border-paper/20'
+                                    }`}
+                                  >
+                                    {inst.status === 'PAYE' && <CheckCircle2 className="w-3 h-3" />}
+                                    {installmentStatusLabel(inst.status)}
+                                  </span>
+                                </div>
                               </div>
+
+                              {inst.status === 'EN_ATTENTE' && (
+                                <div className="pt-2 border-t border-paper/10 flex flex-col items-end gap-1.5">
+                                  <button
+                                    disabled={payingInstallmentId === inst.id}
+                                    onClick={() => void handlePayInstallment(inst.id)}
+                                    className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light disabled:opacity-50 disabled:cursor-not-allowed text-paper font-mono text-xs px-3.5 py-2 rounded transition-all font-semibold"
+                                    data-testid={`pay-button-${inst.id}`}
+                                  >
+                                    {payingInstallmentId === inst.id ? (
+                                      <>
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-paper" />
+                                        Redirection Stripe…
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CreditCard className="w-3.5 h-3.5" />
+                                        Payer par Carte (Stripe)
+                                      </>
+                                    )}
+                                  </button>
+                                  {paymentErrorMap[inst.id] && (
+                                    <div
+                                      className="text-xs font-mono text-laterite-light flex items-center gap-1.5"
+                                      data-testid={`payment-error-${inst.id}`}
+                                    >
+                                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                      <span>{paymentErrorMap[inst.id]}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

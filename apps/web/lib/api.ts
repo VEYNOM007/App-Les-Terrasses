@@ -689,3 +689,71 @@ export async function signContract(documentId: string, signatureBlob: Blob): Pro
     body: form,
   });
 }
+
+// ────────────────────────────────────────────────────────────
+// Paiement (Stripe uniquement)
+// ────────────────────────────────────────────────────────────
+
+export interface PayInstallmentResponse {
+  paymentUrl: string;
+  transactionId: string;
+  provider: 'STRIPE';
+  sessionId?: string;
+}
+
+export interface PaymentScheduleResponse {
+  reservationId: string;
+  totalAmount: string;
+  currency: string;
+  installments: PortalInstallment[];
+}
+
+export interface PaymentHistoryItem {
+  id: string;
+  scheduleId: string;
+  label: string;
+  amount: string;
+  dueDate: string;
+  status: 'EN_ATTENTE' | 'PAYE' | 'EN_RETARD' | 'ANNULE' | string;
+  paidAt: string | null;
+  provider: 'CINETPAY' | 'STRIPE' | 'MOBILE_MONEY' | 'VIREMENT_BANCAIRE' | 'AUTRE' | null;
+  providerRef: string | null;
+  createdAt: string;
+  updatedAt: string;
+  schedule: {
+    reservation: {
+      id: string;
+      unitId: string;
+    };
+  };
+}
+
+/**
+ * Initie le paiement d'une échéance auprès du provider choisi.
+ * Périmètre strict du chantier actif : Stripe (mode test) uniquement.
+ */
+export function payInstallment(
+  installmentId: string,
+  provider: 'STRIPE' = 'STRIPE',
+): Promise<PayInstallmentResponse> {
+  return apiFetch<PayInstallmentResponse>(`/v1/payments/installments/${installmentId}/pay`, {
+    method: 'POST',
+    body: JSON.stringify({ provider }),
+  });
+}
+
+/**
+ * Récupère l'échéancier complet d'une réservation pour l'acheteur connecté.
+ */
+export function fetchPaymentSchedule(reservationId: string): Promise<PaymentScheduleResponse> {
+  return apiFetch<PaymentScheduleResponse>(`/v1/payments/schedule/${reservationId}`);
+}
+
+/**
+ * Récupère l'historique complet des paiements de l'acheteur connecté.
+ * Alignement 1:1 sur la réponse de GET /v1/payments/history (NestJS/Prisma).
+ */
+export function fetchPaymentHistory(): Promise<PaymentHistoryItem[]> {
+  return apiFetch<PaymentHistoryItem[]>('/v1/payments/history');
+}
+

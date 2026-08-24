@@ -4,6 +4,8 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -12,6 +14,7 @@ import { RedisLockService } from '../../common/redis/redis-lock.service';
 import { LaunchService } from '../launch/launch.service';
 import { UnitStatus, ReservationStatus } from '@prisma/client';
 import { AdminReservationStatusInput } from '../admin/dto/reservation-status.dto';
+import { PaymentService } from '../payment/payment.service';
 
 const RESERVATION_HOLD_HOURS = 48;
 
@@ -29,6 +32,8 @@ export class ReservationService {
     private readonly redisLock: RedisLockService,
     private readonly launchService: LaunchService,
     @InjectQueue('reservation-expiration') private readonly expirationQueue: Queue,
+    @Inject(forwardRef(() => PaymentService))
+    private readonly paymentService: PaymentService,
   ) {}
 
   /**
@@ -101,10 +106,13 @@ export class ReservationService {
 
   /**
    * Crée une réservation pour une unité, en garantissant qu'une seule
-   * réservation active ne peut exister par unité à un instant T.
+   * réservation active ne peut exister par un instant T. Génère
+   * automatiquement l'échéancier de paiement associé.
    */
   async reserveUnit(unitId: string, userId: string) {
-    return this.createReservationCore(unitId, userId);
+    const reservation = await this.createReservationCore(unitId, userId);
+    const schedule = await this.paymentService.generateSchedule(reservation.id);
+    return { reservation, schedule };
   }
 
   /**

@@ -7,11 +7,13 @@ import { ConflictException, NotFoundException, ForbiddenException, BadRequestExc
 import { getQueueToken } from '@nestjs/bullmq';
 import { Decimal } from '@prisma/client/runtime/library';
 
+import { PaymentService } from '../payment/payment.service';
+
 /**
  * Tests unitaires — ReservationService
  *
  * Scénarios critiques couverts (Règle R6 CLAUDE.md) :
- *  1. reserveUnit — succès : lock Redis acquis, transaction Prisma, job BullMQ planifié
+ *  1. reserveUnit — succès : lock Redis acquis, transaction Prisma, job BullMQ planifié, échéancier généré
  *  2. reserveUnit — lock Redis non acquis → ConflictException
  *  3. reserveUnit — unité déjà réservée (updateMany.count = 0) → ConflictException
  *  4. reserveUnit — libération du lock Redis même en cas d'erreur (finally)
@@ -57,6 +59,10 @@ const createMockExpirationQueue = () => ({
   add: jest.fn().mockResolvedValue(undefined),
 });
 
+const createMockPaymentService = () => ({
+  generateSchedule: jest.fn().mockResolvedValue({ id: 'sched-001', installments: [] }),
+});
+
 // ────────────────────────────────────────────────────────────
 // Suite de tests
 // ────────────────────────────────────────────────────────────
@@ -67,12 +73,14 @@ describe('ReservationService', () => {
   let redisLock: ReturnType<typeof createMockRedisLock>;
   let launchService: ReturnType<typeof createMockLaunchService>;
   let expirationQueue: ReturnType<typeof createMockExpirationQueue>;
+  let paymentService: ReturnType<typeof createMockPaymentService>;
 
   beforeEach(async () => {
     prisma = createMockPrisma();
     redisLock = createMockRedisLock();
     launchService = createMockLaunchService();
     expirationQueue = createMockExpirationQueue();
+    paymentService = createMockPaymentService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -81,6 +89,7 @@ describe('ReservationService', () => {
         { provide: RedisLockService, useValue: redisLock },
         { provide: LaunchService, useValue: launchService },
         { provide: getQueueToken('reservation-expiration'), useValue: expirationQueue },
+        { provide: PaymentService, useValue: paymentService },
       ],
     }).compile();
 
@@ -129,7 +138,13 @@ describe('ReservationService', () => {
       // Vérification : lock Redis libéré
       expect(redisLock.release).toHaveBeenCalledWith('lock:unit:unit-001', 'token-abc');
 
-      expect(result).toEqual(mockReservation);
+      // Vérification : échéancier généré
+      expect(paymentService.generateSchedule).toHaveBeenCalledWith('res-001');
+
+      expect(result).toEqual({
+        reservation: mockReservation,
+        schedule: { id: 'sched-001', installments: [] },
+      });
     });
 
     it('devrait rejeter si le lock Redis ne peut être acquis (double réservation simultanée)', async () => {

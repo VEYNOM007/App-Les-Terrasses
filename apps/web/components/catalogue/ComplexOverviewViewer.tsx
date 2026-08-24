@@ -128,7 +128,8 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, bloc
   const [activeViewId, setActiveViewId] = useState<string>('view-masterplan');
 
   const blockEntries = Object.entries(blockViewsMap);
-  const hasBlockTabs = blockEntries.length > 0;
+  const allBlockIds = blockTargets.map((t) => t.id);
+  const hasBlockTabs = allBlockIds.length > 0;
 
   const currentViews = activeTab === 'overview' ? views : (blockViewsMap[activeTab] ?? []);
   const activeView = selectActiveView(currentViews, activeViewId);
@@ -140,14 +141,15 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, bloc
   };
 
   const handleSelectBlock = (blockId: string) => {
-    if (blockViewsMap[blockId]) {
-      handleTabChange(blockId);
-    }
+    handleTabChange(blockId);
   };
 
   const blockLabels: Record<string, string> = {};
   for (const [id, blockViews] of blockEntries) {
     blockLabels[id] = blockViews[0]?.title?.split(' ')[0] ?? id;
+  }
+  for (const id of allBlockIds) {
+    if (!blockLabels[id]) blockLabels[id] = id;
   }
 
   if (!activeView) {
@@ -160,7 +162,7 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, bloc
 
   return (
     <div className="bg-ink-card border border-paper/20 rounded-2xl overflow-hidden shadow-2xl">
-      {/* Block tabs (if any block has views) */}
+      {/* Block tabs (if any block exists in the project) */}
       {hasBlockTabs && (
         <div className="bg-ink/95 border-b border-paper/15 px-4 sm:px-5 pt-3 pb-0 flex flex-wrap gap-1.5">
           <button
@@ -174,7 +176,7 @@ export default function ComplexOverviewViewer({ views, units, blockTargets, bloc
             <LayoutGrid className="w-3 h-3 inline mr-1.5 -mt-0.5" />
             Vue d'ensemble
           </button>
-          {blockEntries.map(([id]) => (
+          {allBlockIds.map((id) => (
             <button
               key={id}
               onClick={() => handleTabChange(id)}

@@ -6,7 +6,7 @@ import { AuthUser, fetchMe, login as apiLogin, logout as apiLogout, register as 
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
   register: (data: {
     email: string;
     phone: string;
@@ -41,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const { user: logged } = await apiLogin(email, password);
     setUser(logged);
+    return logged;
   }, []);
 
   const register = useCallback(async (data: {

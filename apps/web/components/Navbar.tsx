@@ -46,6 +46,9 @@ export default function Navbar() {
             <span className="font-mono text-xs text-paper/50">…</span>
           ) : user ? (
             <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-paper/60 hidden sm:inline-block" title={user.email}>
+                {user.fullName || user.email}
+              </span>
               {user.role === 'ADMIN' && (
                 <a
                   href="/admin"

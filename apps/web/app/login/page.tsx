@@ -3,13 +3,14 @@
 import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LogIn, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react';
-import { login as apiLogin } from '../../lib/api';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
+import { useAuth } from '../../components/AuthProvider';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -21,9 +22,7 @@ function LoginForm() {
     setIsSubmitting(true);
 
     try {
-      // apiLogin pose les cookies httpOnly. Le role retourne determine la redirection.
-      // hydrateSession du AuthProvider sur la page de destination recuperera le user.
-      const { user: logged } = await apiLogin(email, password);
+      const logged = await login(email, password);
       const redirect = searchParams.get('redirect');
       if (redirect && redirect.startsWith('/')) {
         router.push(redirect);

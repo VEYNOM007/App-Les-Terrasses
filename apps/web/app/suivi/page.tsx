@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import {
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   HardHat,
   ShieldCheck,
   Download,
@@ -95,6 +97,17 @@ export default function SuiviAcquereur() {
   const [cancellingReservationId, setCancellingReservationId] = useState<string | null>(null);
   const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null);
   const [cancelErrorMap, setCancelErrorMap] = useState<Record<string, string>>({});
+
+  const [showHistory, setShowHistory] = useState(false);
+
+  const activeReservations = useMemo(
+    () => dashboards.filter((d) => ['EN_ATTENTE', 'CONFIRMEE', 'LIVREE'].includes(d.status)),
+    [dashboards],
+  );
+  const cancelledReservations = useMemo(
+    () => dashboards.filter((d) => d.status === 'ANNULEE'),
+    [dashboards],
+  );
 
   useEffect(() => {
     if (isLoading) return;
@@ -302,15 +315,43 @@ export default function SuiviAcquereur() {
             </a>
           </div>
         ) : (
-          dashboards.map((d) => {
-            const { unit, nextInstallment } = d;
-            return (
-              <div key={d.reservationId} className="space-y-6">
+          <>
+            {activeReservations.length === 0 && (
+              <div className="bg-ink-card border border-paper/20 rounded-md p-10 text-center space-y-4">
+                <div className="w-14 h-14 bg-lagoon/15 text-lagoon-light rounded-full flex items-center justify-center mx-auto border border-lagoon/40">
+                  <Home className="w-6 h-6" />
+                </div>
+                <h3 className="font-serif text-xl font-semibold text-paper">
+                  Aucune réservation en cours
+                </h3>
+                <p className="text-xs text-paper/60 font-mono max-w-md mx-auto">
+                  {cancelledReservations.length > 0
+                    ? "Votre réservation précédente a été annulée. Parcourez le catalogue pour en créer une nouvelle."
+                    : "Vous n'avez pas encore réservé de logement. Parcourez le catalogue et réservez votre unité pour activer votre suivi d'échéancier et de chantier."}
+                </p>
+                <a
+                  href="/#reserver"
+                  className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-6 py-3 rounded transition-all font-semibold"
+                >
+                  Parcourir le catalogue →
+                </a>
+              </div>
+            )}
+            {activeReservations.map((d) => {
+              const { unit, nextInstallment } = d;
+              return (
+                <div key={d.reservationId} className="space-y-6">
                 <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
                   <span className="bg-lagoon/20 text-lagoon-light border border-lagoon/40 px-3 py-1.5 rounded">
                     Réservation n° {d.reservationId}
                   </span>
-                  <span className="bg-paper/10 text-paper/80 border border-paper/20 px-3 py-1.5 rounded">
+                  <span
+                    className={`px-3 py-1.5 rounded border ${
+                      d.status === 'ANNULEE'
+                        ? 'bg-laterite/15 text-laterite-light border-laterite/40'
+                        : 'bg-paper/10 text-paper/80 border-paper/20'
+                    }`}
+                  >
                     {reservationStatusLabel(d.status)}
                   </span>
                   <span className="bg-sand/15 text-sand border border-sand/40 px-3 py-1.5 rounded">
@@ -587,7 +628,48 @@ export default function SuiviAcquereur() {
                 </div>
               </div>
             );
-          })
+            })}
+            {cancelledReservations.length > 0 && (
+              <div className="space-y-4">
+                <button
+                  onClick={() => setShowHistory(!showHistory)}
+                  className="flex items-center gap-2 text-xs font-mono text-paper/60 hover:text-paper transition-colors"
+                >
+                  {showHistory ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                  Historique ({cancelledReservations.length} réservation
+                  {cancelledReservations.length > 1 ? 's' : ''} annulée
+                  {cancelledReservations.length > 1 ? 's' : ''})
+                </button>
+                {showHistory && (
+                  <div className="space-y-3">
+                    {cancelledReservations.map((d) => {
+                      const { unit } = d;
+                      return (
+                        <div
+                          key={d.reservationId}
+                          className="opacity-60 bg-ink-card border border-laterite/20 rounded-md p-4 flex flex-wrap items-center gap-3 font-mono text-xs"
+                        >
+                          <span className="bg-paper/10 text-paper/80 border border-paper/20 px-3 py-1.5 rounded">
+                            Réservation n° {d.reservationId}
+                          </span>
+                          <span className="bg-laterite/15 text-laterite-light border border-laterite/40 px-3 py-1.5 rounded">
+                            Annulée
+                          </span>
+                          <span className="bg-sand/15 text-sand border border-sand/40 px-3 py-1.5 rounded">
+                            Lot {unit.block.name} — {unit.type}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
 
         <div className="bg-ink-card border border-paper/20 rounded-md p-6">

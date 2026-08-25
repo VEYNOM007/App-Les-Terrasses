@@ -2,7 +2,7 @@
 
 import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { UserPlus, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react';
+import { UserPlus, AlertTriangle, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
@@ -17,6 +17,7 @@ function RegisterForm() {
   const [country, setCountry] = useState('TG');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -122,30 +123,50 @@ function RegisterForm() {
 
         <div>
           <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Mot de passe *</label>
-          <input
-            type="password"
-            required
-            autoComplete="new-password"
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="8 caractères minimum"
-            className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              autoComplete="new-password"
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="8 caractères minimum"
+              className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 pr-10 text-sm text-paper font-sans focus:border-laterite-light outline-none"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-paper/40 hover:text-paper/70 transition-colors p-1"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
         <div>
           <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Confirmer le mot de passe *</label>
-          <input
-            type="password"
-            required
-            autoComplete="new-password"
-            minLength={8}
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="••••••••"
-            className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              autoComplete="new-password"
+              minLength={8}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 pr-10 text-sm text-paper font-sans focus:border-laterite-light outline-none"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-paper/40 hover:text-paper/70 transition-colors p-1"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
         <button

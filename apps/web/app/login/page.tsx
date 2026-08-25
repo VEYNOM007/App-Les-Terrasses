@@ -2,7 +2,7 @@
 
 import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LogIn, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react';
+import { LogIn, AlertTriangle, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import { useAuth } from '../../components/AuthProvider';
@@ -13,6 +13,7 @@ function LoginForm() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -70,15 +71,25 @@ function LoginForm() {
 
         <div>
           <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Mot de passe</label>
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 pr-10 text-sm text-paper font-sans focus:border-laterite-light outline-none"
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-paper/40 hover:text-paper/70 transition-colors p-1"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
           <div className="text-right mt-2">
             <a href="/forgot-password" className="text-xs text-lagoon-light hover:underline font-mono">
               Mot de passe oublié ?

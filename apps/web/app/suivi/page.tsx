@@ -18,6 +18,7 @@ import {
   Sparkles,
   ExternalLink,
   CreditCard,
+  XCircle,
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import SignaturePad from '../../components/SignaturePad';

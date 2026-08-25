@@ -71,56 +71,32 @@ describe('Fix race condition login (R6)', () => {
   });
 
   describe('2. Login page — redirection basée sur le rôle du user retourné', () => {
+    function resolveRedirect(searchParams: URLSearchParams, role: string): string {
+      const redirect = searchParams.get('redirect');
+      if (typeof redirect === 'string' && redirect.startsWith('/')) {
+        return redirect;
+      }
+      return role === 'ADMIN' ? '/admin' : '/suivi';
+    }
+
     it('devrait rediriger vers /suivi pour un ACHETEUR', () => {
-      const logged = mockUser;
-      const redirect: string | null = null;
-
-      const target = redirect && redirect.startsWith('/')
-        ? redirect
-        : logged.role === 'ADMIN'
-          ? '/admin'
-          : '/suivi';
-
-      expect(target).toBe('/suivi');
+      const params = new URLSearchParams();
+      expect(resolveRedirect(params, mockUser.role)).toBe('/suivi');
     });
 
     it('devrait rediriger vers /admin pour un ADMIN', () => {
-      const logged = mockAdmin;
-      const redirect: string | null = null;
-
-      const target = redirect && redirect.startsWith('/')
-        ? redirect
-        : logged.role === 'ADMIN'
-          ? '/admin'
-          : '/suivi';
-
-      expect(target).toBe('/admin');
+      const params = new URLSearchParams();
+      expect(resolveRedirect(params, mockAdmin.role)).toBe('/admin');
     });
 
     it('devrait respecter le paramètre redirect quand il est fourni', () => {
-      const logged = mockUser;
-      const redirect = '/catalogue';
-
-      const target = redirect && redirect.startsWith('/')
-        ? redirect
-        : logged.role === 'ADMIN'
-          ? '/admin'
-          : '/suivi';
-
-      expect(target).toBe('/catalogue');
+      const params = new URLSearchParams({ redirect: '/catalogue' });
+      expect(resolveRedirect(params, mockUser.role)).toBe('/catalogue');
     });
 
     it('devrait ignorer un redirect qui ne commence pas par /', () => {
-      const logged = mockUser;
-      const redirect = 'https://evil.com';
-
-      const target = redirect && redirect.startsWith('/')
-        ? redirect
-        : logged.role === 'ADMIN'
-          ? '/admin'
-          : '/suivi';
-
-      expect(target).toBe('/suivi');
+      const params = new URLSearchParams({ redirect: 'https://evil.com' });
+      expect(resolveRedirect(params, mockUser.role)).toBe('/suivi');
     });
   });
 

@@ -446,6 +446,38 @@ describe('ReservationService', () => {
     });
   });
 
+  describe('adminGetReservation', () => {
+    it('devrait retourner la réservation avec user, unit et échéancier (si existant)', async () => {
+      const expected = {
+        id: 'res-001',
+        user: { id: 'user-001', fullName: 'Moussa', email: 'm@test.com', phone: '+228' },
+        unit: { id: 'unit-001', type: 'T2', blockId: 'block-1' },
+        paymentSchedule: { totalAmount: 500000, installments: [] },
+      };
+      prisma.reservation.findUnique.mockResolvedValue(expected);
+
+      const result = await service.adminGetReservation('res-001');
+
+      expect(result).toEqual(expected);
+      expect(prisma.reservation.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'res-001' },
+          include: expect.objectContaining({
+            user: expect.objectContaining({ select: expect.objectContaining({ id: true }) }),
+            unit: true,
+            paymentSchedule: expect.any(Object),
+          }),
+        }),
+      );
+    });
+
+    it('devrait lever NotFoundException si la réservation nexiste pas', async () => {
+      prisma.reservation.findUnique.mockResolvedValue(null);
+
+      await expect(service.adminGetReservation('res-inexistant')).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('adminSetStatus', () => {
     const baseReservation = {
       id: 'res-001',

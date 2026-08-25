@@ -258,6 +258,26 @@ export class ReservationService {
   }
 
   /**
+   * Détail d'une réservation pour le back-office — inclut l'acheteur,
+   * l'unité et l'échéancier complet (si existant). Pas de filtre userId :
+   * l'admin voit toutes les réservations.
+   */
+  async adminGetReservation(reservationId: string) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: {
+        user: { select: { id: true, fullName: true, email: true, phone: true } },
+        unit: true,
+        paymentSchedule: {
+          include: { installments: { orderBy: { dueDate: 'asc' } } },
+        },
+      },
+    });
+    if (!reservation) throw new NotFoundException('Réservation introuvable.');
+    return reservation;
+  }
+
+  /**
    * Changement manuel de statut (vente commerciale hors app, livraison…).
    * Prépare le même invariant que `confirmReservation()` :
    *  - CONFIRMEE  -> unité VENDU + recalcul du seuil de financement du lot

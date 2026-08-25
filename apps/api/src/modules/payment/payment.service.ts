@@ -3,7 +3,7 @@ import type Stripe from 'stripe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
-import { InstallmentStatus, PaymentProvider } from '@prisma/client';
+import { InstallmentStatus, PaymentProvider, ReservationStatus } from '@prisma/client';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
 import {
@@ -130,6 +130,11 @@ export class PaymentService {
     }
     if (installment.status === InstallmentStatus.PAYE) {
       throw new BadRequestException('Cette échéance est déjà payée.');
+    }
+    if (installment.schedule.reservation.status === ReservationStatus.ANNULEE) {
+      throw new BadRequestException(
+        'Cette réservation a été annulée. Le paiement n\'est plus possible.',
+      );
     }
 
     const transactionId = `TX-${installment.id.substring(0, 8)}-${Date.now()}`;

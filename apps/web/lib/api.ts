@@ -757,3 +757,12 @@ export function fetchPaymentHistory(): Promise<PaymentHistoryItem[]> {
   return apiFetch<PaymentHistoryItem[]>('/v1/payments/history');
 }
 
+/**
+ * Annule la réservation de l'acheteur connecté (statut EN_ATTENTE uniquement,
+ * contrôle côté backend : propriétaire + transition autorisée).
+ * L'échéancier existant n'est pas supprimé ; l'unité est re-libérée.
+ */
+export function cancelReservation(reservationId: string): Promise<void> {
+  return apiFetch<void>(`/v1/reservations/${reservationId}`, { method: 'DELETE' });
+}
+

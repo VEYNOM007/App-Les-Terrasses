@@ -18,6 +18,7 @@ import {
   Sparkles,
   ExternalLink,
   CreditCard,
+  XCircle,
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import SignaturePad from '../../components/SignaturePad';
@@ -28,6 +29,7 @@ import {
   signContract,
   fetchPaymentSchedule,
   payInstallment,
+  cancelReservation,
   PortalDashboard,
   PortalDocument,
   PaymentScheduleResponse,
@@ -90,6 +92,10 @@ export default function SuiviAcquereur() {
   const [payingInstallmentId, setPayingInstallmentId] = useState<string | null>(null);
   const [paymentErrorMap, setPaymentErrorMap] = useState<Record<string, string>>({});
 
+  const [cancellingReservationId, setCancellingReservationId] = useState<string | null>(null);
+  const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null);
+  const [cancelErrorMap, setCancelErrorMap] = useState<Record<string, string>>({});
+
   useEffect(() => {
     if (isLoading) return;
     if (!user) {
@@ -151,9 +157,33 @@ export default function SuiviAcquereur() {
       setPaymentErrorMap((prev) => ({
         ...prev,
         [installmentId]:
-          err instanceof Error ? err.message : 'Impossible d\'initialiser le paiement Stripe.',
+          err instanceof Error ? err.message : "Impossible d'initialiser le paiement Stripe.",
       }));
       setPayingInstallmentId(null);
+    }
+  };
+
+  const handleCancelReservation = async (reservationId: string) => {
+    if (cancellingReservationId) return; // Garde-fou anti double-clic
+    if (confirmingCancelId !== reservationId) {
+      setConfirmingCancelId(reservationId);
+      setCancelErrorMap((prev) => ({ ...prev, [reservationId]: '' }));
+      return;
+    }
+    setCancellingReservationId(reservationId);
+    setCancelErrorMap((prev) => ({ ...prev, [reservationId]: '' }));
+    try {
+      await cancelReservation(reservationId);
+      setConfirmingCancelId(null);
+      await load();
+    } catch (err) {
+      setCancelErrorMap((prev) => ({
+        ...prev,
+        [reservationId]:
+          err instanceof Error ? err.message : "Impossible d'annuler la réservation.",
+      }));
+    } finally {
+      setCancellingReservationId(null);
     }
   };
 
@@ -286,6 +316,51 @@ export default function SuiviAcquereur() {
                   <span className="bg-sand/15 text-sand border border-sand/40 px-3 py-1.5 rounded">
                     Lot {unit.block.name} — {unit.block.constructionPhase}
                   </span>
+                  {d.status === 'EN_ATTENTE' && (
+                    <div className="flex flex-col items-end gap-1 ml-auto">
+                      {confirmingCancelId !== d.reservationId ? (
+                        <button
+                          onClick={() => void handleCancelReservation(d.reservationId)}
+                          disabled={cancellingReservationId === d.reservationId}
+                          className="inline-flex items-center gap-2 bg-paper/5 hover:bg-paper/10 text-paper/60 hover:text-laterite-light font-mono text-xs px-3 py-1.5 rounded border border-paper/20 hover:border-laterite-light/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          data-testid={`cancel-button-${d.reservationId}`}
+                        >
+                          <AlertCircle className="w-3 h-3" />
+                          Annuler
+                        </button>
+                      ) : (
+                        <div className="inline-flex items-center gap-2">
+                          <span className="text-laterite-light text-xs font-semibold">Confirmer ?</span>
+                          <button
+                            onClick={() => void handleCancelReservation(d.reservationId)}
+                            disabled={cancellingReservationId === d.reservationId}
+                            className="inline-flex items-center gap-1.5 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-2.5 py-1 rounded transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            data-testid={`confirm-cancel-button-${d.reservationId}`}
+                          >
+                            {cancellingReservationId === d.reservationId ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-paper" />
+                            ) : null}
+                            Oui
+                          </button>
+                          <button
+                            onClick={() => setConfirmingCancelId(null)}
+                            className="inline-flex items-center gap-1.5 bg-paper/10 hover:bg-paper/20 text-paper font-mono text-xs px-2.5 py-1 rounded transition-all"
+                          >
+                            Non
+                          </button>
+                        </div>
+                      )}
+                      {cancelErrorMap[d.reservationId] && (
+                        <div
+                          className="text-xs font-mono text-laterite-light flex items-center gap-1.5"
+                          data-testid={`cancel-error-${d.reservationId}`}
+                        >
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>{cancelErrorMap[d.reservationId]}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {(unit.marketingDescription || unit.highlights.length > 0 || unit.media.length > 0) && (
@@ -446,7 +521,7 @@ export default function SuiviAcquereur() {
                                 </div>
                               </div>
 
-                              {inst.status === 'EN_ATTENTE' && (
+                              {d.status === 'EN_ATTENTE' && inst.status === 'EN_ATTENTE' && (
                                 <div className="pt-2 border-t border-paper/10 flex flex-col items-end gap-1.5">
                                   <button
                                     disabled={payingInstallmentId === inst.id}

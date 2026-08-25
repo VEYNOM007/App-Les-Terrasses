@@ -294,6 +294,27 @@ describe('PaymentService', () => {
         ),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('devrait rejeter si la réservation est annulée', async () => {
+      prisma.paymentInstallment.findUniqueOrThrow.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+        schedule: {
+          ...mockInstallmentBase.schedule,
+          reservation: {
+            ...mockInstallmentBase.schedule.reservation,
+            status: 'ANNULEE',
+          },
+        },
+      });
+
+      await expect(
+        service.initiatePayment('inst-001', PaymentProvider.STRIPE, 'user-001'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.initiatePayment('inst-001', PaymentProvider.STRIPE, 'user-001'),
+      ).rejects.toThrow('annulée');
+    });
   });
 
   // ──────────────────────────────────────────────────

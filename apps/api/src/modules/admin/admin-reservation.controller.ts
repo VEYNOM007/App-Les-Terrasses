@@ -21,6 +21,11 @@ export class AdminReservationController {
     return this.reservationService.adminList(query.status);
   }
 
+  @Get(':reservationId')
+  getOne(@Param('reservationId') reservationId: string) {
+    return this.reservationService.adminGetReservation(reservationId);
+  }
+
   /**
    * Vente commerciale enregistrée par un admin, avec offre personnalisée
    * éventuelle (offerPrice/offerLabel). Réutilise le mécanisme anti-double-

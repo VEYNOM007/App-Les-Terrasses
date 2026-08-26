@@ -58,7 +58,7 @@ describe('handleReplaceMedia', () => {
       return { id: 'new' };
     };
 
-    return mockUpload('u1', { type: media.type, altText: media.altText }, new File([''], 'f.jpg')).then(() => {
+    return mockUpload('u1', { type: media.type, altText: media.altText }).then(() => {
       expect(capturedBody.type).toBe('RENDU_3D');
       expect(capturedBody.altText).toBe('Rendu studio');
     });

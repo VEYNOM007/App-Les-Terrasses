@@ -289,6 +289,35 @@ export class AuthService {
   }
 
   /**
+   * Changement de mot de passe authentifié (utilisateur connecté).
+   * Vérifie le mot de passe actuel avant d'appliquer le nouveau.
+   * Révoque tous les refresh tokens actifs (toute session meurt).
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect.');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    });
+
+    return { message: 'Mot de passe mis à jour.' };
+  }
+
+  /**
    * Enregistre une pièce d'identité téléversée et passe le user en
    * `kycStatus = EN_ATTENTE`. Le fichier (buffer en mémoire, validé en
    * amont par multer : fileFilter + limits) est déposé sur B2 sous une

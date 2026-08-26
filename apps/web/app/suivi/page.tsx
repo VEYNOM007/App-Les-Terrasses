@@ -21,6 +21,9 @@ import {
   ExternalLink,
   CreditCard,
   XCircle,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import SignaturePad from '../../components/SignaturePad';
@@ -32,6 +35,7 @@ import {
   fetchPaymentSchedule,
   payInstallment,
   cancelReservation,
+  changePassword,
   PortalDashboard,
   PortalDocument,
   PaymentScheduleResponse,
@@ -99,6 +103,16 @@ export default function SuiviAcquereur() {
   const [cancelErrorMap, setCancelErrorMap] = useState<Record<string, string>>({});
 
   const [showHistory, setShowHistory] = useState(false);
+
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const activeReservations = useMemo(
     () => dashboards.filter((d) => ['EN_ATTENTE', 'CONFIRMEE', 'LIVREE'].includes(d.status)),
@@ -245,6 +259,28 @@ export default function SuiviAcquereur() {
   const isFullySigned = (document: PortalDocument) =>
     document.signatures?.some((s) => s.signerType === 'PROPRIETAIRE') === true &&
     document.signatures?.some((s) => s.signerType === 'ADMIN') === true;
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Les mots de passe ne correspondent pas.');
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setPasswordSuccess('Mot de passe mis à jour.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'Erreur lors du changement de mot de passe.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   if (isLoading || !user) {
     return (
@@ -740,6 +776,85 @@ export default function SuiviAcquereur() {
                 );
               })}
             </div>
+          )}
+        </div>
+
+        {/* Changer mon mot de passe */}
+        <div className="bg-ink-card border border-paper/15 rounded-md p-5 mb-8">
+          <button
+            onClick={() => setShowPasswordForm(!showPasswordForm)}
+            className="flex items-center gap-3 w-full text-left"
+          >
+            <KeyRound className="w-5 h-5 text-laterite-light" />
+            <span className="font-serif text-lg font-semibold text-paper">Changer mon mot de passe</span>
+            <ChevronDown className={`w-4 h-4 text-paper/40 ml-auto transition-transform ${showPasswordForm ? 'rotate-180' : ''}`} />
+          </button>
+          {showPasswordForm && (
+            <form onSubmit={void handleChangePassword} className="mt-4 space-y-4 max-w-md">
+              {passwordSuccess && (
+                <div className="bg-lagoon/15 border border-lagoon/40 rounded p-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-lagoon-light shrink-0" />
+                  <p className="text-xs text-paper font-mono">{passwordSuccess}</p>
+                </div>
+              )}
+              {passwordError && (
+                <div className="bg-laterite/15 border border-laterite/40 rounded p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-laterite-light shrink-0" />
+                  <p className="text-xs text-paper font-mono">{passwordError}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-mono text-paper/60 mb-1">Mot de passe actuel</label>
+                <div className="relative">
+                  <input
+                    type={showCurrentPassword ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    className="w-full bg-ink border border-paper/25 rounded px-3 py-2 text-sm font-mono text-paper placeholder:text-paper/30 focus:border-laterite-light focus:outline-none"
+                  />
+                  <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-paper/40 hover:text-paper/70">
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-paper/60 mb-1">Nouveau mot de passe</label>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    className="w-full bg-ink border border-paper/25 rounded px-3 py-2 text-sm font-mono text-paper placeholder:text-paper/30 focus:border-laterite-light focus:outline-none"
+                  />
+                  <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-paper/40 hover:text-paper/70">
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-paper/60 mb-1">Confirmer le nouveau mot de passe</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  className="w-full bg-ink border border-paper/25 rounded px-3 py-2 text-sm font-mono text-paper placeholder:text-paper/30 focus:border-laterite-light focus:outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={passwordLoading}
+                className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-4 py-2 rounded transition-all font-semibold disabled:opacity-50"
+              >
+                {passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                Mettre à jour
+              </button>
+            </form>
           )}
         </div>
 

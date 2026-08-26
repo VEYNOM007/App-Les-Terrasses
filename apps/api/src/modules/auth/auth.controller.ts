@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Res,
   UploadedFile,
@@ -24,6 +25,7 @@ import { SetupDto } from './dto/setup.dto';
 import { KycUploadDto } from './dto/kyc-upload.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 export const ACCESS_TOKEN_COOKIE = 'access_token';
 export const REFRESH_TOKEN_COOKIE = 'refresh_token';
@@ -146,6 +148,12 @@ export class AuthController {
     await this.authService.logoutAll(user.id);
     clearAuthCookies(res);
     return { success: true };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('password')
+  changePassword(@CurrentUser() user: AuthUser, @Body() body: ChangePasswordDto) {
+    return this.authService.changePassword(user.id, body.currentPassword, body.newPassword);
   }
 
   @UseGuards(JwtAuthGuard)

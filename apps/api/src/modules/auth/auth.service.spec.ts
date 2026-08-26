@@ -305,6 +305,50 @@ describe('AuthService', () => {
   });
 
   // ──────────────────────────────────────────────────
+  // changePassword
+  // ──────────────────────────────────────────────────
+
+  describe('changePassword', () => {
+    it('devrait lever UnauthorizedException si le mot de passe actuel est invalide', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue(USER_FIXTURE);
+      compareSpy.mockResolvedValueOnce(false);
+
+      await expect(service.changePassword('user-001', 'wrong', 'NewPass123!')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('devrait hasher et mettre à jour le mot de passe si l\'actuel est valide', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue(USER_FIXTURE);
+      compareSpy.mockResolvedValueOnce(true);
+      hashSpy.mockResolvedValueOnce('$2b$10$newhash');
+      prisma.$transaction.mockImplementation(async (fn: Function) => fn(prisma));
+
+      await service.changePassword('user-001', 'Secret123!', 'NewPass123!');
+
+      expect(hashSpy).toHaveBeenCalledWith('NewPass123!', 10);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-001' },
+        data: { passwordHash: '$2b$10$newhash' },
+      });
+    });
+
+    it('devrait révoquer tous les refresh tokens actifs du user', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue(USER_FIXTURE);
+      compareSpy.mockResolvedValueOnce(true);
+      hashSpy.mockResolvedValueOnce('$2b$10$newhash');
+      prisma.$transaction.mockImplementation(async (fn: Function) => fn(prisma));
+
+      await service.changePassword('user-001', 'Secret123!', 'NewPass123!');
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-001', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+  });
+
+  // ──────────────────────────────────────────────────
   // refresh (rotation + révocation)
   // ──────────────────────────────────────────────────
 

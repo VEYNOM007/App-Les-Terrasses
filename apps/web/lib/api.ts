@@ -87,6 +87,13 @@ export function logout(): Promise<{ success: boolean }> {
   return apiFetch<{ success: boolean }>('/v1/auth/logout', { method: 'POST' });
 }
 
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/v1/auth/password', {
+    method: 'PATCH',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
 export function fetchMe(): Promise<AuthUser> {
   return apiFetch<AuthUser>('/v1/auth/me');
 }

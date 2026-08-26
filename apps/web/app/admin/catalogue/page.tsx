@@ -41,7 +41,10 @@ import {
   MapPin,
   Loader2,
   AlertCircle,
-  Database
+  Database,
+  Upload,
+  ExternalLink,
+  ImagePlus,
 } from 'lucide-react';
 
 /**
@@ -103,10 +106,12 @@ export default function AdminCataloguePage() {
   const [unitActionSuccess, setUnitActionSuccess] = useState('');
   const [mediaTypeInput, setMediaTypeInput] = useState<UnitMediaType>('RENDU_3D');
   const [mediaUrlInput, setMediaUrlInput] = useState('');
-  const [mediaFileInput, setMediaFileInput] = useState<File | null>(null);
   const [savingMedia, setSavingMedia] = useState(false);
   const [mediaActionError, setMediaActionError] = useState('');
   const [mediaActionSuccess, setMediaActionSuccess] = useState('');
+  const [mediaToDelete, setMediaToDelete] = useState<string | null>(null);
+  const [mediaToReplace, setMediaToReplace] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   // Formulaire d'ajout d'une unité dans un bloc réel.
   const [adminProjects, setAdminProjects] = useState<AdminProject[]>([]);
@@ -304,24 +309,6 @@ export default function AdminCataloguePage() {
     }
   };
 
-  const handleUploadMedia = async () => {
-    if (!selectedUnit) return;
-    setSavingMedia(true);
-    setMediaActionError('');
-    setMediaActionSuccess('');
-    try {
-      if (!mediaFileInput) throw new Error('Sélectionnez un fichier à uploader.');
-      await uploadUnitMedia(selectedUnit.id, { type: mediaTypeInput }, mediaFileInput);
-      await refreshSelectedUnit(selectedUnit.id);
-      setMediaFileInput(null);
-      setMediaActionSuccess('Média uploadé sur le stockage public.');
-    } catch (e) {
-      setMediaActionError(e instanceof Error ? e.message : 'Impossible d’uploader le média.');
-    } finally {
-      setSavingMedia(false);
-    }
-  };
-
   const handleUpdateMedia = async (media: UnitMedia, patch: { type?: UnitMediaType; sortOrder?: number; url?: string }) => {
     if (!selectedUnit) return;
     setMediaActionError('');
@@ -347,6 +334,44 @@ export default function AdminCataloguePage() {
       setMediaActionError(e instanceof Error ? e.message : 'Impossible de supprimer le média.');
     }
   };
+
+  const handleReplaceMedia = async (media: UnitMedia, file: File) => {
+    if (!selectedUnit) return;
+    setSavingMedia(true);
+    setMediaActionError('');
+    setMediaActionSuccess('');
+    setMediaToReplace(null);
+    try {
+      await adminDeleteMedia(media.id);
+      await uploadUnitMedia(selectedUnit.id, { type: media.type, altText: media.altText }, file);
+      await refreshSelectedUnit(selectedUnit.id);
+      setMediaActionSuccess('Média remplacé.');
+    } catch (e) {
+      setMediaActionError(e instanceof Error ? e.message : 'Impossible de remplacer le média.');
+    } finally {
+      setSavingMedia(false);
+    }
+  };
+
+  const handleDragDropUpload = async (file: File, type: UnitMediaType) => {
+    if (!selectedUnit) return;
+    setSavingMedia(true);
+    setMediaActionError('');
+    setMediaActionSuccess('');
+    try {
+      await uploadUnitMedia(selectedUnit.id, { type }, file);
+      await refreshSelectedUnit(selectedUnit.id);
+      setMediaActionSuccess('Média uploadé.');
+    } catch (e) {
+      setMediaActionError(e instanceof Error ? e.message : 'Impossible d\'uploader le média.');
+    } finally {
+      setSavingMedia(false);
+      setDragOver(false);
+    }
+  };
+
+  const isExternalUrl = (url: string): boolean =>
+    url.includes('unsplash');
 
   const handleAddNewUnitToBase = async () => {
     setAddingUnit(true);
@@ -944,51 +969,152 @@ export default function AdminCataloguePage() {
                         Aucun média sur cette unité pour le moment.
                       </p>
                     ) : (
-                      <ul className="space-y-2">
-                        {selectedUnit.media.map((m) => (
-                          <li
-                            key={m.id}
-                            className="bg-ink-card border border-paper/15 rounded-lg p-3 font-mono text-xs space-y-2"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-sand font-bold">{m.type}</span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => void handleUpdateMedia(m, { type: m.type === 'RENDU_3D' ? 'PHOTO' : 'RENDU_3D' })}
-                                  className="text-lagoon-light hover:underline"
-                                  title="Basculer le type"
-                                >
-                                  <RefreshCw className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => void handleDeleteMedia(m)}
-                                  className="text-laterite hover:text-laterite-light"
-                                  title="Supprimer ce média"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                      <ul className="space-y-3">
+                        {selectedUnit.media.map((m) => {
+                          const external = isExternalUrl(m.url);
+                          const replacing = mediaToReplace === m.id;
+                          return (
+                            <li
+                              key={m.id}
+                              className="bg-ink-card border border-paper/15 rounded-lg overflow-hidden font-mono text-xs"
+                            >
+                              <div className="relative">
+                                <img
+                                  src={m.url}
+                                  alt={m.altText || m.type}
+                                  className="w-full h-32 object-cover bg-ink"
+                                  loading="lazy"
+                                />
+                                <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+                                  <span className="bg-ink/80 text-sand px-1.5 py-0.5 rounded text-[10px] font-bold backdrop-blur-sm">
+                                    {m.type}
+                                  </span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold backdrop-blur-sm ${
+                                    external
+                                      ? 'bg-laterite/80 text-paper'
+                                      : 'bg-lagoon/80 text-paper'
+                                  }`}>
+                                    {external ? 'Unsplash' : 'Photo réelle'}
+                                  </span>
+                                </div>
+                                <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+                                  <a
+                                    href={m.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="bg-ink/80 text-paper/80 hover:text-paper p-1 rounded backdrop-blur-sm"
+                                    title="Ouvrir l'image"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                </div>
                               </div>
-                            </div>
-                            <p className="text-paper/60 break-all">{m.url}</p>
-                            <div className="flex items-center gap-2">
-                              <label className="text-paper/50">Ordre</label>
-                              <input
-                                type="number"
-                                min={0}
-                                defaultValue={m.sortOrder}
-                                onBlur={(e) => void handleUpdateMedia(m, { sortOrder: Number(e.target.value) })}
-                                className="w-20 bg-ink border border-paper/20 rounded p-1.5 text-paper"
-                              />
-                            </div>
-                          </li>
-                        ))}
+                              <div className="p-3 space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => void handleUpdateMedia(m, { type: m.type === 'RENDU_3D' ? 'PHOTO' : 'RENDU_3D' })}
+                                      className="text-lagoon-light hover:underline"
+                                      title="Basculer le type"
+                                    >
+                                      <RefreshCw className="w-3.5 h-3.5" />
+                                    </button>
+                                    <label className="text-lagoon-light hover:underline cursor-pointer" title="Remplacer cette image">
+                                      <ImagePlus className="w-3.5 h-3.5" />
+                                      <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) void handleReplaceMedia(m, file);
+                                        }}
+                                      />
+                                    </label>
+                                  </div>
+                                  {mediaToDelete === m.id ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-laterite text-[10px]">Confirmer ?</span>
+                                      <button
+                                        onClick={() => { void handleDeleteMedia(m); setMediaToDelete(null); }}
+                                        className="bg-laterite hover:bg-laterite-light text-paper px-2 py-0.5 rounded text-[10px] font-bold"
+                                      >
+                                        Oui
+                                      </button>
+                                      <button
+                                        onClick={() => setMediaToDelete(null)}
+                                        className="text-paper/50 hover:text-paper text-[10px]"
+                                      >
+                                        Non
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => setMediaToDelete(m.id)}
+                                      className="text-laterite hover:text-laterite-light"
+                                      title="Supprimer ce média"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-paper/50">Ordre</label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    defaultValue={m.sortOrder}
+                                    onBlur={(e) => void handleUpdateMedia(m, { sortOrder: Number(e.target.value) })}
+                                    className="w-20 bg-ink border border-paper/20 rounded p-1.5 text-paper"
+                                  />
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
 
                     <div className="pt-3 border-t border-paper/15 space-y-3">
+                      <div
+                        className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                          dragOver
+                            ? 'border-lagoon bg-lagoon/10'
+                            : 'border-paper/20 hover:border-paper/40'
+                        }`}
+                        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOver(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file && file.type.startsWith('image/')) {
+                            void handleDragDropUpload(file, mediaTypeInput);
+                          }
+                        }}
+                      >
+                        <Upload className="w-6 h-6 text-paper/40 mx-auto mb-2" />
+                        <p className="text-xs text-paper/60 font-mono">
+                          Glissez une image ici ou
+                        </p>
+                        <label className="text-lagoon-light hover:underline cursor-pointer font-mono text-xs">
+                          parcourez vos fichiers
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) void handleDragDropUpload(file, mediaTypeInput);
+                            }}
+                          />
+                        </label>
+                        <p className="text-[10px] text-paper/40 mt-1 font-mono">PNG, JPG, WebP — max 15 Mo</p>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-4 font-mono text-xs">
                         <div>
-                          <label className="block text-paper/70 mb-1">Type</label>
+                          <label className="block text-paper/70 mb-1">Type par défaut</label>
                           <select
                             value={mediaTypeInput}
                             onChange={(e) => setMediaTypeInput(e.target.value as UnitMediaType)}
@@ -1000,7 +1126,7 @@ export default function AdminCataloguePage() {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-paper/70 mb-1">URL</label>
+                          <label className="block text-paper/70 mb-1">URL externe</label>
                           <input
                             type="text"
                             value={mediaUrlInput}
@@ -1009,38 +1135,6 @@ export default function AdminCataloguePage() {
                             className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper focus:border-sand outline-none"
                           />
                         </div>
-                      </div>
-
-                      <div className="border-t border-paper/15 pt-3 space-y-2">
-                        <label className="block text-paper/70 font-mono text-xs">
-                          Upload depuis l'ordinateur (rendus, photos, plans — PNG, JPG, WebP, PDF, ≤ 15 Mo)
-                        </label>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp,application/pdf"
-                          onChange={(e) => setMediaFileInput(e.target.files?.[0] ?? null)}
-                          className="w-full text-xs text-paper/70 font-mono file:mr-3 file:rounded-lg file:border file:border-sand/40 file:bg-ink-card file:px-3 file:py-2 file:text-paper file:font-mono file:cursor-pointer hover:file:bg-ink"
-                        />
-                        {mediaFileInput && (
-                          <p className="text-[11px] font-mono text-lagoon-light break-all">
-                            {mediaFileInput.name} — {(mediaFileInput.size / (1024 * 1024)).toFixed(2)} Mo
-                          </p>
-                        )}
-                        <button
-                          onClick={() => void handleUploadMedia()}
-                          disabled={savingMedia || !mediaFileInput}
-                          className="w-full bg-sand/20 hover:bg-sand/30 text-sand font-mono text-xs font-bold py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition-all disabled:opacity-60 border border-sand/40"
-                        >
-                          {savingMedia ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" /> Upload…
-                            </>
-                          ) : (
-                            <>
-                              <Image className="w-4 h-4" /> Uploader le média
-                            </>
-                          )}
-                        </button>
                       </div>
 
                       <button

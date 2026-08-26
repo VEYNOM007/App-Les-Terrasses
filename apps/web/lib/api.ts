@@ -586,6 +586,20 @@ export interface ReservationResponse {
   createdAt: string;
 }
 
+export interface AdminReservation {
+  id: string;
+  status: 'EN_ATTENTE' | 'CONFIRMEE' | 'ANNULEE' | 'LIVREE';
+  lockExpiresAt: string;
+  createdAt: string;
+  user: { id: string; fullName: string; email: string; phone: string };
+  unit: { id: string; blockId: string; type: string; floor: number };
+}
+
+export function fetchAdminReservations(status?: string): Promise<AdminReservation[]> {
+  const qs = status ? `?status=${status}` : '';
+  return apiFetch<AdminReservation[]>(`/v1/admin/reservations${qs}`);
+}
+
 export interface ReservationCreatePayload {
   reservation: ReservationResponse;
   schedule: { id: string };

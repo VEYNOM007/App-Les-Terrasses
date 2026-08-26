@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import Navbar from '../../../components/Navbar';
-import Footer from '../../../components/Footer';
 import { DEFAULT_COMPLEX_DATA, ComplexInfo, ComplexView } from '../../../lib/catalogData';
 import {
   adminAddUnitMedia,
@@ -510,7 +508,6 @@ export default function AdminCataloguePage() {
 
   return (
     <main className="min-h-screen bg-ink text-paper font-sans">
-      <Navbar />
 
       {/* Admin Top Header */}
       <section className="pt-10 pb-8 bg-ink-dark border-b border-paper/15">
@@ -1427,7 +1424,6 @@ export default function AdminCataloguePage() {
 
       </div>
 
-      <Footer />
     </main>
   );
 }

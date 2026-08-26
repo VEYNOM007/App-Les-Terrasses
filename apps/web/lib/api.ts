@@ -62,6 +62,7 @@ export function register(data: {
   password: string;
   fullName: string;
   country?: string;
+  address?: string;
 }): Promise<AuthResponse> {
   return apiFetch<AuthResponse>('/v1/auth/register', {
     method: 'POST',
@@ -598,6 +599,28 @@ export interface AdminReservation {
 export function fetchAdminReservations(status?: string): Promise<AdminReservation[]> {
   const qs = status ? `?status=${status}` : '';
   return apiFetch<AdminReservation[]>(`/v1/admin/reservations${qs}`);
+}
+
+export interface AdminUser {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  country: string;
+  address: string | null;
+  role: 'ACHETEUR' | 'COMMERCIAL' | 'ADMIN' | 'ARTISAN';
+  createdAt: string;
+}
+
+export function fetchAdminUsers(): Promise<AdminUser[]> {
+  return apiFetch<AdminUser[]>('/v1/admin/clients');
+}
+
+export function updateUserAddress(userId: string, address: string | null): Promise<AdminUser> {
+  return apiFetch<AdminUser>(`/v1/admin/clients/${userId}/address`, {
+    method: 'PATCH',
+    body: JSON.stringify({ address }),
+  });
 }
 
 export interface ReservationCreatePayload {

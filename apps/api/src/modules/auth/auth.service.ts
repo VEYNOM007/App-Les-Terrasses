@@ -42,7 +42,7 @@ export class AuthService {
     private readonly storage: StorageService,
   ) {}
 
-  async register(data: { email: string; phone: string; password: string; fullName: string; country?: string }) {
+  async register(data: { email: string; phone: string; password: string; fullName: string; country?: string; address?: string }) {
     const existing = await this.prisma.user.findFirst({
       where: { OR: [{ email: data.email }, { phone: data.phone }] },
     });
@@ -56,6 +56,7 @@ export class AuthService {
         passwordHash,
         fullName: data.fullName,
         country: data.country ?? 'TG',
+        address: data.address ?? null,
       },
     });
 

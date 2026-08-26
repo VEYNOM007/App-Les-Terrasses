@@ -24,4 +24,9 @@ export class RegisterDto {
   @IsString()
   @Length(2, 3)
   country?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  address?: string;
 }

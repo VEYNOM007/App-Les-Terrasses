@@ -15,6 +15,7 @@ function RegisterForm() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [country, setCountry] = useState('TG');
+  const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -33,7 +34,7 @@ function RegisterForm() {
     setIsSubmitting(true);
 
     try {
-      await register({ email, phone, password, fullName, country });
+      await register({ email, phone, password, fullName, country, address: address || undefined });
       const redirect = searchParams.get('redirect');
       router.push(redirect && redirect.startsWith('/') ? redirect : '/suivi');
     } catch (err) {
@@ -119,6 +120,19 @@ function RegisterForm() {
               <option value="SN">Sénégal (SN)</option>
             </select>
           </div>
+        </div>
+
+        <div>
+          <label className="block font-mono text-xs text-paper/60 uppercase mb-1">Adresse</label>
+          <input
+            type="text"
+            autoComplete="street-address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Quartier, rue, boîte postale…"
+            className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
+          />
+          <p className="text-[11px] text-paper/40 font-mono mt-1">Optionnel — vous pourrez la compléter plus tard.</p>
         </div>
 
         <div>

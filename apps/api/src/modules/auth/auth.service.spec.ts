@@ -218,6 +218,7 @@ describe('AuthService', () => {
           passwordHash: '$2b$10$hashedpasswordmock',
           fullName: 'New User',
           country: 'TG',
+          address: null,
         },
       });
       // Refresh token persiste en DB avec tokenHash SHA-256 (pas le clair)

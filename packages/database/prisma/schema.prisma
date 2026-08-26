@@ -184,6 +184,7 @@ model User {
   passwordHash String
   fullName     String
   country      String     @default("TG")
+  address      String?
   role         UserRole   @default(ACHETEUR)
   kycStatus    KycStatus  @default(NON_SOUMIS)
   kycDocuments Document[] @relation("KycDocuments")

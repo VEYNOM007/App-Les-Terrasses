@@ -88,6 +88,12 @@ jobs:
       - name: Run Jest suite (serial — DB partagée)
         run: pnpm --filter @residence-catalog/api exec jest --forceExit --runInBand
 
+      # #74/#75/#76 : les tests R6 vitest (web) ne tournaient QUE en local —
+      # la CI n'exécutait que tsc + jest (API), donc une CI "verte" ne
+      # garantissait pas les 159 tests unitaires web. Ajout pour couvrir.
+      - name: Run Vitest suite (web)
+        run: pnpm --filter web test
+
   # Smoke build Docker : une CI verte ne garantit pas qu'un merge se
   # déploiera (BACKLOG #8). Construit chaque image sans push — un build
   # cassé (ex. ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE) échoue ici avant

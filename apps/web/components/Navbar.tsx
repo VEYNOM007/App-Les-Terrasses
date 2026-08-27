@@ -41,46 +41,55 @@ export default function Navbar() {
           <a href="#reserver" className="hover:text-sand transition-colors">Pré-inscription</a>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {isLoading ? (
             <span className="font-mono text-xs text-paper/50">…</span>
           ) : user ? (
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-paper/60 hidden sm:inline-block" title={user.email}>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="font-mono text-xs text-paper/60 hidden lg:inline-block max-w-[160px] truncate" title={user.email}>
                 {user.fullName || user.email}
               </span>
               {user.role === 'ADMIN' && (
                 <a
                   href="/admin"
-                  className="inline-flex items-center gap-1.5 font-mono text-xs border border-laterite/40 bg-laterite/15 text-laterite-light px-3 py-2 rounded-sm hover:bg-laterite/25 transition-all"
+                  title="Admin"
+                  aria-label="Admin"
+                  className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-laterite/40 bg-laterite/15 text-laterite-light px-2 sm:px-3 py-2 rounded-sm hover:bg-laterite/25 transition-all"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5" /> Admin
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Admin</span>
                 </a>
               )}
               <a
                 href="/suivi"
-                className="inline-flex items-center gap-1.5 font-mono text-xs border border-lagoon/40 bg-lagoon/15 text-lagoon-light px-3 py-2 rounded-sm hover:bg-lagoon/25 transition-all"
+                title="Suivi"
+                aria-label="Suivi"
+                className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-lagoon/40 bg-lagoon/15 text-lagoon-light px-2 sm:px-3 py-2 rounded-sm hover:bg-lagoon/25 transition-all"
               >
-                <User className="w-3.5 h-3.5" /> Suivi
+                <User className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Suivi</span>
               </a>
               <button
                 onClick={handleLogout}
-                className="inline-flex items-center gap-1.5 font-mono text-xs border border-paper/30 px-3 py-2 rounded-sm hover:bg-paper/10 text-paper/80 transition-all"
+                title="Déconnexion"
+                aria-label="Déconnexion"
+                className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-paper/30 px-2 sm:px-3 py-2 rounded-sm hover:bg-paper/10 text-paper/80 transition-all"
               >
-                <LogOut className="w-3.5 h-3.5" /> Déconnexion
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Déconnexion</span>
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <a
                 href="/login"
-                className="font-mono text-xs border border-paper/30 px-4 py-2.5 rounded-sm hover:bg-paper/10 text-paper transition-all"
+                className="font-mono text-xs border border-paper/30 px-3 sm:px-4 py-2.5 rounded-sm hover:bg-paper/10 text-paper transition-all"
               >
                 Connexion
               </a>
               <a
                 href="#reserver"
-                className="font-mono text-xs border border-paper/30 px-4 py-2.5 rounded-sm hover:bg-laterite hover:border-laterite text-paper transition-all"
+                className="font-mono text-xs border border-paper/30 px-3 sm:px-4 py-2.5 rounded-sm hover:bg-laterite hover:border-laterite text-paper transition-all"
               >
                 Réserver ma place →
               </a>

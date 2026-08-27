@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   PhoneCall,
   Clock,
-  Settings,
 } from 'lucide-react';
 
 export default function CataloguePage() {
@@ -112,12 +111,6 @@ export default function CataloguePage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <a
-                href="/admin/catalogue"
-                className="bg-paper/10 hover:bg-paper/20 border border-paper/20 text-paper font-mono text-xs px-4 py-3 rounded-lg inline-flex items-center gap-2 transition-all"
-              >
-                <Settings className="w-4 h-4 text-sand" /> Espace Promoteur (Sans-Code)
-              </a>
               <a
                 href="#grille-biens"
                 className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-5 py-3 rounded-lg inline-flex items-center gap-2 transition-all shadow-lg"

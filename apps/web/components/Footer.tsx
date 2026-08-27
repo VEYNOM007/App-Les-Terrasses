@@ -14,6 +14,14 @@ export default function Footer() {
           Baguida, Lomé (Togo) — Titre Foncier RM100/71 — Prospectus non contractuel
         </div>
       </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 flex justify-center sm:justify-end">
+        <a
+          href="/admin/catalogue"
+          className="text-[11px] font-mono text-paper/30 hover:text-paper/70 underline underline-offset-2 transition-colors"
+        >
+          Espace Promoteur
+        </a>
+      </div>
     </footer>
   );
 }

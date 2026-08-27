@@ -57,7 +57,7 @@ export default function Navbar() {
                   className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-laterite/40 bg-laterite/15 text-laterite-light px-2 sm:px-3 py-2 rounded-sm hover:bg-laterite/25 transition-all"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Admin</span>
+                  <span className="hidden lg:inline">Admin</span>
                 </a>
               )}
               <a
@@ -67,7 +67,7 @@ export default function Navbar() {
                 className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-lagoon/40 bg-lagoon/15 text-lagoon-light px-2 sm:px-3 py-2 rounded-sm hover:bg-lagoon/25 transition-all"
               >
                 <User className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Suivi</span>
+                <span className="hidden lg:inline">Suivi</span>
               </a>
               <button
                 onClick={handleLogout}
@@ -76,7 +76,7 @@ export default function Navbar() {
                 className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-paper/30 px-2 sm:px-3 py-2 rounded-sm hover:bg-paper/10 text-paper/80 transition-all"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Déconnexion</span>
+                <span className="hidden lg:inline">Déconnexion</span>
               </button>
             </div>
           ) : (

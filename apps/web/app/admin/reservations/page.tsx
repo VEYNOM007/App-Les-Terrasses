@@ -57,7 +57,7 @@ export default function AdminReservationsPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await fetchAdminReservations('EN_ATTENTE');
+      const data = await fetchAdminReservations('en_attente');
       setReservations(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Impossible de charger les réservations.');

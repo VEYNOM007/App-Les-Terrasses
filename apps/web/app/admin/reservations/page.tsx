@@ -1,8 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import Navbar from '../../../components/Navbar';
-import Footer from '../../../components/Footer';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CalendarClock,
   Loader2,
@@ -53,6 +51,21 @@ export default function AdminReservationsPage() {
   const [error, setError] = useState('');
   const [now, setNow] = useState(Date.now());
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollHint = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
+  }, []);
+
+  useEffect(() => {
+    updateScrollHint();
+    window.addEventListener('resize', updateScrollHint);
+    return () => window.removeEventListener('resize', updateScrollHint);
+  }, [reservations, updateScrollHint]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -82,20 +95,17 @@ export default function AdminReservationsPage() {
   if (isLoading || !user) {
     return (
       <main className="min-h-screen bg-ink text-paper flex flex-col">
-        <Navbar />
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="flex items-center gap-3 font-mono text-xs text-paper/60">
             <Loader2 className="w-5 h-5 animate-spin text-laterite-light" /> Vérification de votre session…
           </div>
         </div>
-        <Footer />
       </main>
     );
   }
 
   return (
     <main className="min-h-screen bg-ink text-paper flex flex-col">
-      <Navbar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-1 w-full space-y-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-paper/15">
@@ -145,16 +155,21 @@ export default function AdminReservationsPage() {
           </div>
         ) : (
           <div className="bg-ink-card border border-paper/20 rounded-md overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full font-mono text-xs">
-                <thead>
-                  <tr className="border-b border-paper/15 text-paper/50">
-                    <th className="text-left px-5 py-3 font-semibold">Réservation</th>
-                    <th className="text-left px-5 py-3 font-semibold">Unité</th>
-                    <th className="text-left px-5 py-3 font-semibold">Acheteur</th>
-                    <th className="text-left px-5 py-3 font-semibold">Créée</th>
-                    <th className="text-left px-5 py-3 font-semibold">Expiration</th>
-                  </tr>
+            <div className="relative">
+              <div
+                ref={scrollRef}
+                onScroll={updateScrollHint}
+                className="overflow-x-auto"
+              >
+                <table className="w-full font-mono text-xs">
+                  <thead>
+                    <tr className="border-b border-paper/15 text-paper/50">
+                      <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Réservation</th>
+                      <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Unité</th>
+                      <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Acheteur</th>
+                      <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Créée</th>
+                      <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Expiration</th>
+                    </tr>
                 </thead>
                 <tbody>
                   {sorted.map((r) => {
@@ -167,12 +182,12 @@ export default function AdminReservationsPage() {
                         key={r.id}
                         className="border-b border-paper/10 hover:bg-paper/5 transition-colors"
                       >
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 whitespace-nowrap">
                           <span className="bg-lagoon/20 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded">
                             {r.id.slice(0, 18)}…
                           </span>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <Building2 className="w-3.5 h-3.5 text-sand shrink-0" />
                             <span className="text-paper">
@@ -189,10 +204,10 @@ export default function AdminReservationsPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4 text-paper/60">
+                        <td className="px-5 py-4 text-paper/60 whitespace-nowrap">
                           {formatRelative(r.createdAt)}
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5 py-4 whitespace-nowrap">
                           {msRemaining <= 0 ? (
                             <span className="inline-flex items-center gap-1.5 bg-laterite/20 text-laterite-light border border-laterite/50 px-2.5 py-1 rounded">
                               <Clock className="w-3 h-3" />
@@ -210,6 +225,10 @@ export default function AdminReservationsPage() {
                   })}
                 </tbody>
               </table>
+              </div>
+              {canScrollRight && (
+                <div className="absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-ink-card via-ink-card/60 to-transparent pointer-events-none" />
+              )}
             </div>
             <div className="px-5 py-3 border-t border-paper/10 text-paper/40 font-mono text-[11px]">
               {sorted.length} réservation{sorted.length > 1 ? 's' : ''} en attente — trié par urgence
@@ -219,7 +238,6 @@ export default function AdminReservationsPage() {
         )}
       </div>
 
-      <Footer />
     </main>
   );
 }

@@ -12,7 +12,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisLockService } from '../../common/redis/redis-lock.service';
 import { LaunchService } from '../launch/launch.service';
-import { UnitStatus, ReservationStatus } from '@prisma/client';
+import { UnitStatus, ReservationStatus, DocumentType, ContractSignerType } from '@prisma/client';
 import { AdminReservationStatusInput } from '../admin/dto/reservation-status.dto';
 import { PaymentService } from '../payment/payment.service';
 
@@ -24,6 +24,13 @@ const RESERVATION_STATUS_BY_INPUT: Record<AdminReservationStatusInput, Reservati
   annulee: ReservationStatus.ANNULEE,
   livree: ReservationStatus.LIVREE,
 };
+
+/** Résumé d'état du contrat d'une réservation, pour le back-office admin. */
+export interface AdminReservationContractState {
+  id: string;
+  buyerSigned: boolean;
+  adminSigned: boolean;
+}
 
 @Injectable()
 export class ReservationService {
@@ -245,15 +252,44 @@ export class ReservationService {
   /**
    * Liste toutes les réservations (filtre statut optionnel) avec les
    * coordonnées de l'acheteur — usage back-office commercial.
+   *
+   * Chaque réservation est enrichie d'un résumé `contract` (dernier contrat
+   * CONTRAT et son état de signature) pour que l'interface admin détermine
+   * le palier du bouton "Générer le contrat" :
+   *  - `null`                    → aucun contrat → Palier 3 (libre)
+   *  - `buyerSigned: true`       → Palier 1 → bouton masqué
+   *  - `buyerSigned: false`      → Palier 3 (contrat non-signé) ou Palier 2
+   *                               (si `adminSigned: true`) → confirmation
    */
   async adminList(status?: AdminReservationStatusInput) {
-    return this.prisma.reservation.findMany({
+    const reservations = await this.prisma.reservation.findMany({
       where: status ? { status: RESERVATION_STATUS_BY_INPUT[status] } : undefined,
       include: {
         user: { select: { id: true, fullName: true, email: true, phone: true } },
         unit: { select: { id: true, blockId: true, type: true, floor: true } },
+        documents: {
+          where: { type: DocumentType.CONTRAT },
+          include: { signatures: { select: { signerType: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
+    });
+
+    return reservations.map(({ documents, ...reservation }) => {
+      const document = documents[0];
+      let contract: AdminReservationContractState | null = null;
+      if (document) {
+        const buyerSigned = document.signatures.some(
+          (s) => s.signerType === ContractSignerType.PROPRIETAIRE,
+        );
+        const adminSigned = document.signatures.some(
+          (s) => s.signerType === ContractSignerType.ADMIN,
+        );
+        contract = { id: document.id, buyerSigned, adminSigned };
+      }
+      return { ...reservation, contract };
     });
   }
 

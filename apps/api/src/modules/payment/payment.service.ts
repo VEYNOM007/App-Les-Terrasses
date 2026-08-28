@@ -2,8 +2,9 @@ import { Inject, Injectable, NotFoundException, Logger, BadRequestException, for
 import type Stripe from 'stripe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
+import { ContractService } from '../contract/contract.service';
 import { NotificationService } from '../notification/notification.service';
-import { InstallmentStatus, PaymentProvider, ReservationStatus } from '@prisma/client';
+import { InstallmentStatus, PaymentProvider, ReservationStatus, UserRole } from '@prisma/client';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
 import {
@@ -31,6 +32,7 @@ export class PaymentService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => ReservationService))
     private readonly reservationService: ReservationService,
+    private readonly contractService: ContractService,
     private readonly notifications: NotificationService,
     private readonly cinetPayClient: CinetPayClient,
     private readonly stripeClient: StripeClient,
@@ -212,7 +214,9 @@ export class PaymentService {
   ) {
     const installment = await this.prisma.paymentInstallment.findUnique({
       where: { id: installmentId },
-      include: { schedule: { include: { reservation: true, installments: true } } },
+      include: {
+        schedule: { include: { reservation: { include: { user: true } }, installments: true } },
+      },
     });
 
     if (!installment) {
@@ -237,10 +241,21 @@ export class PaymentService {
 
     const { reservation, installments } = installment.schedule;
 
-    // Première échéance (acompte) payée → on confirme la réservation
+    // Première échéance (acompte) payée → on confirme la réservation et on
+    // génère automatiquement le contrat de vente. La garde anti-doublon de
+    // generateBuyerContract rend ce déclenchement idempotent : un webhook
+    // rejoué (déjà ignoré plus haut par le statut PAYE) ou un rappel ne
+    // créeront jamais un doublon ni n'écraseront une signature.
     const isFirstInstallment = installment.label === DEFAULT_INSTALLMENT_PLAN[0].label;
     if (isFirstInstallment) {
       await this.reservationService.confirmReservation(reservation.id);
+      if (reservation.user) {
+        await this.contractService.generateBuyerContract(
+          reservation.id,
+          reservation.userId,
+          reservation.user.role ?? UserRole.ACHETEUR,
+        );
+      }
     }
 
     await this.notifications.notifyUser(reservation.userId, {

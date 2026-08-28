@@ -5,8 +5,9 @@ import { ContractPdfService } from './contract-pdf.service';
 import { StorageModule } from '../../common/storage/storage.module';
 
 @Module({
-  imports: [StorageModule], // dépendance déclarée : PDF + signatures déposés sur B2
+  imports: [StorageModule], // d�pendance d�clar�e : PDF + signatures d�pos�s sur B2
   providers: [ContractService, ContractPdfService],
   controllers: [ContractController],
+  exports: [ContractService],
 })
 export class ContractModule {}

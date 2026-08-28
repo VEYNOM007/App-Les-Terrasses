@@ -601,11 +601,33 @@ export interface AdminReservation {
   createdAt: string;
   user: { id: string; fullName: string; email: string; phone: string };
   unit: { id: string; blockId: string; type: string; floor: number };
+  // État du dernier contrat de la réservation (null/undefined = aucun). Sert au bouton
+  // admin "Générer le contrat" pour déterminer le palier de sécurité.
+  contract?: {
+    id: string;
+    buyerSigned: boolean;
+    adminSigned: boolean;
+  } | null;
 }
 
 export function fetchAdminReservations(status?: string): Promise<AdminReservation[]> {
   const qs = status ? `?status=${status}` : '';
   return apiFetch<AdminReservation[]>(`/v1/admin/reservations${qs}`);
+}
+
+/**
+ * (Règénère le contrat acheteur d'une réservation — réservé aux admins.
+ * Le backend applique la garde en 3 paliers ; `force` est la confirmation
+ * explicite du Palier 2 (remplacer un contrat déjà signé par l'admin).
+ */
+export function regenerateBuyerContract(
+  reservationId: string,
+  force: boolean,
+): Promise<PortalDocument> {
+  return apiFetch<PortalDocument>(`/v1/contracts/buyer/${reservationId}/regenerate`, {
+    method: 'POST',
+    body: JSON.stringify({ force }),
+  });
 }
 
 export interface AdminUser {

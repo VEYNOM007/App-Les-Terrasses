@@ -444,6 +444,57 @@ describe('ReservationService', () => {
         expect.objectContaining({ where: { status: 'EN_ATTENTE' } }),
       );
     });
+
+    it('devrait enrichir chaque réservation de l\'état du dernier contrat (palier)', async () => {
+      const base = {
+        id: 'res-001',
+        status: 'CONFIRMEE',
+        lockExpiresAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        user: { id: 'user-001', fullName: 'Moussa', email: 'm@test.com', phone: '+228' },
+        unit: { id: 'unit-001', type: 'T2', blockId: 'block-1', floor: 2 },
+      };
+
+      // Cas 1 : contrat non signé → buyerSigned=false, adminSigned=false (Palier 3)
+      // Cas 2 : contrat signé par l'admin seul → adminSigned=true (Palier 2)
+      prisma.reservation.findMany.mockResolvedValue([
+        {
+          ...base,
+          documents: [{ id: 'doc-unsigned', signatures: [] }],
+        },
+        {
+          ...base,
+          id: 'res-002',
+          documents: [
+            { id: 'doc-admin', signatures: [{ signerType: 'ADMIN' }] },
+          ],
+        },
+      ]);
+
+      const result = await service.adminList('confirmee');
+
+      expect(result[0].contract).toEqual({ id: 'doc-unsigned', buyerSigned: false, adminSigned: false });
+      expect(result[1].contract).toEqual({ id: 'doc-admin', buyerSigned: false, adminSigned: true });
+      // Le champ documents brut est retiré de la réponse.
+      expect(result[0]).not.toHaveProperty('documents');
+    });
+
+    it('devrait retourner contract:null si aucune réservation n\'a de contrat', async () => {
+      prisma.reservation.findMany.mockResolvedValue([
+        {
+          id: 'res-001',
+          status: 'CONFIRMEE',
+          lockExpiresAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          user: { id: 'user-001', fullName: 'M', email: 'm@test.com', phone: '+228' },
+          unit: { id: 'unit-001', type: 'T2', blockId: 'block-1', floor: 2 },
+          documents: [],
+        },
+      ]);
+
+      const result = await service.adminList('confirmee');
+      expect(result[0].contract).toBeNull();
+    });
   });
 
   describe('adminGetReservation', () => {

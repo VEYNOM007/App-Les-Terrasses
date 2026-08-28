@@ -3,6 +3,7 @@ import { PaymentService, CinetPayWebhookPayload } from './payment.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
+import { ContractService } from '../contract/contract.service';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
 import {
@@ -10,7 +11,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { PaymentProvider } from '@prisma/client';
+import { PaymentProvider, UserRole } from '@prisma/client';
 
 /**
  * Tests unitaires — PaymentService
@@ -19,6 +20,9 @@ import { PaymentProvider } from '@prisma/client';
  *  1. markInstallmentPaid — première invocation → statut PAYE
  *  2. markInstallmentPaid — double invocation idempotente → ignoré sans erreur
  *  3. markInstallmentPaid — installment introuvable → log warning, pas d'exception
+ *  *  markInstallmentPaid — acompte payé → ContractService.generateBuyerContract appelé UNE FOIS (R6)
+ *  *  markInstallmentPaid — tranche suivante (hors acompte) → contrat NON généré (R6)
+ *  *  markInstallmentPaid — webhook acompte rejoué (déjà PAYE) → contrat NON regénéré (R6)
  *  4. initiatePayment — échéance déjà payée → BadRequestException
  *  5. initiatePayment — utilisateur non propriétaire → BadRequestException
  *  6. handleCinetPayWebhook — vérification serveur-à-serveur ACCEPTED + montant → PAYE
@@ -86,6 +90,10 @@ const createMockReservationService = () => ({
   confirmReservation: jest.fn().mockResolvedValue(undefined),
 });
 
+const createMockContractService = () => ({
+  generateBuyerContract: jest.fn().mockResolvedValue({ id: 'contract-001' }),
+});
+
 const createMockNotificationService = () => ({
   notifyUser: jest.fn().mockResolvedValue(undefined),
 });
@@ -118,6 +126,7 @@ describe('PaymentService', () => {
   let service: PaymentService;
   let prisma: ReturnType<typeof createMockPrisma>;
   let reservationService: ReturnType<typeof createMockReservationService>;
+  let contractService: ReturnType<typeof createMockContractService>;
   let notificationService: ReturnType<typeof createMockNotificationService>;
   let cinetPayClient: ReturnType<typeof createMockCinetPayClient>;
   let stripeClient: ReturnType<typeof createMockStripeClient>;
@@ -125,6 +134,7 @@ describe('PaymentService', () => {
   beforeEach(async () => {
     prisma = createMockPrisma();
     reservationService = createMockReservationService();
+    contractService = createMockContractService();
     notificationService = createMockNotificationService();
     cinetPayClient = createMockCinetPayClient();
     stripeClient = createMockStripeClient();
@@ -134,6 +144,7 @@ describe('PaymentService', () => {
         PaymentService,
         { provide: PrismaService, useValue: prisma },
         { provide: ReservationService, useValue: reservationService },
+        { provide: ContractService, useValue: contractService },
         { provide: NotificationService, useValue: notificationService },
         { provide: CinetPayClient, useValue: cinetPayClient },
         { provide: StripeClient, useValue: stripeClient },
@@ -209,8 +220,59 @@ describe('PaymentService', () => {
   });
 
   // ──────────────────────────────────────────────────
-  // initiatePayment — validations métier
+  // markInstallmentPaid — génération du contrat acheteur (R6)
   // ──────────────────────────────────────────────────
+
+  describe('markInstallmentPaid — contrat acheteur (R6)', () => {
+    it('devrait générer le contrat acheteur UNE FOIS quand l\'acompte est payé', async () => {
+      prisma.paymentInstallment.findUnique.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+      });
+      prisma.paymentInstallment.update.mockResolvedValue({});
+
+      await service.markInstallmentPaid('inst-001', PaymentProvider.CINETPAY, 'TX-ref-001');
+
+      // L'acompte est la première tranche → déclenchement du contrat.
+      expect(contractService.generateBuyerContract).toHaveBeenCalledTimes(1);
+      expect(contractService.generateBuyerContract).toHaveBeenCalledWith(
+        'res-001',
+        'user-001',
+        UserRole.ACHETEUR,
+      );
+    });
+
+    it('ne devrait PAS générer de contrat acheteur pour une tranche suivante (hors acompte)', async () => {
+      prisma.paymentInstallment.findUnique.mockResolvedValue({
+        ...mockInstallmentBase,
+        label: 'Tranche fondations',
+        status: 'EN_ATTENTE',
+      });
+      prisma.paymentInstallment.update.mockResolvedValue({});
+
+      await service.markInstallmentPaid('inst-002', PaymentProvider.CINETPAY, 'TX-ref-002');
+
+      // Seul l'acompte déclenche le contrat : une tranche d'équilibre ne
+      // doit jamais le générer, ni confirmer la réservation.
+      expect(contractService.generateBuyerContract).not.toHaveBeenCalled();
+      expect(reservationService.confirmReservation).not.toHaveBeenCalled();
+    });
+
+    it('ne devrait PAS regénérer le contrat si le webhook de l\'acompte est rejoué (déjà PAYE)', async () => {
+      prisma.paymentInstallment.findUnique.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'PAYE',
+        paidAt: new Date('2026-07-20'),
+      });
+
+      await service.markInstallmentPaid('inst-001', PaymentProvider.CINETPAY, 'TX-ref-001');
+
+      // Idempotence : un webhook rejoué sur une échéance déjà payée ne doit
+      // ni recréer de contrat, ni reconfirmer la réservation.
+      expect(contractService.generateBuyerContract).not.toHaveBeenCalled();
+      expect(reservationService.confirmReservation).not.toHaveBeenCalled();
+    });
+  });
 
   describe('initiatePayment', () => {
     it('devrait rejeter si l\'échéance est déjà payée', async () => {

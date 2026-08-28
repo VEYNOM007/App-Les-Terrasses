@@ -4,9 +4,10 @@ import { PaymentController } from './payment.controller';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
 import { ReservationModule } from '../reservation/reservation.module';
+import { ContractModule } from '../contract/contract.module';
 
 @Module({
-  imports: [forwardRef(() => ReservationModule)],
+  imports: [forwardRef(() => ReservationModule), ContractModule],
   providers: [PaymentService, CinetPayClient, StripeClient],
   controllers: [PaymentController],
   exports: [PaymentService, CinetPayClient, StripeClient],

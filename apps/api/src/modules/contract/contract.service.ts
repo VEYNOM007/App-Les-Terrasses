@@ -48,6 +48,17 @@ export class ContractService {
       throw new ForbiddenException('Cette réservation ne vous appartient pas.');
     }
 
+    // Garde anti-doublon (mode automatique, idempotent) : si un contrat
+    // existe déjà pour cette réservation, on retourne l'existant en silence
+    // — jamais on ne le recrée (cela casserait une signature en cours et
+    // dupliquerait les PDF B2). Un webhook de paiement rejoué est ainsi
+    // absorbé sans effet visible.
+    const existing = await this.prisma.document.findFirst({
+      where: { reservationId, type: DocumentType.CONTRAT },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) return existing;
+
     const fileUrl = await this.pdf.generate({
       title: 'Contrat de réservation et de vente',
       reference: reservationId,
@@ -90,12 +101,71 @@ export class ContractService {
     return document;
   }
 
+  /**
+   * Régénère le contrat d'une réservation à la demande d'un administrateur.
+   *
+   * Garde de sécurité en trois paliers selon l'état de signature actuel :
+   *  - Palier 1 : le propriétaire (acheteur) a signé → BLOQUÉ, sans aucune
+   *    exception, même pour un admin. On n'écrase jamais une signature
+   *    acheteur ; une telle opération reste une action manuelle en base.
+   *  - Palier 2 : seul l'administration a signé (sans le propriétaire) →
+   *    une confirmation explicite (force=true) est requise.
+   *  - Palier 3 : rien n'est signé → régénération libre (rotation du contrat
+   *    non-signé : suppression de l'ancien PDF + création d'un nouveau).
+   */
+  async regenerateBuyerContract(reservationId: string, userId: string, role: UserRole, force = false) {
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: reservationId },
+      select: { userId: true },
+    });
+    if (!reservation) throw new NotFoundException('Réservation introuvable.');
+    if (role !== UserRole.ADMIN) {
+      throw new ForbiddenException('Seul un administrateur peut régénérer un contrat.');
+    }
+
+    const existing = await this.prisma.document.findFirst({
+      where: { reservationId, type: DocumentType.CONTRAT },
+      include: { signatures: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Aucun contrat : la régénération se comporte comme une génération initiale.
+    if (!existing) {
+      return this.generateBuyerContract(reservationId, userId, role);
+    }
+
+    const hasOwnerSignature = existing.signatures.some(
+      (s) => s.signerType === ContractSignerType.PROPRIETAIRE,
+    );
+    const hasAdminSignature = existing.signatures.some(
+      (s) => s.signerType === ContractSignerType.ADMIN,
+    );
+
+    if (hasOwnerSignature) {
+      throw new ConflictException(
+        'Le contrat est déjà signé par le propriétaire : sa régénération est impossible.',
+      );
+    }
+    if (hasAdminSignature && !force) {
+      throw new ConflictException(
+        'Le contrat est déjà signé par l\'administration. Confirmez la régénération pour continuer.',
+      );
+    }
+
+    // Palier 3 (ou Palier 2 confirmé) : rotation de l'ancien contrat non-signé.
+    await this.prisma.document.delete({ where: { id: existing.id } });
+    if (existing.fileUrl) {
+      await this.storage.deleteObject(existing.fileUrl);
+    }
+
+    return this.generateBuyerContract(reservationId, userId, role);
+  }
+
   async generateArtisanContract(
     assignmentId: string,
     userId: string,
     role: UserRole,
-  ) {
-    const assignment = await this.prisma.artisanAssignment.findUnique({
+  ) {    const assignment = await this.prisma.artisanAssignment.findUnique({
       where: { id: assignmentId },
       include: { artisan: true, block: { include: { project: true } } },
     });

@@ -30,7 +30,9 @@ const createMockPrisma = () => ({
     create: jest.fn(),
     findUnique: jest.fn(),
     findMany: jest.fn(),
+    findFirst: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
   },
   contractSignature: {
     create: jest.fn(),
@@ -73,6 +75,7 @@ describe('ContractService', () => {
       storage as unknown as StorageService,
     );
     prisma.document.create.mockResolvedValue({ id: 'document-1' });
+    prisma.document.findFirst.mockResolvedValue(null);
   });
 
   describe('generateBuyerContract', () => {
@@ -125,6 +128,158 @@ describe('ContractService', () => {
         'user-1',
         expect.objectContaining({ title: 'Votre contrat est disponible' }),
       );
+    });
+
+    it('retourne le contrat existant en silence si déjà généré (idempotence)', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({ userId: 'user-1' });
+      const existing = { id: 'document-existant', type: DocumentType.CONTRAT };
+      prisma.document.findFirst.mockResolvedValue(existing);
+
+      const result = await service.generateBuyerContract('reservation-1', 'user-1', UserRole.ACHETEUR);
+
+      expect(result).toBe(existing);
+      expect(prisma.document.create).not.toHaveBeenCalled();
+      expect(pdf.generate).not.toHaveBeenCalled();
+    });
+
+    it('retourne l\'existant même s\'il est déjà signé (ne casse jamais une signature)', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({ userId: 'user-1' });
+      const existing = {
+        id: 'document-signe',
+        type: DocumentType.CONTRAT,
+        signatures: [{ signerType: ContractSignerType.PROPRIETAIRE }],
+      };
+      prisma.document.findFirst.mockResolvedValue(existing);
+
+      const result = await service.generateBuyerContract('reservation-1', 'user-1', UserRole.ACHETEUR);
+
+      expect(result).toBe(existing);
+      expect(prisma.document.create).not.toHaveBeenCalled();
+      expect(pdf.generate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('regenerateBuyerContract', () => {
+    it('refuse un non-administrateur', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({ userId: 'user-1' });
+
+      await expect(
+        service.regenerateBuyerContract('reservation-1', 'user-1', UserRole.ACHETEUR),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.document.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuse une réservation inexistante', async () => {
+      prisma.reservation.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.regenerateBuyerContract('reservation-1', 'admin-1', UserRole.ADMIN),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('palier 1 : bloque si le propriétaire a déjà signé (aucune exception)', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({ userId: 'user-1' });
+      prisma.document.findFirst.mockResolvedValue({
+        id: 'document-signe',
+        fileUrl: 'contracts/old.pdf',
+        signatures: [{ signerType: ContractSignerType.PROPRIETAIRE }],
+      });
+
+      await expect(
+        service.regenerateBuyerContract('reservation-1', 'admin-1', UserRole.ADMIN, true),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.document.delete).not.toHaveBeenCalled();
+      expect(storage.deleteObject).not.toHaveBeenCalled();
+    });
+
+    it('palier 2 : exige la confirmation (force) quand seul l\'admin a signé', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({ userId: 'user-1' });
+      prisma.document.findFirst.mockResolvedValue({
+        id: 'document-admin-signé',
+        fileUrl: 'contracts/old.pdf',
+        signatures: [{ signerType: ContractSignerType.ADMIN }],
+      });
+
+      await expect(
+        service.regenerateBuyerContract('reservation-1', 'admin-1', UserRole.ADMIN),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.document.delete).not.toHaveBeenCalled();
+    });
+
+    it('palier 2 confirmé : régénère quand force=true', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        user: { fullName: 'Kofi Mensah', email: 'kofi@test.tg', phone: '+22890000000' },
+        unit: {
+          type: 'T2',
+          surface: 55,
+          price: { toString: () => '35000000' },
+          currency: 'XOF',
+          block: { name: 'Bloc A', project: { name: 'Projet Test' } },
+        },
+      });
+      prisma.document.findFirst.mockResolvedValueOnce({
+        id: 'document-admin-signé',
+        fileUrl: 'contracts/old.pdf',
+        signatures: [{ signerType: ContractSignerType.ADMIN }],
+      });
+      prisma.document.create.mockResolvedValue({ id: 'document-neuf' });
+
+      const result = await service.regenerateBuyerContract('reservation-1', 'admin-1', UserRole.ADMIN, true);
+
+      expect(prisma.document.delete).toHaveBeenCalledWith({ where: { id: 'document-admin-signé' } });
+      expect(storage.deleteObject).toHaveBeenCalledWith('contracts/old.pdf');
+      expect(prisma.document.create).toHaveBeenCalled();
+      expect(result.id).toBe('document-neuf');
+    });
+
+    it('palier 3 : régénère librement si rien n\'est signé (rotation)', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        user: { fullName: 'Kofi Mensah', email: 'kofi@test.tg', phone: '+22890000000' },
+        unit: {
+          type: 'T2',
+          surface: 55,
+          price: { toString: () => '35000000' },
+          currency: 'XOF',
+          block: { name: 'Bloc A', project: { name: 'Projet Test' } },
+        },
+      });
+      prisma.document.findFirst.mockResolvedValueOnce({
+        id: 'document-non-signe',
+        fileUrl: 'contracts/old.pdf',
+        signatures: [],
+      });
+      prisma.document.create.mockResolvedValue({ id: 'document-neuf' });
+
+      const result = await service.regenerateBuyerContract('reservation-1', 'admin-1', UserRole.ADMIN);
+
+      expect(prisma.document.delete).toHaveBeenCalledWith({ where: { id: 'document-non-signe' } });
+      expect(storage.deleteObject).toHaveBeenCalledWith('contracts/old.pdf');
+      expect(prisma.document.create).toHaveBeenCalled();
+      expect(result.id).toBe('document-neuf');
+    });
+
+    it('se comporte comme une génération initiale quand aucun contrat n\'existe', async () => {
+      prisma.reservation.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        user: { fullName: 'Kofi Mensah', email: 'kofi@test.tg', phone: '+22890000000' },
+        unit: {
+          type: 'T2',
+          surface: 55,
+          price: { toString: () => '35000000' },
+          currency: 'XOF',
+          block: { name: 'Bloc A', project: { name: 'Projet Test' } },
+        },
+      });
+      prisma.document.findFirst.mockResolvedValue(null);
+      prisma.document.create.mockResolvedValue({ id: 'document-neuf' });
+
+      const result = await service.regenerateBuyerContract('reservation-1', 'admin-1', UserRole.ADMIN);
+
+      expect(prisma.document.delete).not.toHaveBeenCalled();
+      expect(prisma.document.create).toHaveBeenCalled();
+      expect(result.id).toBe('document-neuf');
     });
   });
 

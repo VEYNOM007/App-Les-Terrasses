@@ -172,7 +172,14 @@ export class ContractService {
    * traduit en 409. Une fois les deux signatures présentes, le PDF est
    * contresigné (signedFileUrl) et le propriétaire est notifié.
    */
-  async signContract(documentId: string, userId: string, role: UserRole, signatureBuffer: Buffer) {
+  async signContract(
+    documentId: string,
+    userId: string,
+    role: UserRole,
+    signatureBuffer: Buffer,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     if (!isPng(signatureBuffer)) {
       throw new BadRequestException('Signature invalide : PNG requis.');
     }
@@ -206,7 +213,14 @@ export class ContractService {
 
     try {
       await this.prisma.contractSignature.create({
-        data: { documentId, signerType, signerUserId: userId, signatureImageUrl },
+        data: {
+          documentId,
+          signerType,
+          signerUserId: userId,
+          signatureImageUrl,
+          ipAddress,
+          userAgent,
+        },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

@@ -275,6 +275,40 @@ describe('ContractService', () => {
       });
     });
 
+    it('persiste l\'adresse IP et le user-agent du signataire', async () => {
+      await service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG, '192.0.2.10', 'Mozilla/5.0 (trace-test)');
+      const [uploadKey] = storage.putObject.mock.calls[0];
+      expect(prisma.contractSignature.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            documentId: 'document-1',
+            signerType: ContractSignerType.PROPRIETAIRE,
+            signerUserId: 'user-1',
+            signatureImageUrl: uploadKey,
+            ipAddress: '192.0.2.10',
+            userAgent: 'Mozilla/5.0 (trace-test)',
+          }),
+        }),
+      );
+    });
+
+    it('signe sans IP ni user-agent si non fournis (optionnels)', async () => {
+      await service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG);
+      const [uploadKey] = storage.putObject.mock.calls[0];
+      expect(prisma.contractSignature.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            documentId: 'document-1',
+            signerType: ContractSignerType.PROPRIETAIRE,
+            signerUserId: 'user-1',
+            signatureImageUrl: uploadKey,
+            ipAddress: undefined,
+            userAgent: undefined,
+          }),
+        }),
+      );
+    });
+
     it('refuse un tiers (ni propriétaire ni admin)', async () => {
       await expect(
         service.signContract('document-1', 'intruder-1', UserRole.ACHETEUR, VALID_PNG),

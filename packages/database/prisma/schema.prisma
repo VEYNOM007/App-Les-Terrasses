@@ -574,6 +574,8 @@ model ContractSignature {
   signatureImageUrl String
 
   signedAt DateTime @default(now())
+  ipAddress  String?
+  userAgent  String?
 
   @@unique([documentId, signerType])
   @@index([documentId])

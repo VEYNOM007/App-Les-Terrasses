@@ -8,6 +8,7 @@ import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
+import { ContractService } from '../contract/contract.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { RedisModule } from '../../common/redis/redis.module';
 import { PrismaModule } from '../../common/prisma/prisma.module';
@@ -55,6 +56,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
     constructEvent: jest.Mock;
   };
   let reservationService: { confirmReservation: jest.Mock };
+  let contractService: { generateBuyerContract: jest.Mock };
 
   beforeAll(async () => {
     cinetPayClient = {
@@ -77,6 +79,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
       constructEvent: jest.fn().mockReturnValue(null),
     };
     reservationService = { confirmReservation: jest.fn().mockResolvedValue(undefined) };
+    contractService = { generateBuyerContract: jest.fn().mockResolvedValue({ id: 'contract-001' }) };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -96,6 +99,7 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
         { provide: StripeClient, useValue: stripeClient },
         { provide: ReservationService, useValue: reservationService },
         { provide: NotificationService, useValue: { notifyUser: jest.fn() } },
+        { provide: ContractService, useValue: contractService },
       ],
     })
       .overrideProvider(PrismaService)

@@ -6,6 +6,7 @@ import { ReservationService } from '../reservation/reservation.service';
 import { NotificationService } from '../notification/notification.service';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
+import { ContractService } from '../contract/contract.service';
 import { convertXofToEurCents, resolveXofToEurRate } from '../../common/payment/eur-conversion';
 import {
   cleanupTestDatabase,
@@ -46,10 +47,12 @@ describe('PaymentService — integration (vraie DB)', () => {
     createCheckoutSession: jest.Mock;
     constructEvent: jest.Mock;
   };
+  let contractService: { generateBuyerContract: jest.Mock };
 
   beforeAll(async () => {
     reservationService = { confirmReservation: jest.fn().mockResolvedValue(undefined) };
     notificationService = { notifyUser: jest.fn().mockResolvedValue(undefined) };
+    contractService = { generateBuyerContract: jest.fn().mockResolvedValue({ id: 'contract-001' }) };
     cinetPayClient = {
       createPaymentSession: jest.fn().mockResolvedValue({
         paymentUrl: 'https://checkout.cinetpay.com/demo/tx-1',
@@ -79,6 +82,7 @@ describe('PaymentService — integration (vraie DB)', () => {
         { provide: NotificationService, useValue: notificationService },
         { provide: CinetPayClient, useValue: cinetPayClient },
         { provide: StripeClient, useValue: stripeClient },
+        { provide: ContractService, useValue: contractService },
       ],
     }).compile();
 
@@ -266,6 +270,8 @@ describe('PaymentService — integration (vraie DB)', () => {
 
       // PAS confirmReservation parce que c'est pas l'acompte
       expect(reservationService.confirmReservation).not.toHaveBeenCalled();
+      // PAS de contrat généré non plus : seule la 1ère échéance le déclenche
+      expect(contractService.generateBuyerContract).not.toHaveBeenCalled();
     });
 
     it('declenche confirmReservation quand l\'acompte est payé', async () => {
@@ -305,6 +311,12 @@ describe('PaymentService — integration (vraie DB)', () => {
       await service.markInstallmentPaid(acompte.id, 'CINETPAY', 'cpm-acompte');
 
       expect(reservationService.confirmReservation).toHaveBeenCalledWith(reservation.id);
+      // R6 : le paiement de l'acompte déclenche aussi la génération du contrat
+      expect(contractService.generateBuyerContract).toHaveBeenCalledWith(
+        reservation.id,
+        user.id,
+        expect.any(String),
+      );
     });
 
     it('est idempotent : 2e appel est ignoré sans erreur ni double notification', async () => {

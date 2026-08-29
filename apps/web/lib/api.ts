@@ -616,6 +616,22 @@ export function fetchAdminReservations(status?: string): Promise<AdminReservatio
 }
 
 /**
+ * Modifie le statut d'une réservation côté back-office (réservé aux admins).
+ * L'endpoint backend `PATCH /admin/reservations/:id/status` est déjà en place
+ * (gardé par @Roles('ADMIN')) ; ce helper le rebranche à l'interface.
+ * `status` suit le format API minuscules (ex. 'annulee' → ANNULEE + unité DISPONIBLE).
+ */
+export function updateAdminReservationStatus(
+  reservationId: string,
+  status: 'en_attente' | 'confirmee' | 'annulee' | 'livree',
+): Promise<void> {
+  return apiFetch<void>(`/v1/admin/reservations/${reservationId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+/**
  * (Règénère le contrat acheteur d'une réservation — réservé aux admins.
  * Le backend applique la garde en 3 paliers ; `force` est la confirmation
  * explicite du Palier 2 (remplacer un contrat déjà signé par l'admin).

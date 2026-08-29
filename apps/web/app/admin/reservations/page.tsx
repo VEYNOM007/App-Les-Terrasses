@@ -12,6 +12,7 @@ import {
   RefreshCw,
   XCircle,
   PenLine,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '../../../components/AuthProvider';
 import SignaturePad from '../../../components/SignaturePad';
@@ -20,6 +21,7 @@ import {
   regenerateBuyerContract,
   updateAdminReservationStatus,
   signContract,
+  adminDownloadContract,
   AdminReservation,
 } from '../../../lib/api';
 
@@ -104,6 +106,10 @@ export default function AdminReservationsPage() {
   const [pendingSign, setPendingSign] = useState<AdminReservation | null>(null);
   const [signing, setSigning] = useState(false);
   const [signError, setSignError] = useState('');
+
+  // Téléchargement admin du contrat contresigné (URL signée B2, endpoint C2).
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -237,8 +243,24 @@ export default function AdminReservationsPage() {
     }
   }
 
+  // Télécharge le contrat contresigné via l'endpoint admin dédié (C2) puis
+  // ouvre l'URL signée B2 dans un nouvel onglet (jamais de proxy serveur).
+  async function handleAdminDownload(reservation: AdminReservation) {
+    if (!reservation.contract) return;
+    setDownloadError('');
+    setDownloadingId(reservation.id);
+    try {
+      const { downloadUrl } = await adminDownloadContract(reservation.id, reservation.contract.id);
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : 'Impossible de télécharger le contrat.');
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   const isActing = actingId !== null;
-  const working = acting || cancelling || isActing || signing;
+  const working = acting || cancelling || isActing || signing || downloadingId !== null;
 
   if (!user) {
     return (
@@ -312,6 +334,21 @@ export default function AdminReservationsPage() {
           </div>
         )}
 
+        {downloadError && (
+          <div className="bg-laterite/15 border border-laterite/40 rounded-md p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-laterite-light shrink-0" />
+            <p className="text-sm text-paper font-mono">
+              {downloadError}
+              <button
+                onClick={() => setDownloadError('')}
+                className="ml-3 underline text-paper/60 hover:text-paper font-mono text-xs"
+              >
+                Fermer
+              </button>
+            </p>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center gap-3 font-mono text-xs text-paper/60 py-16">
             <Loader2 className="w-5 h-5 animate-spin text-laterite-light" /> Chargement des
@@ -370,6 +407,9 @@ export default function AdminReservationsPage() {
                     {sorted.map((r) => {
                       const palier = contractPalier(r.contract);
                       const pasSigneParAcheteur = !r.contract?.buyerSigned;
+                      // Contrat entièrement signé (acheteur + promoteur) : fini
+                      // la saisie de signature, seule la consultation PDF reste.
+                      const fullySigned = !!r.contract?.buyerSigned && !!r.contract?.adminSigned;
 
                       return (
                         <tr
@@ -428,7 +468,27 @@ export default function AdminReservationsPage() {
                               </td>
                               <td className="px-5 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-3">
-                                  {palier === 1 ? (
+                                  {fullySigned ? (
+                                    <>
+                                      <span className="inline-flex items-center gap-1.5 bg-lagoon/15 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded whitespace-nowrap">
+                                        <FileText className="w-3 h-3" />
+                                        Signé
+                                      </span>
+                                      <button
+                                        type="button"
+                                        disabled={working}
+                                        onClick={() => void handleAdminDownload(r)}
+                                        className="inline-flex items-center gap-1.5 bg-lagoon-light/15 border border-lagoon-light/50 text-lagoon-light hover:bg-lagoon-light/25 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded transition-all whitespace-nowrap"
+                                      >
+                                        {downloadingId === r.id ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                          <Download className="w-3.5 h-3.5" />
+                                        )}
+                                        {downloadingId === r.id ? 'Préparation…' : 'Télécharger'}
+                                      </button>
+                                    </>
+                                  ) : palier === 1 ? (
                                     <>
                                       <span className="inline-flex items-center gap-1.5 bg-lagoon/15 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded whitespace-nowrap">
                                         <FileText className="w-3 h-3" />

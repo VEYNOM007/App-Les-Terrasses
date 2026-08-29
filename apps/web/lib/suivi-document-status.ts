@@ -15,6 +15,15 @@ export type SuiviDocumentStatusLabel = {
 };
 
 /**
+ * Contrat finalisé : les deux signatures sont posées (acheteur + promoteur)
+ * et la réservation n'est pas annulée. C'est l'état où le PDF contresigné
+ * est définitif — le téléchargement sert alors la version `signedFileUrl`.
+ */
+export function isContractFinalized(document: PortalDocument): boolean {
+  return document.buyerSigned && document.adminSigned && !isDocumentObsolete(document);
+}
+
+/**
  * Libellé de statut d'un document côté /suivi acheteur (R6/C5).
  *  - obsolète        → réservation annulée (archive)
  *  - signé           → acheté + promoteur (contrat contresigné)

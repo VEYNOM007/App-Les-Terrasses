@@ -185,12 +185,13 @@ describe('PortalService', () => {
         },
         include: {
           reservation: { select: { id: true, status: true } },
+          signatures: { select: { signerType: true } },
         },
         orderBy: { createdAt: 'desc' },
       });
     });
 
-    it('devrait exposer reservationId/reservationStatus et retirer le noeud reservation imbriqué', async () => {
+    it('devrait exposer reservationId/reservationStatus/buyerSigned/adminSigned et retirer le noeud reservation imbriqué', async () => {
       prisma.document.findMany.mockResolvedValue([
         {
           id: 'doc-010',
@@ -199,8 +200,18 @@ describe('PortalService', () => {
           fileUrl: 'contracts/original.pdf',
           signedFileUrl: null,
           createdAt: new Date('2026-07-01T08:00:00.000Z'),
-          signature: [],
+          signatures: [{ signerType: 'PROPRIETAIRE' }],
           reservation: { id: 'resa-001', status: 'ANNULEE' },
+        },
+        {
+          id: 'doc-012',
+          type: 'CONTRAT',
+          name: 'Contrat T2',
+          fileUrl: 'contracts/original.pdf',
+          signedFileUrl: null,
+          createdAt: new Date('2026-07-02T08:00:00.000Z'),
+          signatures: [{ signerType: 'PROPRIETAIRE' }, { signerType: 'ADMIN' }],
+          reservation: { id: 'resa-002', status: 'CONFIRMEE' },
         },
         {
           id: 'doc-011',
@@ -208,27 +219,40 @@ describe('PortalService', () => {
           name: 'Devis artisan',
           fileUrl: 'artisan/devis.pdf',
           signedFileUrl: null,
-          createdAt: new Date('2026-07-02T08:00:00.000Z'),
-          signature: [],
+          createdAt: new Date('2026-07-03T08:00:00.000Z'),
+          signatures: [],
           reservation: null,
         },
       ]);
 
       const result = await service.listDocuments('user-001');
 
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
+      // Palier 1 : acheteur signé, promoteur en attente
       expect(result[0]).toMatchObject({
         id: 'doc-010',
         reservationId: 'resa-001',
         reservationStatus: 'ANNULEE',
+        buyerSigned: true,
+        adminSigned: false,
       });
       expect(result[0]).not.toHaveProperty('reservation');
+      expect(result[0]).not.toHaveProperty('signatures');
+      // Contrat entièrement signé
       expect(result[1]).toMatchObject({
+        id: 'doc-012',
+        buyerSigned: true,
+        adminSigned: true,
+      });
+      // Document sans réservation ni signature (pièce artisan)
+      expect(result[2]).toMatchObject({
         id: 'doc-011',
         reservationId: null,
         reservationStatus: null,
+        buyerSigned: false,
+        adminSigned: false,
       });
-      expect(result[1]).not.toHaveProperty('reservation');
+      expect(result[2]).not.toHaveProperty('reservation');
     });
   });
 });

@@ -703,6 +703,8 @@ export interface PortalInstallment {
 export interface PortalDashboard {
   reservationId: string;
   status: string;
+  createdAt: string;
+  updatedAt: string;
   unit: {
     id: string;
     name: string;
@@ -743,6 +745,8 @@ export interface PortalDocument {
   fileUrl: string;
   signedFileUrl: string | null;
   createdAt: string;
+  reservationId: string | null;
+  reservationStatus: string | null;
   signatures?: ContractSignature[];
 }
 

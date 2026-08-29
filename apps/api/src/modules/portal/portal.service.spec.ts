@@ -14,6 +14,9 @@ import { StorageService } from '../../common/storage/storage.service';
  */
 
 const createMockPrisma = () => ({
+  reservation: {
+    findMany: jest.fn(),
+  },
   document: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -130,6 +133,43 @@ describe('PortalService', () => {
     });
   });
 
+  describe('getDashboard', () => {
+    it('devrait exposer createdAt et updatedAt (dates de l\'historique des annulées)', async () => {
+      prisma.reservation.findMany.mockResolvedValue([
+        {
+          id: 'resa-001',
+          status: 'ANNULEE',
+          createdAt: new Date('2026-07-01T08:00:00.000Z'),
+          updatedAt: new Date('2026-07-05T10:00:00.000Z'),
+          unit: {
+            block: {
+              progressPercent: 20,
+              constructionPhase: 'STRUCTURE',
+            },
+          },
+          paymentSchedule: {
+            installments: [],
+          },
+        },
+      ]);
+
+      const result = await service.getDashboard('user-001');
+
+      expect(result).toEqual([
+        {
+          reservationId: 'resa-001',
+          status: 'ANNULEE',
+          createdAt: new Date('2026-07-01T08:00:00.000Z'),
+          updatedAt: new Date('2026-07-05T10:00:00.000Z'),
+          unit: { block: { progressPercent: 20, constructionPhase: 'STRUCTURE' } },
+          constructionProgress: 20,
+          constructionPhase: 'STRUCTURE',
+          nextInstallment: undefined,
+        },
+      ]);
+    });
+  });
+
   describe('listDocuments', () => {
     it('devrait lister les contrats d\'une réservation ET d\'une affectation artisan', async () => {
       prisma.document.findMany.mockResolvedValue([]);
@@ -143,8 +183,52 @@ describe('PortalService', () => {
             { artisanAssignment: { artisan: { userId: 'user-001' } } },
           ],
         },
+        include: {
+          reservation: { select: { id: true, status: true } },
+        },
         orderBy: { createdAt: 'desc' },
       });
+    });
+
+    it('devrait exposer reservationId/reservationStatus et retirer le noeud reservation imbriqué', async () => {
+      prisma.document.findMany.mockResolvedValue([
+        {
+          id: 'doc-010',
+          type: 'CONTRAT',
+          name: 'Contrat Studio',
+          fileUrl: 'contracts/original.pdf',
+          signedFileUrl: null,
+          createdAt: new Date('2026-07-01T08:00:00.000Z'),
+          signature: [],
+          reservation: { id: 'resa-001', status: 'ANNULEE' },
+        },
+        {
+          id: 'doc-011',
+          type: 'DEVIS',
+          name: 'Devis artisan',
+          fileUrl: 'artisan/devis.pdf',
+          signedFileUrl: null,
+          createdAt: new Date('2026-07-02T08:00:00.000Z'),
+          signature: [],
+          reservation: null,
+        },
+      ]);
+
+      const result = await service.listDocuments('user-001');
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({
+        id: 'doc-010',
+        reservationId: 'resa-001',
+        reservationStatus: 'ANNULEE',
+      });
+      expect(result[0]).not.toHaveProperty('reservation');
+      expect(result[1]).toMatchObject({
+        id: 'doc-011',
+        reservationId: null,
+        reservationStatus: null,
+      });
+      expect(result[1]).not.toHaveProperty('reservation');
     });
   });
 });

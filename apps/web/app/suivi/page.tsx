@@ -41,6 +41,7 @@ import {
   PaymentScheduleResponse,
 } from '../../lib/api';
 import {
+  isContractFinalized,
   isDocumentObsolete,
   suiviDocumentStatusLabel,
 } from '../../lib/suivi-document-status';
@@ -744,6 +745,7 @@ export default function SuiviAcquereur() {
                 const signed = isFullySigned(document);
                 const ownerSigned = hasOwnerSignature(document);
                 const isObsolete = isDocumentObsolete(document);
+                const finalized = isContractFinalized(document);
                 const statusLabel = suiviDocumentStatusLabel(document);
                 const statusToneClass: Record<string, string> = {
                   inherit: 'text-paper/50',
@@ -766,6 +768,11 @@ export default function SuiviAcquereur() {
                             Obsolète
                           </span>
                         )}
+                        {finalized && (
+                          <span className="bg-lagoon/15 text-lagoon-light border border-lagoon/40 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide">
+                            Contrat finalisé
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-paper/50 font-mono">
                         Créé le {formatDate(document.createdAt)} ·{' '}
@@ -775,9 +782,14 @@ export default function SuiviAcquereur() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => void handleDownload(document.id)}
-                        className="inline-flex items-center gap-2 border border-paper/30 hover:border-sand text-paper font-mono text-xs px-3 py-2 rounded transition-all"
+                        className={`inline-flex items-center gap-2 border font-mono text-xs px-3 py-2 rounded transition-all ${
+                          finalized
+                            ? 'border-lagoon/50 hover:border-lagoon text-lagoon-light font-semibold'
+                            : 'border-paper/30 hover:border-sand text-paper'
+                        }`}
                       >
-                        <Download className="w-4 h-4" /> Télécharger
+                        <Download className="w-4 h-4" />{' '}
+                        {finalized ? 'Télécharger le contrat finalisé' : 'Télécharger'}
                       </button>
                       {!signed && !ownerSigned && !isObsolete && (
                         <button

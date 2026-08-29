@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { isDocumentObsolete, suiviDocumentStatusLabel } from './suivi-document-status';
+import {
+  isContractFinalized,
+  isDocumentObsolete,
+  suiviDocumentStatusLabel,
+} from './suivi-document-status';
 import { PortalDocument } from './api';
 
 function baseDocument(overrides: Partial<PortalDocument>): PortalDocument {
@@ -70,5 +74,34 @@ describe('suiviDocumentStatusLabel — libellés /suivi acheteur (R6/C5)', () =>
       }),
     );
     expect(label).toEqual({ text: 'Réservation annulée — consultable aux archives', tone: 'laterite' });
+  });
+});
+
+describe('isContractFinalized — contrat finalisé / PDF final (R6/C6)', () => {
+  it('true quand les deux signataires ont signé et la réservation est active', () => {
+    expect(
+      isContractFinalized(baseDocument({ buyerSigned: true, adminSigned: true })),
+    ).toBe(true);
+  });
+
+  it('false si un seul signataire a signé (Palier 1 ou 2)', () => {
+    expect(
+      isContractFinalized(baseDocument({ buyerSigned: true, adminSigned: false })),
+    ).toBe(false);
+    expect(
+      isContractFinalized(baseDocument({ buyerSigned: false, adminSigned: true })),
+    ).toBe(false);
+  });
+
+  it('false si la réservation est annulée (archive, même doublement signée)', () => {
+    expect(
+      isContractFinalized(
+        baseDocument({
+          reservationStatus: 'ANNULEE',
+          buyerSigned: true,
+          adminSigned: true,
+        }),
+      ),
+    ).toBe(false);
   });
 });

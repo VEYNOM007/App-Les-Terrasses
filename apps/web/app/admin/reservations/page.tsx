@@ -10,11 +10,13 @@ import {
   Building2,
   FileText,
   RefreshCw,
+  XCircle,
 } from 'lucide-react';
 import { useAuth } from '../../../components/AuthProvider';
 import {
   fetchAdminReservations,
   regenerateBuyerContract,
+  updateAdminReservationStatus,
   AdminReservation,
 } from '../../../lib/api';
 
@@ -85,6 +87,13 @@ export default function AdminReservationsPage() {
   const [pendingConfirm, setPendingConfirm] = useState<AdminReservation | null>(null);
   const [acting, setActing] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
+
+  // Annulation d'une réservation confirmée (bouton ligne).
+  // `cancelling` bloque l'interface pendant l'appel, `pendingCancel` porte la
+  // réservation à annuler (null = aucun dialogue ouvert).
+  const [pendingCancel, setPendingCancel] = useState<AdminReservation | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -172,7 +181,31 @@ export default function AdminReservationsPage() {
     void runGenerate(pendingConfirm, true);
   }
 
+  // Ouvre le dialogue d'annulation. La confirmation est toujours demandée ;
+  // elle est renforcée quand l'acheteur a déjà signé (Palier 1) : annuler
+  // laissera le contrat signé en archive annulée.
+  function requestCancel(reservation: AdminReservation) {
+    setCancelError('');
+    setPendingCancel(reservation);
+  }
+
+  async function runCancel() {
+    if (!pendingCancel) return;
+    setCancelling(true);
+    setCancelError('');
+    try {
+      await updateAdminReservationStatus(pendingCancel.id, 'annulee');
+      setPendingCancel(null);
+      await load(view);
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : "Impossible d'annuler la réservation.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const isActing = actingId !== null;
+  const working = acting || cancelling || isActing;
 
   if (!user) {
     return (
@@ -361,35 +394,46 @@ export default function AdminReservationsPage() {
                                 {formatDate(r.createdAt)}
                               </td>
                               <td className="px-5 py-4 whitespace-nowrap">
-                                {palier === 1 ? (
-                                  <span className="inline-flex items-center gap-1.5 bg-lagoon/15 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded whitespace-nowrap">
-                                    <FileText className="w-3 h-3" />
-                                    Signé par l'acheteur
-                                  </span>
-                                ) : (
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-paper/50 whitespace-nowrap">
-                                      {r.contract
-                                        ? r.contract.adminSigned
-                                          ? 'Signé admin'
-                                          : 'Non signé'
-                                        : 'Aucun'}
+                                <div className="flex items-center gap-3">
+                                  {palier === 1 ? (
+                                    <span className="inline-flex items-center gap-1.5 bg-lagoon/15 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded whitespace-nowrap">
+                                      <FileText className="w-3 h-3" />
+                                      Signé par l'acheteur
                                     </span>
-                                    <button
-                                      type="button"
-                                      disabled={acting || !pasSigneParAcheteur}
-                                      onClick={() => handleGenerate(r)}
-                                      className="inline-flex items-center gap-1.5 bg-laterite-light/15 border border-laterite-light/50 text-laterite-light hover:bg-laterite-light/25 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded transition-all whitespace-nowrap"
-                                    >
-                                      {actingId === r.id ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      ) : (
-                                        <RefreshCw className="w-3.5 h-3.5" />
-                                      )}
-                                      {palier === 2 ? 'Remplacer le contrat' : 'Générer le contrat'}
-                                    </button>
-                                  </div>
-                                )}
+                                  ) : (
+                                    <>
+                                      <span className="text-paper/50 whitespace-nowrap">
+                                        {r.contract
+                                          ? r.contract.adminSigned
+                                            ? 'Signé admin'
+                                            : 'Non signé'
+                                          : 'Aucun'}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        disabled={acting || !pasSigneParAcheteur}
+                                        onClick={() => handleGenerate(r)}
+                                        className="inline-flex items-center gap-1.5 bg-laterite-light/15 border border-laterite-light/50 text-laterite-light hover:bg-laterite-light/25 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded transition-all whitespace-nowrap"
+                                      >
+                                        {actingId === r.id ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                          <RefreshCw className="w-3.5 h-3.5" />
+                                        )}
+                                        {palier === 2 ? 'Remplacer le contrat' : 'Générer le contrat'}
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    type="button"
+                                    disabled={working}
+                                    onClick={() => requestCancel(r)}
+                                    className="inline-flex items-center gap-1.5 bg-laterite-light/10 border border-laterite-light/40 text-laterite-light hover:bg-laterite-light/20 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded transition-all whitespace-nowrap"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    Annuler
+                                  </button>
+                                </div>
                               </td>
                             </>
                           )}
@@ -454,6 +498,70 @@ export default function AdminReservationsPage() {
                 className="bg-laterite-light text-ink hover:bg-laterite-light/90 font-mono text-xs px-4 py-2 rounded transition-all disabled:opacity-40"
               >
                 {acting ? 'Remplacement…' : 'Confirmer le remplacement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingCancel && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm"
+        >
+          <div className="bg-ink-card border border-laterite/40 rounded-md max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-laterite-light shrink-0" />
+              <div>
+                <h3 className="font-serif text-lg font-semibold text-paper">
+                  Annuler cette réservation ?
+                </h3>
+                {pendingCancel.contract?.buyerSigned ? (
+                  <p className="text-xs text-paper/70 font-mono mt-1 leading-relaxed">
+                    L'acheteur a déjà signé le contrat de vente. Annuler la réservation
+                    libérera l'unité mais laissera le contrat signé en archive annulée
+                    (il restera visible côté acheteur dans son suivi). Cette action est
+                    irréversible.
+                  </p>
+                ) : (
+                  <p className="text-xs text-paper/70 font-mono mt-1 leading-relaxed">
+                    La réservation sera annulée et l'unité redeviendra disponible.
+                    Cette action est irréversible.
+                  </p>
+                )}
+                <p className="text-xs text-paper/50 font-mono mt-2">
+                  {pendingCancel.user.fullName} — {pendingCancel.unit.type}, Étage{' '}
+                  {pendingCancel.unit.floor}
+                </p>
+                {cancelError && (
+                  <p className="text-xs font-mono text-laterite-light mt-2">
+                    {cancelError}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => {
+                  setPendingCancel(null);
+                  setCancelError('');
+                }}
+                className="bg-paper/10 hover:bg-paper/20 text-paper font-mono text-xs px-4 py-2 rounded transition-all disabled:opacity-40"
+              >
+                Fermer
+              </button>
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => void runCancel()}
+                className="bg-laterite-light text-ink hover:bg-laterite-light/90 font-mono text-xs px-4 py-2 rounded transition-all disabled:opacity-40"
+              >
+                {cancelling ? 'Annulation…' : pendingCancel.contract?.buyerSigned
+                  ? 'Confirmer l\'annulation'
+                  : 'Annuler la réservation'}
               </button>
             </div>
           </div>

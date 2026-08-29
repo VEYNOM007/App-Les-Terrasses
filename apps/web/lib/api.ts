@@ -767,6 +767,18 @@ export async function downloadDocument(documentId: string): Promise<DownloadDocu
   return apiFetch<DownloadDocumentResponse>(`/v1/portal/documents/${documentId}/download`);
 }
 
+// Téléchargement admin du contrat d'une réservation : route dédiée isolée
+// sous @Roles('ADMIN'). Le document est vérifié rattaché à la réservation
+// demandée côté serveur (isolation, pas de navigation transversale).
+export async function adminDownloadContract(
+  reservationId: string,
+  documentId: string,
+): Promise<DownloadDocumentResponse> {
+  return apiFetch<DownloadDocumentResponse>(
+    `/v1/admin/reservations/${reservationId}/documents/${documentId}/download`,
+  );
+}
+
 export async function signContract(documentId: string, signatureBlob: Blob): Promise<PortalDocument> {
   const form = new FormData();
   form.append('signature', signatureBlob, 'signature.png');

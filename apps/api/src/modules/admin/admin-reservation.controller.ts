@@ -46,4 +46,18 @@ export class AdminReservationController {
   ) {
     return this.reservationService.adminSetStatus(reservationId, body.status);
   }
+
+  /**
+   * Téléchargement admin du contrat d'une réservation (URL signée B2).
+   * Route isolée sous @Roles('ADMIN') ; le document est vérifié rattaché à
+   * la réservation demandée avant de renvoyer l'URL (pas de bypass du
+   * portail acheteur).
+   */
+  @Get(':reservationId/documents/:documentId/download')
+  downloadContract(
+    @Param('reservationId') reservationId: string,
+    @Param('documentId') documentId: string,
+  ) {
+    return this.reservationService.adminGetDocumentFile(reservationId, documentId);
+  }
 }

@@ -11,6 +11,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisLockService } from '../../common/redis/redis-lock.service';
+import { StorageService } from '../../common/storage/storage.service';
 import { LaunchService } from '../launch/launch.service';
 import { UnitStatus, ReservationStatus, DocumentType, ContractSignerType } from '@prisma/client';
 import { AdminReservationStatusInput } from '../admin/dto/reservation-status.dto';
@@ -38,6 +39,7 @@ export class ReservationService {
     private readonly prisma: PrismaService,
     private readonly redisLock: RedisLockService,
     private readonly launchService: LaunchService,
+    private readonly storage: StorageService,
     @InjectQueue('reservation-expiration') private readonly expirationQueue: Queue,
     @Inject(forwardRef(() => PaymentService))
     private readonly paymentService: PaymentService,
@@ -311,6 +313,31 @@ export class ReservationService {
     });
     if (!reservation) throw new NotFoundException('Réservation introuvable.');
     return reservation;
+  }
+
+  /**
+   * Téléchargement admin du contrat d'une réservation. Endpoint dédié sous
+   * @Roles('ADMIN') — aucune réutilisation ni bypass de `getDocumentFile`
+   * (portail acheteur). Le document est vérifié : il doit exister ET être
+   * rattaché à la réservation demandée (isolation, pas de navigation
+   * transversale d'un document quelconque). Renvoie une URL signée B2 ; un
+   * contrat contresigné sert sa version finale (signedFileUrl), sinon
+   * l'original (fileUrl) reste archivé.
+   */
+  async adminGetDocumentFile(reservationId: string, documentId: string) {
+    const document = await this.prisma.document.findUnique({
+      where: { id: documentId },
+      select: { id: true, reservationId: true, fileUrl: true, signedFileUrl: true },
+    });
+
+    if (!document || document.reservationId !== reservationId) {
+      throw new NotFoundException('Contrat introuvable pour cette réservation.');
+    }
+
+    const key = document.signedFileUrl ?? document.fileUrl;
+    if (!key) throw new NotFoundException('Contrat sans fichier associé.');
+
+    return { downloadUrl: await this.storage.getSignedUrl(key) };
   }
 
   /**

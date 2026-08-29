@@ -6,6 +6,7 @@ import { ReservationService } from './reservation.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisLockService } from '../../common/redis/redis-lock.service';
 import { LaunchService } from '../launch/launch.service';
+import { StorageService } from '../../common/storage/storage.service';
 import { PaymentService } from '../payment/payment.service';
 import {
   cleanupTestDatabase,
@@ -57,6 +58,7 @@ describe('ReservationService — integration (vraie DB + Redis)', () => {
         { provide: LaunchService, useValue: launchService },
         { provide: getQueueToken('reservation-expiration'), useValue: queue },
         { provide: PaymentService, useValue: paymentService },
+        { provide: StorageService, useValue: { getSignedUrl: jest.fn() } },
       ],
     })
       .overrideProvider('REDIS_CLIENT')

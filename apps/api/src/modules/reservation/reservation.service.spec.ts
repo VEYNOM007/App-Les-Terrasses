@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ReservationService } from './reservation.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisLockService } from '../../common/redis/redis-lock.service';
+import { StorageService } from '../../common/storage/storage.service';
 import { LaunchService } from '../launch/launch.service';
 import { ConflictException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
@@ -43,6 +44,16 @@ const createMockPrisma = () => ({
     findMany: jest.fn(),
     update: jest.fn(),
   },
+  document: {
+    findUnique: jest.fn(),
+  },
+});
+
+const createMockStorage = () => ({
+  putObject: jest.fn(),
+  getObject: jest.fn(),
+  getSignedUrl: jest.fn().mockResolvedValue('https://b2.signed-url.example/file'),
+  deleteObject: jest.fn(),
 });
 
 const createMockRedisLock = () => ({
@@ -74,6 +85,7 @@ describe('ReservationService', () => {
   let launchService: ReturnType<typeof createMockLaunchService>;
   let expirationQueue: ReturnType<typeof createMockExpirationQueue>;
   let paymentService: ReturnType<typeof createMockPaymentService>;
+  let storage: ReturnType<typeof createMockStorage>;
 
   beforeEach(async () => {
     prisma = createMockPrisma();
@@ -81,6 +93,7 @@ describe('ReservationService', () => {
     launchService = createMockLaunchService();
     expirationQueue = createMockExpirationQueue();
     paymentService = createMockPaymentService();
+    storage = createMockStorage();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -90,6 +103,7 @@ describe('ReservationService', () => {
         { provide: LaunchService, useValue: launchService },
         { provide: getQueueToken('reservation-expiration'), useValue: expirationQueue },
         { provide: PaymentService, useValue: paymentService },
+        { provide: StorageService, useValue: storage },
       ],
     }).compile();
 
@@ -526,6 +540,59 @@ describe('ReservationService', () => {
       prisma.reservation.findUnique.mockResolvedValue(null);
 
       await expect(service.adminGetReservation('res-inexistant')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('adminGetDocumentFile', () => {
+    it('devrait renvoyer l\'URL signée du contrat rattaché à la réservation (version contresignée)', async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        id: 'doc-001',
+        reservationId: 'res-001',
+        fileUrl: 'contracts/original.pdf',
+        signedFileUrl: 'contracts/signed.pdf',
+      });
+
+      const result = await service.adminGetDocumentFile('res-001', 'doc-001');
+
+      expect(storage.getSignedUrl).toHaveBeenCalledWith('contracts/signed.pdf');
+      expect(result).toEqual({ downloadUrl: 'https://b2.signed-url.example/file' });
+    });
+
+    it('devrait renvoyer l\'URL de l\'original quand le contrat n\'est pas contresigné', async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        id: 'doc-002',
+        reservationId: 'res-001',
+        fileUrl: 'contracts/original.pdf',
+        signedFileUrl: null,
+      });
+
+      const result = await service.adminGetDocumentFile('res-001', 'doc-002');
+
+      expect(storage.getSignedUrl).toHaveBeenCalledWith('contracts/original.pdf');
+      expect(result).toEqual({ downloadUrl: 'https://b2.signed-url.example/file' });
+    });
+
+    it('devrait rejeter (NotFound) un document rattaché à une AUTRE réservation (isolation)', async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        id: 'doc-003',
+        reservationId: 'res-autre',
+        fileUrl: 'contracts/autre.pdf',
+        signedFileUrl: null,
+      });
+
+      await expect(service.adminGetDocumentFile('res-001', 'doc-003')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(storage.getSignedUrl).not.toHaveBeenCalled();
+    });
+
+    it('devrait rejeter (NotFound) un document inexistant sans générer d\'URL', async () => {
+      prisma.document.findUnique.mockResolvedValue(null);
+
+      await expect(service.adminGetDocumentFile('res-001', 'doc-inexistant')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(storage.getSignedUrl).not.toHaveBeenCalled();
     });
   });
 

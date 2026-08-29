@@ -17,6 +17,29 @@ export interface ContractPdfInput {
 export interface ContractPdfSignature {
   label: string;
   imageUrl: string;
+  /** Date exacte de SA signature (signedAt en base), jamais une date générique. */
+  signedAt: string;
+}
+
+/**
+ * Formate une date en lecture humaine pour un contrat : jour/mois/année et
+ * heure locale (jamais le format ISO brut illisible — défaut historique des
+ * mentions de signature).
+ */
+export function formatSignatureDate(iso: string): string {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} à ${pad(
+    date.getHours(),
+  )}h${pad(date.getMinutes())}`;
+}
+
+/**
+ * Mention affichée sous chaque signature : rôle + la date DE CETTE signature
+ * précise. Deux signataires n'affichent jamais la même date/générique.
+ */
+export function buildSignatureCaption(label: string, signedAt: string): string {
+  return `${label} — signé le ${formatSignatureDate(signedAt)}`;
 }
 
 /** Position/dimension d'une boîte de signature dans la bande dédiée. */
@@ -185,10 +208,15 @@ export class ContractPdfService {
       // placement.height. Plus jamais de coordonnée négative (bug historique
       // de troncature des signatures).
       page.drawImage(image, { x: placement.x, y: placement.y, width: drawWidth, height: drawHeight });
-      page.drawText(signature.label, { x: placement.x, y: layout.labelBaselineY, size: 9, font: regular });
+      page.drawText(buildSignatureCaption(signature.label, signature.signedAt), {
+        x: placement.x,
+        y: layout.labelBaselineY,
+        size: 8,
+        font: regular,
+      });
     }
 
-    page.drawText(`Document signé le ${new Date().toISOString()}`, {
+    page.drawText(`Document contresigné le ${formatSignatureDate(new Date().toISOString())}`, {
       x: MARGIN,
       y: layout.dateBaselineY,
       size: 9,

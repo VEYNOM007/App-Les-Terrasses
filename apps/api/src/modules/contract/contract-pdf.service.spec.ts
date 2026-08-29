@@ -3,6 +3,8 @@ import { PDFDocument } from 'pdf-lib';
 import {
   ContractPdfService,
   signatureBandLayout,
+  formatSignatureDate,
+  buildSignatureCaption,
   MARGIN,
 } from './contract-pdf.service';
 import { StorageService } from '../../common/storage/storage.service';
@@ -68,7 +70,7 @@ describe('ContractPdfService', () => {
     });
 
     const signedKey = await service.sign(originalKey, [
-      { label: 'Propriétaire', imageUrl: signatureKey },
+      { label: 'Propriétaire', imageUrl: signatureKey, signedAt: '2026-08-29T09:00:00.000Z' },
     ]);
 
     expect(signedKey).toMatch(/^contracts\/[0-9a-f-]+\.pdf$/);
@@ -110,8 +112,8 @@ describe('ContractPdfService', () => {
     });
 
     const signedKey = await service.sign(originalKey, [
-      { label: 'Propriétaire', imageUrl: sigA },
-      { label: 'Administration', imageUrl: sigB },
+      { label: 'Propriétaire', imageUrl: sigA, signedAt: '2026-08-29T09:00:00.000Z' },
+      { label: 'Administration', imageUrl: sigB, signedAt: '2026-08-29T14:30:00.000Z' },
     ]);
 
     const signedBody = storage.putObject.mock.calls[1][1];
@@ -159,5 +161,42 @@ describe('signatureBandLayout — géométrie bornée (R6)', () => {
 
   it('rejette un appel sans signataire (défensif)', () => {
     expect(() => signatureBandLayout(PAGE_WIDTH, PAGE_HEIGHT, 0)).toThrow();
+  });
+});
+
+describe('formatSignatureDate (R6)', () => {
+  it('formate en lecture humaine locale, jamais en ISO brut', () => {
+    // 2026-08-29T09:00:00Z — heure locale machine ; on vérifie la forme et la
+    // date, pas l'heure exacte (fuseau machine non fiable en CI).
+    const formatted = formatSignatureDate('2026-08-29T09:00:00.000Z');
+    expect(formatted).toMatch(/^\d{2}\/\d{2}\/\d{4} à \d{2}h\d{2}$/);
+    expect(formatted).toContain('29/08/2026 à ');
+    expect(formatted).not.toContain('T');
+    expect(formatted).not.toContain('Z');
+  });
+
+  it('préserve la date locale précise (après-midi)', () => {
+    const formatted = formatSignatureDate('2026-08-29T14:30:00.000Z');
+    expect(formatted).toMatch(/^\d{2}\/\d{2}\/\d{4} à \d{2}h\d{2}$/);
+    expect(formatted).toContain('29/08/2026 à ');
+  });
+});
+
+describe('buildSignatureCaption — date propre à chaque signataire (R6)', () => {
+  it('affiche la date DE la signature du signataire, pas une date générique commune', () => {
+    const propositaire = buildSignatureCaption('Propriétaire', '2026-08-29T09:00:00.000Z');
+    const administration = buildSignatureCaption('Administration', '2026-08-29T14:30:00.000Z');
+    expect(propositaire).toContain('Propriétaire — signé le 29/08/2026');
+    expect(administration).toContain('Administration — signé le 29/08/2026');
+    // Deux signataires différents → deux mentions distinctes (jamais dupliquées).
+    expect(propositaire).not.toBe(administration);
+    expect(propositaire).not.toContain('Administration');
+    expect(administration).not.toContain('Propriétaire');
+  });
+
+  it('ne produit jamais d’ISO brut dans la mention', () => {
+    const caption = buildSignatureCaption('Propriétaire', '2026-08-29T09:00:00.000Z');
+    expect(caption).not.toMatch(/T\d{2}:/);
+    expect(caption).not.toContain('Z');
   });
 });;

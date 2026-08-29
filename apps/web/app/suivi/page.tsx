@@ -40,6 +40,7 @@ import {
   PortalDocument,
   PaymentScheduleResponse,
 } from '../../lib/api';
+import { isDocumentObsolete } from '../../lib/suivi-document-status';
 
 function formatXOF(value: string | number): string {
   const n = typeof value === 'string' ? Number(value) : value;
@@ -698,6 +699,9 @@ export default function SuiviAcquereur() {
                           <span className="bg-sand/15 text-sand border border-sand/40 px-3 py-1.5 rounded">
                             Lot {unit.block.name} — {unit.type}
                           </span>
+                          <span className="text-paper/50">
+                            Réservée le {formatDate(d.createdAt)} · Annulée le {formatDate(d.updatedAt)}
+                          </span>
                         </div>
                       );
                     })}
@@ -738,16 +742,28 @@ export default function SuiviAcquereur() {
               {documents.map((document) => {
                 const signed = isFullySigned(document);
                 const ownerSigned = hasOwnerSignature(document);
+                const isObsolete = isDocumentObsolete(document);
                 return (
                   <div
                     key={document.id}
-                    className="p-3.5 bg-paper/5 border border-paper/10 rounded flex flex-col md:flex-row md:items-center gap-3"
+                    className={`p-3.5 bg-paper/5 border border-paper/10 rounded flex flex-col md:flex-row md:items-center gap-3 ${
+                      isObsolete ? 'opacity-55' : ''
+                    }`}
                   >
                     <div className="flex-1">
-                      <div className="font-mono text-sm text-paper font-bold">{document.name}</div>
+                      <div className="font-mono text-sm text-paper font-bold flex items-center gap-2">
+                        {document.name}
+                        {isObsolete && (
+                          <span className="bg-laterite/20 text-laterite-light border border-laterite/40 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide">
+                            Obsolète
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-paper/50 font-mono">
                         Créé le {formatDate(document.createdAt)} ·{' '}
-                        {signed ? (
+                        {isObsolete ? (
+                          <span className="text-laterite-light">Réservation annulée — consultable aux archives</span>
+                        ) : signed ? (
                           <span className="text-lagoon-light">Signé</span>
                         ) : ownerSigned ? (
                           <span className="text-sand">Signé propriétaire — en attente de l'administration</span>
@@ -763,7 +779,7 @@ export default function SuiviAcquereur() {
                       >
                         <Download className="w-4 h-4" /> Télécharger
                       </button>
-                      {!signed && !ownerSigned && (
+                      {!signed && !ownerSigned && !isObsolete && (
                         <button
                           onClick={() => setSigningDocumentId(document.id)}
                           className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-3 py-2 rounded transition-all font-semibold"

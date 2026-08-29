@@ -26,6 +26,12 @@ export class PortalService {
     return reservations.map((r) => ({
       reservationId: r.id,
       status: r.status,
+      // Dates brutes exposées au portail : createdAt = date de réservation ;
+      // updatedAt = dernière transition de statut (pour les annulées, la date
+      // d'annulation). Aucune colonne dédiée `cancelledAt` n'existe en base ;
+      // on ne réintroduit pas une donnée fabriquée.
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
       unit: r.unit,
       constructionProgress: r.unit.block.progressPercent,
       constructionPhase: r.unit.block.constructionPhase,
@@ -34,15 +40,27 @@ export class PortalService {
   }
 
   async listDocuments(userId: string) {
-    return this.prisma.document.findMany({
+    const documents = await this.prisma.document.findMany({
       where: {
         OR: [
           { reservation: { userId } },
           { artisanAssignment: { artisan: { userId } } },
         ],
       },
+      include: {
+        reservation: { select: { id: true, status: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
+
+    return documents.map(({ reservation, ...document }) => ({
+      ...document,
+      // exposition de la réservation liée (id + statut) pour que le portail
+      // puisse marquer « obsolète » un contrat d'une réservation annulée ;
+      // null pour les documents sans réservation (pièces artisan).
+      reservationId: reservation?.id ?? null,
+      reservationStatus: reservation?.status ?? null,
+    }));
   }
 
   /**

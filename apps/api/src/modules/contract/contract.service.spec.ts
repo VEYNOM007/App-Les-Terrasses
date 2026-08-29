@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { ContractSignerType, DocumentType, Prisma, UserRole } from '@prisma/client';
+import { ContractSignerType, DocumentType, Prisma, UserRole, ReservationStatus } from '@prisma/client';
 import { ContractService } from './contract.service';
 import { ContractPdfService } from './contract-pdf.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -383,6 +383,22 @@ describe('ContractService', () => {
       await expect(
         service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("refuse de signer un contrat lie a une reservation annulee (obsolete)", async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        id: 'document-1',
+        fileUrl: 'contracts/1.pdf',
+        reservation: { userId: 'user-1', status: ReservationStatus.ANNULEE },
+        artisanAssignment: null,
+        signatures: [],
+      });
+
+      await expect(
+        service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.contractSignature.create).not.toHaveBeenCalled();
+      expect(storage.putObject).not.toHaveBeenCalled();
     });
 
     it('signe en PROPRIETAIRE pour l\'acheteur propriétaire (jamais ADMIN côté client)', async () => {

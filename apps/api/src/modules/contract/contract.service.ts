@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Prisma, ContractSignerType, DocumentType, UserRole } from '@prisma/client';
+import { Prisma, ContractSignerType, DocumentType, UserRole, ReservationStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { ContractPdfService } from './contract-pdf.service';
@@ -254,17 +254,21 @@ export class ContractService {
       throw new BadRequestException('Signature invalide : PNG requis.');
     }
 
-    const signatureImageUrl = await this.persistSignature(signatureBuffer);
-
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
       include: {
-        reservation: { select: { userId: true } },
+        reservation: { select: { userId: true, status: true } },
         artisanAssignment: { include: { artisan: { select: { userId: true } } } },
         signatures: { select: { signerType: true, signatureImageUrl: true } },
       },
     });
     if (!document) throw new NotFoundException('Document introuvable.');
+
+    // Un contrat lié à une réservation annulée est devenu obsolète : plus
+    // aucune signature ne peut y être apposée (ni propriétaire ni admin).
+    if (document.reservation?.status === ReservationStatus.ANNULEE) {
+      throw new ConflictException('Impossible de signer un contrat d\'une réservation annulée.');
+    }
 
     const ownerId = document.reservation?.userId ?? document.artisanAssignment?.artisan.userId ?? null;
     if (!ownerId) {
@@ -280,6 +284,11 @@ export class ContractService {
     } else if (ownerId !== userId) {
       throw new ForbiddenException('Seul le propriétaire du contrat peut le signer.');
     }
+
+    // L'image n'est déposée sur B2 qu'après validation de toutes les gardes
+    // (document existant, réservation non annulée, appartenance, ordre de
+    // signature) : aucun objet orphelin n'est créé pour une signature rejetée.
+    const signatureImageUrl = await this.persistSignature(signatureBuffer);
 
     try {
       await this.prisma.contractSignature.create({

@@ -524,15 +524,15 @@ describe('ContractService', () => {
         })
         .mockResolvedValue({ id: 'document-1', signatures: [] });
       prisma.contractSignature.findMany.mockResolvedValue([
-        { signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: 'signatures/a.png' },
-        { signerType: ContractSignerType.ADMIN, signatureImageUrl: 'signatures/b.png' },
+        { signerType: ContractSignerType.PROPRIETAIRE, signatureImageUrl: 'signatures/a.png', signedAt: new Date('2026-08-29T09:00:00.000Z') },
+        { signerType: ContractSignerType.ADMIN, signatureImageUrl: 'signatures/b.png', signedAt: new Date('2026-08-29T14:30:00.000Z') },
       ]);
 
       await service.signContract('document-1', 'admin-1', UserRole.ADMIN, VALID_PNG);
 
       expect(pdf.sign).toHaveBeenCalledWith('contracts/1.pdf', [
-        { label: 'Propriétaire', imageUrl: 'signatures/a.png' },
-        { label: 'Administration', imageUrl: 'signatures/b.png' },
+        { label: 'Propriétaire', imageUrl: 'signatures/a.png', signedAt: '2026-08-29T09:00:00.000Z' },
+        { label: 'Administration', imageUrl: 'signatures/b.png', signedAt: '2026-08-29T14:30:00.000Z' },
       ]);
       expect(prisma.document.update).toHaveBeenCalledWith({
         where: { id: 'document-1' },

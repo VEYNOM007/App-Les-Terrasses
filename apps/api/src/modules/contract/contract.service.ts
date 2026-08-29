@@ -310,7 +310,7 @@ export class ContractService {
 
     const signatures = await this.prisma.contractSignature.findMany({
       where: { documentId },
-      select: { signerType: true, signatureImageUrl: true },
+      select: { signerType: true, signatureImageUrl: true, signedAt: true },
     });
 
     if (
@@ -324,6 +324,7 @@ export class ContractService {
         .map((s) => ({
           label: s.signerType === ContractSignerType.PROPRIETAIRE ? 'Propriétaire' : 'Administration',
           imageUrl: s.signatureImageUrl,
+          signedAt: s.signedAt.toISOString(),
         })));
 
       await this.prisma.document.update({

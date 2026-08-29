@@ -11,12 +11,15 @@ import {
   FileText,
   RefreshCw,
   XCircle,
+  PenLine,
 } from 'lucide-react';
 import { useAuth } from '../../../components/AuthProvider';
+import SignaturePad from '../../../components/SignaturePad';
 import {
   fetchAdminReservations,
   regenerateBuyerContract,
   updateAdminReservationStatus,
+  signContract,
   AdminReservation,
 } from '../../../lib/api';
 
@@ -94,6 +97,13 @@ export default function AdminReservationsPage() {
   const [pendingCancel, setPendingCancel] = useState<AdminReservation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState('');
+
+  // Contre-signature admin d'un contrat (Palier 1 : l'acheteur a signé, il
+  // reste la signature du promoteur). `pendingSign` porte la réservation dont
+  // le contrat est en cours de contre-signature (null = SignaturePad fermé).
+  const [pendingSign, setPendingSign] = useState<AdminReservation | null>(null);
+  const [signing, setSigning] = useState(false);
+  const [signError, setSignError] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -204,8 +214,31 @@ export default function AdminReservationsPage() {
     }
   }
 
+  // Ouvre le SignaturePad pour contre-signer le contrat d'une réservation
+  // (Palier 1 : l'acheteur a déjà signé, il reste la signature admin).
+  function requestSign(reservation: AdminReservation) {
+    if (!reservation.contract) return;
+    setSignError('');
+    setPendingSign(reservation);
+  }
+
+  async function runSign(signatureBlob: Blob) {
+    if (!pendingSign?.contract) return;
+    setSigning(true);
+    setSignError('');
+    try {
+      await signContract(pendingSign.contract.id, signatureBlob);
+      setPendingSign(null);
+      await load(view);
+    } catch (err) {
+      setSignError(err instanceof Error ? err.message : 'Impossible de contre-signer le contrat.');
+    } finally {
+      setSigning(false);
+    }
+  }
+
   const isActing = actingId !== null;
-  const working = acting || cancelling || isActing;
+  const working = acting || cancelling || isActing || signing;
 
   if (!user) {
     return (
@@ -396,10 +429,21 @@ export default function AdminReservationsPage() {
                               <td className="px-5 py-4 whitespace-nowrap">
                                 <div className="flex items-center gap-3">
                                   {palier === 1 ? (
-                                    <span className="inline-flex items-center gap-1.5 bg-lagoon/15 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded whitespace-nowrap">
-                                      <FileText className="w-3 h-3" />
-                                      Signé par l'acheteur
-                                    </span>
+                                    <>
+                                      <span className="inline-flex items-center gap-1.5 bg-lagoon/15 text-lagoon-light border border-lagoon/40 px-2.5 py-1 rounded whitespace-nowrap">
+                                        <FileText className="w-3 h-3" />
+                                        Signé par l'acheteur
+                                      </span>
+                                      <button
+                                        type="button"
+                                        disabled={working}
+                                        onClick={() => requestSign(r)}
+                                        className="inline-flex items-center gap-1.5 bg-lagoon-light/15 border border-lagoon-light/50 text-lagoon-light hover:bg-lagoon-light/25 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded transition-all whitespace-nowrap"
+                                      >
+                                        <PenLine className="w-3.5 h-3.5" />
+                                        Contre-signer
+                                      </button>
+                                    </>
                                   ) : (
                                     <>
                                       <span className="text-paper/50 whitespace-nowrap">
@@ -564,6 +608,44 @@ export default function AdminReservationsPage() {
                   : 'Annuler la réservation'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {pendingSign && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm"
+        >
+          <div className="bg-ink-card border border-lagoon/40 rounded-md max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-serif text-lg font-semibold text-paper">
+                  Contre-signer le contrat
+                </h3>
+                <p className="text-xs text-paper/60 font-mono mt-1">
+                  {pendingSign.user.fullName} — {pendingSign.unit.type}, Étage{' '}
+                  {pendingSign.unit.floor}
+                </p>
+                <p className="text-xs text-paper/50 font-mono mt-1">
+                  L'acheteur a déjà signé ; votre signature de promoteur finalisera
+                  le contrat et sera embarquée sur le PDF.
+                </p>
+              </div>
+            </div>
+            {signError && (
+              <p className="text-xs font-mono text-laterite-light bg-laterite/10 border border-laterite/30 rounded px-3 py-2">
+                {signError}
+              </p>
+            )}
+            <SignaturePad
+              onConfirm={(blob) => void runSign(blob)}
+              onCancel={() => {
+                setPendingSign(null);
+                setSignError('');
+              }}
+            />
           </div>
         </div>
       )}

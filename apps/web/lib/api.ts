@@ -731,13 +731,6 @@ export function fetchPortalDashboard(): Promise<PortalDashboard[]> {
 // Documents & contrats
 // ────────────────────────────────────────────────────────────
 
-export interface ContractSignature {
-  id: string;
-  signerType: 'PROPRIETAIRE' | 'ADMIN';
-  signatureImageUrl: string;
-  signedAt: string;
-}
-
 export interface PortalDocument {
   id: string;
   type: string;
@@ -747,7 +740,10 @@ export interface PortalDocument {
   createdAt: string;
   reservationId: string | null;
   reservationStatus: string | null;
-  signatures?: ContractSignature[];
+  // État des signatures agrégé côté serveur (portal /listDocuments) : permet
+  // à /suivi d'afficher le bon libellé (en attente / Palier 1 / signé).
+  buyerSigned: boolean;
+  adminSigned: boolean;
 }
 
 export function fetchPortalDocuments(): Promise<PortalDocument[]> {

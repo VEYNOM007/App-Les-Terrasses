@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ContractSignerType } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
 
@@ -49,18 +50,31 @@ export class PortalService {
       },
       include: {
         reservation: { select: { id: true, status: true } },
+        signatures: { select: { signerType: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return documents.map(({ reservation, ...document }) => ({
-      ...document,
-      // exposition de la réservation liée (id + statut) pour que le portail
-      // puisse marquer « obsolète » un contrat d'une réservation annulée ;
-      // null pour les documents sans réservation (pièces artisan).
-      reservationId: reservation?.id ?? null,
-      reservationStatus: reservation?.status ?? null,
-    }));
+    return documents.map(({ reservation, signatures, ...document }) => {
+      const buyerSigned = signatures.some(
+        (s) => s.signerType === ContractSignerType.PROPRIETAIRE,
+      );
+      const adminSigned = signatures.some(
+        (s) => s.signerType === ContractSignerType.ADMIN,
+      );
+      return {
+        ...document,
+        // exposition de la réservation liée (id + statut) pour que le portail
+        // puisse marquer « obsolète » un contrat d'une réservation annulée ;
+        // null pour les documents sans réservation (pièces artisan). Les
+        // signatures sont agrégées en booléens pour que /suivi affiche le bon
+        // libellé (Palier 1 : acheteur signé, promoteur en attente ; signé).
+        reservationId: reservation?.id ?? null,
+        reservationStatus: reservation?.status ?? null,
+        buyerSigned,
+        adminSigned,
+      };
+    });
   }
 
   /**

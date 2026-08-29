@@ -40,7 +40,10 @@ import {
   PortalDocument,
   PaymentScheduleResponse,
 } from '../../lib/api';
-import { isDocumentObsolete } from '../../lib/suivi-document-status';
+import {
+  isDocumentObsolete,
+  suiviDocumentStatusLabel,
+} from '../../lib/suivi-document-status';
 
 function formatXOF(value: string | number): string {
   const n = typeof value === 'string' ? Number(value) : value;
@@ -254,12 +257,10 @@ export default function SuiviAcquereur() {
     }
   };
 
-  const hasOwnerSignature = (document: PortalDocument) =>
-    document.signatures?.some((s) => s.signerType === 'PROPRIETAIRE') ?? false;
+  const hasOwnerSignature = (document: PortalDocument) => document.buyerSigned;
 
   const isFullySigned = (document: PortalDocument) =>
-    document.signatures?.some((s) => s.signerType === 'PROPRIETAIRE') === true &&
-    document.signatures?.some((s) => s.signerType === 'ADMIN') === true;
+    document.buyerSigned && document.adminSigned;
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -743,6 +744,13 @@ export default function SuiviAcquereur() {
                 const signed = isFullySigned(document);
                 const ownerSigned = hasOwnerSignature(document);
                 const isObsolete = isDocumentObsolete(document);
+                const statusLabel = suiviDocumentStatusLabel(document);
+                const statusToneClass: Record<string, string> = {
+                  inherit: 'text-paper/50',
+                  sand: 'text-sand',
+                  lagoon: 'text-lagoon-light',
+                  laterite: 'text-laterite-light',
+                };
                 return (
                   <div
                     key={document.id}
@@ -761,15 +769,7 @@ export default function SuiviAcquereur() {
                       </div>
                       <div className="text-xs text-paper/50 font-mono">
                         Créé le {formatDate(document.createdAt)} ·{' '}
-                        {isObsolete ? (
-                          <span className="text-laterite-light">Réservation annulée — consultable aux archives</span>
-                        ) : signed ? (
-                          <span className="text-lagoon-light">Signé</span>
-                        ) : ownerSigned ? (
-                          <span className="text-sand">Signé propriétaire — en attente de l'administration</span>
-                        ) : (
-                          <span>En attente de signature</span>
-                        )}
+                        <span className={statusToneClass[statusLabel.tone]}>{statusLabel.text}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

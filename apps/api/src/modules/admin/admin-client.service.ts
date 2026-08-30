@@ -22,6 +22,7 @@ export class AdminClientService {
         country: true,
         address: true,
         role: true,
+        kycStatus: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -49,6 +50,7 @@ export class AdminClientService {
         country: true,
         address: true,
         role: true,
+        kycStatus: true,
         createdAt: true,
       },
     });

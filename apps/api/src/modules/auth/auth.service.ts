@@ -322,9 +322,11 @@ export class AuthService {
    * `kycStatus = EN_ATTENTE`. Le fichier (buffer en mémoire, validé en
    * amont par multer : fileFilter + limits) est déposé sur B2 sous une
    * clé interne `kyc/<uuid>.<ext>` ; la base ne référence que cette clé —
-   * jamais une URL B2, jamais un chemin disque.
+   * jamais une URL B2, jamais un chemin disque. Le nom du document est
+   * généré côté serveur : le `originalname` client peut contenir des
+   * données personnelles (PII) et n'est jamais stocké.
    */
-  async uploadKyc(userId: string, file: { buffer: Buffer; mimetype: string; originalname: string }) {
+  async uploadKyc(userId: string, file: { buffer: Buffer; mimetype: string }) {
     const ext = KYC_EXT_BY_MIME[file.mimetype] ?? '.bin';
     const key = `kyc/${crypto.randomUUID()}${ext}`;
     await this.storage.putObject(key, file.buffer, file.mimetype);
@@ -332,7 +334,7 @@ export class AuthService {
     await this.prisma.document.create({
       data: {
         type: DocumentType.PIECE_IDENTITE,
-        name: file.originalname,
+        name: `Pièce d'identité — ${new Date().toLocaleDateString('fr-FR')}`,
         fileUrl: key,
         kycOwnerId: userId,
       },

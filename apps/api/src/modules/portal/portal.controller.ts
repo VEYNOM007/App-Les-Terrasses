@@ -19,6 +19,11 @@ export class PortalController {
     return this.portalService.listDocuments(user.id);
   }
 
+  @Get('kyc')
+  getKyc(@CurrentUser() user: AuthUser) {
+    return this.portalService.getKyc(user.id);
+  }
+
   /**
    * Renvoie une URL signée (B2) que le navigateur télécharge directement.
    * L'appartenance du document est vérifiée côté serveur (getDocumentFile).

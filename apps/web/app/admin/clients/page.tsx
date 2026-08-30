@@ -11,13 +11,27 @@ import {
   MapPin,
 } from 'lucide-react';
 import { useAuth } from '../../../components/AuthProvider';
-import { fetchAdminUsers, updateUserAddress, AdminUser } from '../../../lib/api';
+import { fetchAdminUsers, updateUserAddress, AdminUser, KycStatus } from '../../../lib/api';
 
 const ROLE_BADGES: Record<string, string> = {
   ACHETEUR: 'bg-lagoon/20 text-lagoon-light border-lagoon/40',
   COMMERCIAL: 'bg-sand/20 text-sand border-sand/40',
   ADMIN: 'bg-laterite/20 text-laterite-light border-laterite/40',
   ARTISAN: 'bg-paper/10 text-paper/70 border-paper/30',
+};
+
+const KYC_BADGES: Record<KycStatus, string> = {
+  NON_SOUMIS: 'bg-paper/5 text-paper/50 border-paper/20',
+  EN_ATTENTE: 'bg-sand/15 text-sand border-sand/40',
+  VALIDE: 'bg-lagoon/15 text-lagoon-light border-lagoon/40',
+  REJETE: 'bg-laterite/15 text-laterite-light border-laterite/40',
+};
+
+const KYC_LABELS: Record<KycStatus, string> = {
+  NON_SOUMIS: 'Non soumise',
+  EN_ATTENTE: 'En attente',
+  VALIDE: 'Validée',
+  REJETE: 'Rejetée',
 };
 
 function formatDate(iso: string): string {
@@ -167,6 +181,7 @@ export default function AdminClientsPage() {
                       <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Pays</th>
                       <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Adresse</th>
                       <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Rôle</th>
+                      <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Identité</th>
                       <th className="text-left px-5 py-3 font-semibold whitespace-nowrap">Inscrit le</th>
                     </tr>
                   </thead>
@@ -224,6 +239,11 @@ export default function AdminClientsPage() {
                       <td className="px-5 py-4">
                         <span className={`inline-block border px-2.5 py-1 rounded text-[11px] ${ROLE_BADGES[u.role] ?? 'bg-paper/10 text-paper/60 border-paper/30'}`}>
                           {u.role}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span className={`inline-block border px-2.5 py-1 rounded text-[11px] ${KYC_BADGES[u.kycStatus]}`}>
+                          {KYC_LABELS[u.kycStatus]}
                         </span>
                       </td>
                       <td className="px-5 py-4 text-paper/50">{formatDate(u.createdAt)}</td>

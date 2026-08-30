@@ -24,6 +24,8 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  UserCheck,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import SignaturePad from '../../components/SignaturePad';
@@ -36,9 +38,14 @@ import {
   payInstallment,
   cancelReservation,
   changePassword,
+  fetchPortalKyc,
+  uploadKyc,
   PortalDashboard,
   PortalDocument,
   PaymentScheduleResponse,
+  PortalKyc,
+  KycStatus,
+  KycDocumentType,
 } from '../../lib/api';
 import {
   isContractFinalized,
@@ -84,6 +91,31 @@ function formatDate(iso: string): string {
     : d.toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function kycStatusMeta(status: KycStatus): { label: string; tone: string; badge: string } {
+  switch (status) {
+    case 'NON_SOUMIS':
+      return {
+        label: 'Identité non soumise',
+        tone: 'text-paper/50',
+        badge: 'bg-paper/5 border-paper/20',
+      };
+    case 'EN_ATTENTE':
+      return { label: 'Vérification en cours', tone: 'text-sand', badge: 'bg-sand/15 border-sand/40' };
+    case 'VALIDE':
+      return {
+        label: 'Identité vérifiée',
+        tone: 'text-lagoon-light',
+        badge: 'bg-lagoon/15 border-lagoon/40',
+      };
+    case 'REJETE':
+      return {
+        label: 'Pièce rejetée',
+        tone: 'text-laterite-light',
+        badge: 'bg-laterite/15 border-laterite/40',
+      };
+  }
+}
+
 export default function SuiviAcquereur() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
@@ -95,6 +127,14 @@ export default function SuiviAcquereur() {
   const [documentsError, setDocumentsError] = useState('');
   const [signingDocumentId, setSigningDocumentId] = useState<string | null>(null);
   const [signingError, setSigningError] = useState('');
+
+  const [kyc, setKyc] = useState<PortalKyc | null>(null);
+  const [kycLoading, setKycLoading] = useState(true);
+  const [kycError, setKycError] = useState('');
+  const [kycType, setKycType] = useState<KycDocumentType>('cni');
+  const [kycUploading, setKycUploading] = useState(false);
+  const [kycUploadError, setKycUploadError] = useState('');
+  const [kycUploadSuccess, setKycUploadSuccess] = useState('');
 
   const [schedulesMap, setSchedulesMap] = useState<Record<string, PaymentScheduleResponse>>({});
   const [scheduleLoadingMap, setScheduleLoadingMap] = useState<Record<string, boolean>>({});
@@ -236,6 +276,23 @@ export default function SuiviAcquereur() {
     if (user) void loadDocuments();
   }, [user, loadDocuments]);
 
+  const loadKyc = useCallback(async () => {
+    setKycLoading(true);
+    setKycError('');
+    try {
+      const data = await fetchPortalKyc();
+      setKyc(data);
+    } catch (err) {
+      setKycError(err instanceof Error ? err.message : 'Impossible de charger votre dossier d\'identité.');
+    } finally {
+      setKycLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) void loadKyc();
+  }, [user, loadKyc]);
+
   const handleDownload = async (documentId: string) => {
     try {
       const { downloadUrl } = await downloadDocument(documentId);
@@ -255,6 +312,39 @@ export default function SuiviAcquereur() {
       await loadDocuments();
     } catch (err) {
       setSigningError(err instanceof Error ? err.message : 'Signature impossible pour le moment.');
+    }
+  };
+
+  const handleViewKycPiece = async (documentId: string) => {
+    setKycUploadError('');
+    try {
+      const { downloadUrl } = await downloadDocument(documentId);
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    } catch {
+      setKycUploadError('Aperçu impossible pour le moment.');
+    }
+  };
+
+  const handleKycUpload = async (file: File) => {
+    setKycUploadError('');
+    setKycUploadSuccess('');
+    if (!['image/png', 'image/jpeg', 'application/pdf'].includes(file.type)) {
+      setKycUploadError('Formats acceptés : PNG, JPG ou PDF.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setKycUploadError('La pièce ne doit pas dépasser 5 Mo.');
+      return;
+    }
+    setKycUploading(true);
+    try {
+      await uploadKyc(file, kycType);
+      setKycUploadSuccess('Pièce transmise — elle est en cours de vérification.');
+      await loadKyc();
+    } catch (err) {
+      setKycUploadError(err instanceof Error ? err.message : 'Transmission impossible.');
+    } finally {
+      setKycUploading(false);
     }
   };
 
@@ -714,6 +804,133 @@ export default function SuiviAcquereur() {
           </>
         )}
 
+        {/* Vérification d'identité (KYC) */}
+        <div className="bg-ink-card border border-paper/20 rounded-md p-6">
+          <h3 className="font-serif text-xl font-semibold text-paper mb-4 flex items-center gap-2">
+            <UserCheck className="w-5 h-5 text-lagoon-light" /> Vérification d'identité
+          </h3>
+
+          {kycLoading ? (
+            <div className="flex items-center gap-3 font-mono text-xs text-paper/60 py-6">
+              <Loader2 className="w-4 h-4 animate-spin text-laterite-light" /> Chargement de votre
+              dossier d'identité…
+            </div>
+          ) : kycError ? (
+            <div className="flex items-center gap-3 text-xs font-mono text-laterite-light">
+              <AlertCircle className="w-4 h-4 shrink-0" /> {kycError}
+            </div>
+          ) : kyc ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={`inline-flex items-center gap-2 border px-3 py-1.5 rounded font-mono text-xs ${kycStatusMeta(kyc.kycStatus).tone} ${kycStatusMeta(kyc.kycStatus).badge}`}
+                >
+                  {kyc.kycStatus === 'VALIDE' ? (
+                    <CheckCircle2 className="w-4 h-4" />
+                  ) : kyc.kycStatus === 'REJETE' ? (
+                    <XCircle className="w-4 h-4" />
+                  ) : (
+                    <Loader2 className="w-4 h-4" />
+                  )}
+                  {kycStatusMeta(kyc.kycStatus).label}
+                </span>
+                {kyc.latestDocument && (
+                  <button
+                    onClick={() => {
+                      if (kyc.latestDocument) void handleViewKycPiece(kyc.latestDocument.id);
+                    }}
+                    className="inline-flex items-center gap-1.5 border border-paper/30 hover:border-sand text-paper font-mono text-xs px-3 py-1.5 rounded transition-all"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Voir ma pièce
+                  </button>
+                )}
+              </div>
+
+              {kyc.kycStatus === 'VALIDE' && (
+                <p className="text-xs text-lagoon-light font-mono">
+                  Vous pouvez signer vos contrats de réservation.
+                </p>
+              )}
+
+              {kyc.kycStatus === 'EN_ATTENTE' && (
+                <p className="text-xs text-sand font-mono">
+                  Votre pièce est en cours de vérification par l'administration. La signature de vos
+                  contrats sera possible dès la validation.
+                </p>
+              )}
+
+              {kyc.kycStatus === 'REJETE' && (
+                <div className="bg-laterite/15 border border-laterite/40 rounded p-3">
+                  <p className="text-xs font-mono text-paper">
+                    <span className="text-laterite-light font-bold">Motif du rejet : </span>
+                    {kyc.latestDocument?.rejectedReason ?? 'Pièce non conforme.'}
+                  </p>
+                  <p className="text-xs text-paper/60 font-mono mt-1">
+                    Ajoutez une pièce valide et enregistrez de nouveau — elle remplacera la pièce
+                    précédente (supprimée automatiquement après 15 jours).
+                  </p>
+                </div>
+              )}
+
+              {kyc.kycStatus === 'NON_SOUMIS' && (
+                <p className="text-xs text-paper/60 font-mono">
+                  Pour pouvoir signer vos contrats, envoyez une pièce d'identité en cours de
+                  validité. Elle sera vérifiée par notre administration.
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <select
+                  value={kycType}
+                  onChange={(e) => setKycType(e.target.value as KycDocumentType)}
+                  disabled={kycUploading || kyc.kycStatus === 'EN_ATTENTE'}
+                  className="bg-ink border border-paper/25 rounded px-3 py-2 text-sm font-mono text-paper focus:border-laterite-light focus:outline-none disabled:opacity-50"
+                >
+                  <option value="cni">Carte d'identité nationale</option>
+                  <option value="passeport">Passeport</option>
+                  <option value="carte_sejour">Carte de séjour</option>
+                </select>
+                <label
+                  className={`inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-4 py-2 rounded transition-all font-semibold cursor-pointer ${
+                    kycUploading || kyc.kycStatus === 'EN_ATTENTE' ? 'opacity-50 pointer-events-none' : ''
+                  }`}
+                >
+                  {kycUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  {kycUploading ? 'Transmission en cours…' : 'Envoyer ma pièce'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,application/pdf"
+                    className="hidden"
+                    disabled={kycUploading || kyc.kycStatus === 'EN_ATTENTE'}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) void handleKycUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              {kycUploadError && (
+                <div className="bg-laterite/15 border border-laterite/40 rounded p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-laterite-light shrink-0" />
+                  <p className="text-xs text-paper font-mono">{kycUploadError}</p>
+                </div>
+              )}
+              {kycUploadSuccess && (
+                <div className="bg-lagoon/15 border border-lagoon/40 rounded p-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-lagoon-light shrink-0" />
+                  <p className="text-xs text-paper font-mono">{kycUploadSuccess}</p>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
         <div className="bg-ink-card border border-paper/20 rounded-md p-6">
           <h3 className="font-serif text-xl font-semibold text-paper mb-4 flex items-center gap-2">
             <FileText className="w-5 h-5 text-sand" /> Mes Documents & Contrats
@@ -792,12 +1009,21 @@ export default function SuiviAcquereur() {
                         {finalized ? 'Télécharger le contrat finalisé' : 'Télécharger'}
                       </button>
                       {!signed && !ownerSigned && !isObsolete && (
-                        <button
-                          onClick={() => setSigningDocumentId(document.id)}
-                          className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-3 py-2 rounded transition-all font-semibold"
-                        >
-                          <PenLine className="w-4 h-4" /> Signer
-                        </button>
+                        document.reservationId && kyc && kyc.kycStatus !== 'VALIDE' ? (
+                          <span
+                            title="Votre vérification d'identité doit être validée avant de pouvoir signer."
+                            className="inline-flex items-center gap-2 text-paper/40 border border-paper/20 font-mono text-xs px-3 py-2 rounded cursor-not-allowed"
+                          >
+                            <PenLine className="w-4 h-4" /> Identité à vérifier
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setSigningDocumentId(document.id)}
+                            className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-3 py-2 rounded transition-all font-semibold"
+                          >
+                            <PenLine className="w-4 h-4" /> Signer
+                          </button>
+                        )
                       )}
                     </div>
                   </div>

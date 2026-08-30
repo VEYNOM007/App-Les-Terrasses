@@ -14,6 +14,9 @@ import { StorageService } from '../../common/storage/storage.service';
  */
 
 const createMockPrisma = () => ({
+  user: {
+    findUnique: jest.fn(),
+  },
   reservation: {
     findMany: jest.fn(),
   },
@@ -253,6 +256,77 @@ describe('PortalService', () => {
         adminSigned: false,
       });
       expect(result[2]).not.toHaveProperty('reservation');
+    });
+  });
+
+  describe('getKyc', () => {
+    it('devrait exposer le statut KYC et la dernière pièce avec son motif de rejet, sans clé B2', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-001',
+        kycStatus: 'REJETE',
+        kycDocuments: [
+          {
+            id: 'doc-kyc-1',
+            name: 'Pièce d\'identité — 12/08/2026',
+            fileUrl: 'kyc/secret-key.pdf',
+            createdAt: new Date('2026-08-12T08:00:00.000Z'),
+            rejectedAt: new Date('2026-08-13T10:00:00.000Z'),
+            rejectedReason: 'Pièce illisible — veuillez soumettre une copie nette.',
+          },
+        ],
+      });
+
+      const result = await service.getKyc('user-001');
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'user-001' },
+        select: {
+          id: true,
+          kycStatus: true,
+          kycDocuments: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              name: true,
+              createdAt: true,
+              rejectedAt: true,
+              rejectedReason: true,
+            },
+          },
+        },
+      });
+      expect(result).toEqual({
+        kycStatus: 'REJETE',
+        latestDocument: {
+          id: 'doc-kyc-1',
+          name: 'Pièce d\'identité — 12/08/2026',
+          createdAt: new Date('2026-08-12T08:00:00.000Z'),
+          rejectedAt: new Date('2026-08-13T10:00:00.000Z'),
+          rejectedReason: 'Pièce illisible — veuillez soumettre une copie nette.',
+        },
+      });
+      // La clé de fichier B2 ne doit jamais transiter vers le portail.
+      expect(JSON.stringify(result)).not.toContain('fileUrl');
+      expect(JSON.stringify(result)).not.toContain('secret-key');
+    });
+
+    it('devrait renvoyer latestDocument null pour un compte sans pièce soumise', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-002',
+        kycStatus: 'NON_SOUMIS',
+        kycDocuments: [],
+      });
+
+      const result = await service.getKyc('user-002');
+
+      expect(result).toEqual({ kycStatus: 'NON_SOUMIS', latestDocument: null });
+    });
+
+    it('devrait renvoyer 404 si le compte n\'existe pas', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.getKyc('user-introuvable')).rejects.toThrow(NotFoundException);
     });
   });
 });

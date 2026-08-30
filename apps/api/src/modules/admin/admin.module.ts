@@ -4,19 +4,22 @@ import { AdminController } from './admin.controller';
 import { AdminArtisanController } from './admin-artisan.controller';
 import { AdminReservationController } from './admin-reservation.controller';
 import { AdminClientController } from './admin-client.controller';
+import { AdminKycController } from './admin-kyc.controller';
 import { AdminClientService } from './admin-client.service';
 import { ArtisanModule } from '../artisan/artisan.module';
 import { ReservationModule } from '../reservation/reservation.module';
 import { PaymentModule } from '../payment/payment.module';
+import { KycModule } from '../kyc/kyc.module';
 
 @Module({
-  imports: [ArtisanModule, ReservationModule, PaymentModule],
+  imports: [ArtisanModule, ReservationModule, PaymentModule, KycModule],
   providers: [AdminService, AdminClientService],
   controllers: [
     AdminController,
     AdminArtisanController,
     AdminReservationController,
     AdminClientController,
+    AdminKycController,
   ],
 })
 export class AdminModule {}

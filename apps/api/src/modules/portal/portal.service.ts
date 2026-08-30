@@ -107,4 +107,41 @@ export class PortalService {
 
     return { downloadUrl: await this.storage.getSignedUrl(key) };
   }
+
+  /**
+   * Dossier KYC de l'acheteur courant : son statut de vérification et la
+   * dernière pièce soumise (avec motif de rejet, pour la resoumission).
+   * N'expose jamais la clé de fichier B2 — la pièce se consulte via
+   * GET /portal/documents/:id/download (URL signée).
+   */
+  async getKyc(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        kycStatus: true,
+        kycDocuments: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            name: true,
+            createdAt: true,
+            rejectedAt: true,
+            rejectedReason: true,
+          },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('Utilisateur introuvable.');
+
+    const latest = user.kycDocuments[0] ?? null;
+    return {
+      kycStatus: user.kycStatus,
+      latestDocument: latest
+        ? { id: latest.id, name: latest.name, createdAt: latest.createdAt, rejectedAt: latest.rejectedAt, rejectedReason: latest.rejectedReason }
+        : null,
+    };
+  }
 }

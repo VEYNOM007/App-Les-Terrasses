@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Prisma, ContractSignerType, DocumentType, UserRole, ReservationStatus } from '@prisma/client';
+import { Prisma, ContractSignerType, DocumentType, UserRole, ReservationStatus, KycStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { ContractPdfService } from './contract-pdf.service';
@@ -283,6 +283,24 @@ export class ContractService {
       }
     } else if (ownerId !== userId) {
       throw new ForbiddenException('Seul le propriétaire du contrat peut le signer.');
+    }
+
+    // GATE KYC (décision produit) : l'acheteur ne peut signer son contrat de
+    // réservation que si sa vérification d'identité a été VALIDÉE par
+    // l'administration. Ne concerne que les contrats de réservation (jamais
+    // les contrats d'artisan) et uniquement le signataire PROPRIETAIRE.
+    // Fail-closed : user introuvable = non validé. Placé AVANT l'upload B2 :
+    // aucune signature ne part vers le stockage pour un achat non vérifié.
+    if (signerType === ContractSignerType.PROPRIETAIRE && document.reservationId) {
+      const owner = await this.prisma.user.findUnique({
+        where: { id: ownerId },
+        select: { kycStatus: true },
+      });
+      if (!owner || owner.kycStatus !== KycStatus.VALIDE) {
+        throw new ConflictException(
+          'Votre vérification d\'identité doit être validée avant de pouvoir signer le contrat.',
+        );
+      }
     }
 
     // L'image n'est déposée sur B2 qu'après validation de toutes les gardes

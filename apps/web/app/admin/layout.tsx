@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Loader2, ShieldAlert, LayoutGrid, CalendarClock, Users } from 'lucide-react';
+import { Loader2, ShieldAlert, LayoutGrid, CalendarClock, Users, Stamp } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import { useAuth } from '../../components/AuthProvider';
@@ -11,6 +11,7 @@ const ADMIN_NAV_ITEMS = [
   { href: '/admin/catalogue', label: 'Catalogue', icon: LayoutGrid },
   { href: '/admin/reservations', label: 'Réservations', icon: CalendarClock },
   { href: '/admin/clients', label: 'Comptes', icon: Users },
+  { href: '/admin/kyc', label: 'Identités', icon: Stamp },
 ] as const;
 
 function AdminNav() {

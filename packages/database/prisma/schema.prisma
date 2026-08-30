@@ -544,6 +544,11 @@ model Document {
   kycOwnerId String?
   kycOwner   User?   @relation("KycDocuments", fields: [kycOwnerId], references: [id])
 
+  // Rejet KYC : conservés pour le motif affiché à l'acheteur et pour la purge
+  // automatique à 15 jours des pièces rejetées (décision produit).
+  rejectedAt      DateTime?
+  rejectedReason  String?
+
   artisanAssignmentId String?
   artisanAssignment   ArtisanAssignment? @relation(fields: [artisanAssignmentId], references: [id], onDelete: Cascade)
 
@@ -557,6 +562,7 @@ model Document {
 
   @@index([reservationId])
   @@index([artisanAssignmentId])
+  @@index([kycOwnerId])
   @@map("documents")
 }
 

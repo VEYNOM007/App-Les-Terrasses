@@ -18,6 +18,7 @@ import { ArtisanModule } from './modules/artisan/artisan.module';
 import { ContractModule } from './modules/contract/contract.module';
 import { LaunchModule } from './modules/launch/launch.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { KycModule } from './modules/kyc/kyc.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { AdminModule } from './modules/admin/admin.module';
     ContractModule,
     LaunchModule,
     AdminModule,
+    KycModule,
   ],
 })
 export class AppModule {}

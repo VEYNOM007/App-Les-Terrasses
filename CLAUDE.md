@@ -42,6 +42,14 @@ s'y conformer strictement (path, méthode, schéma de réponse).
 
 ## Règles spécifiques à ce projet
 
+### Accès VPS production
+VPS prod (Contabo partagé) : `ssh les-terrasses-vps` — alias défini dans `~/.ssh/config`
+(HostName 169.58.53.64, User deploy, clé `~/.ssh/glm_agent_deploy`, `IdentitiesOnly`). Aucun mot de
+passe, uniquement la clé. Repo distant : `~/app-les-terrasses` (branche `main`). Déploiement :
+`git pull origin main` puis `docker compose -f docker-compose.prod.yml up -d --build` (les migrations
+Prisma s'appliquent via le job one-shot `migrate` avant le démarrage de l'API).
+**Règle : ne jamais conclure « pas d'accès » sans avoir d'abord testé `ssh les-terrasses-vps 'true'`.**
+
 ### Sécurité des rôles — non négociable
 Toute route sous `/admin/*` DOIT porter `@UseGuards(JwtAuthGuard, RolesGuard)`
 et `@Roles('ADMIN')`. Toute route sous `/artisans/*` (hors `/admin/artisans/*`)

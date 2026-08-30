@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { ContractSignerType, DocumentType, Prisma, UserRole, ReservationStatus } from '@prisma/client';
+import { ContractSignerType, DocumentType, Prisma, UserRole, ReservationStatus, KycStatus } from '@prisma/client';
 import { ContractService } from './contract.service';
 import { ContractPdfService } from './contract-pdf.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -37,6 +37,9 @@ const createMockPrisma = () => ({
   contractSignature: {
     create: jest.fn(),
     findMany: jest.fn(),
+  },
+  user: {
+    findUnique: jest.fn(),
   },
 });
 
@@ -344,6 +347,7 @@ describe('ContractService', () => {
     const buyerDocument = {
       id: 'document-1',
       fileUrl: 'contracts/1.pdf',
+      reservationId: 'reservation-1',
       reservation: { userId: 'user-1' },
       artisanAssignment: null,
       signatures: [] as { signerType: ContractSignerType; signatureImageUrl: string }[],
@@ -354,6 +358,9 @@ describe('ContractService', () => {
       prisma.contractSignature.findMany.mockResolvedValue([]);
       prisma.document.update.mockResolvedValue({ id: 'document-1', signedFileUrl: 'contracts/signed.pdf' });
       prisma.document.findUnique.mockResolvedValue(buyerDocument);
+      // Tous les happy paths PROPRIETAIRE signent avec une identité déjà
+      // validée ; les tests du gate KYC provisionnent leur propre statut.
+      prisma.user.findUnique.mockResolvedValue({ kycStatus: KycStatus.VALIDE });
     });
 
     it('refuse une image qui n\'est pas un vrai PNG (magic byte)', async () => {
@@ -485,6 +492,67 @@ describe('ContractService', () => {
         service.signContract('document-1', 'intruder-1', UserRole.ACHETEUR, VALID_PNG),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.contractSignature.create).not.toHaveBeenCalled();
+    });
+
+    // ── GATE KYC (C4) : signature acheteur soumise à identité validée ──
+
+    it.each([
+      KycStatus.NON_SOUMIS,
+      KycStatus.EN_ATTENTE,
+      KycStatus.REJETE,
+    ])('bloque la signature PROPRIETAIRE quand le KYC est %s (409, avant upload B2)', async (kycStatus) => {
+      prisma.user.findUnique.mockResolvedValue({ kycStatus });
+
+      await expect(
+        service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG),
+      ).rejects.toThrow(ConflictException);
+      // Aucun objet orphelin ne part vers B2, aucune signature en base.
+      expect(storage.putObject).not.toHaveBeenCalled();
+      expect(prisma.contractSignature.create).not.toHaveBeenCalled();
+    });
+
+    it('fail-closed : user introuvable via le gate = identité non validée (409)', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG),
+      ).rejects.toThrow(ConflictException);
+      expect(storage.putObject).not.toHaveBeenCalled();
+    });
+
+    it('signe avec une identité VALIDÉE en consultant le statut KYC du signataire', async () => {
+      await service.signContract('document-1', 'user-1', UserRole.ACHETEUR, VALID_PNG);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        select: { kycStatus: true },
+      });
+      expect(storage.putObject).toHaveBeenCalledTimes(1);
+      expect(prisma.contractSignature.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('n\'applique PAS le gate aux contrats d\'artisan (pas de KYC chez les artisans)', async () => {
+      prisma.document.findUnique.mockResolvedValue({
+        id: 'document-artisan',
+        fileUrl: 'contracts/artisan.pdf',
+        reservationId: null,
+        reservation: null,
+        artisanAssignment: { artisan: { userId: 'artisan-user-1' } },
+        signatures: [],
+      });
+
+      await service.signContract('document-artisan', 'artisan-user-1', UserRole.ARTISAN, VALID_PNG);
+
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(prisma.contractSignature.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            documentId: 'document-artisan',
+            signerType: ContractSignerType.PROPRIETAIRE,
+            signerUserId: 'artisan-user-1',
+          }),
+        }),
+      );
     });
 
     it('refuse la signature ADMIN tant que le propriétaire n\'a pas signé', async () => {

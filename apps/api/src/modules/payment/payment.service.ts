@@ -1,10 +1,10 @@
-import { Inject, Injectable, NotFoundException, Logger, BadRequestException, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Logger, BadRequestException, ConflictException, forwardRef } from '@nestjs/common';
 import type Stripe from 'stripe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ReservationService } from '../reservation/reservation.service';
 import { ContractService } from '../contract/contract.service';
 import { NotificationService } from '../notification/notification.service';
-import { InstallmentStatus, PaymentProvider, ReservationStatus, UserRole } from '@prisma/client';
+import { InstallmentStatus, PaymentProvider, ReservationStatus, UserRole, KycStatus } from '@prisma/client';
 import { CinetPayClient } from './cinetpay.client';
 import { StripeClient } from './stripe.client';
 import {
@@ -137,6 +137,23 @@ export class PaymentService {
       throw new BadRequestException(
         'Cette réservation a été annulée. Le paiement n\'est plus possible.',
       );
+    }
+
+    // GATE KYC (décision produit) : l'acheteur ne peut payer l'ACOMPTE que si
+    // sa vérification d'identité a été VALIDÉE par l'administration. Calqué
+    // sur le gate de signature de contrat (C4) — fail-closed : user non
+    // VALIDE = refusé. Placé AVANT tout appel provider (CinetPay/Stripe) :
+    // aucune session de paiement n'est ouverte pour un achat non vérifié.
+    // Ne concerne que la première échéance (celle qui scelle le logement) ;
+    // les tranches suivantes restent payables quel que soit le statut KYC.
+    const isFirstInstallment = installment.label === DEFAULT_INSTALLMENT_PLAN[0].label;
+    if (isFirstInstallment) {
+      const buyer = installment.schedule.reservation.user;
+      if (!buyer || buyer.kycStatus !== KycStatus.VALIDE) {
+        throw new ConflictException(
+          'Votre vérification d\'identité doit être validée avant de pouvoir payer l\'acompte. Veuillez soumettre votre pièce d\'identité.',
+        );
+      }
     }
 
     const transactionId = `TX-${installment.id.substring(0, 8)}-${Date.now()}`;

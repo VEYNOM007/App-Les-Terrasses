@@ -10,8 +10,9 @@ import {
   BadRequestException,
   NotFoundException,
   ServiceUnavailableException,
+  ConflictException,
 } from '@nestjs/common';
-import { PaymentProvider, UserRole } from '@prisma/client';
+import { PaymentProvider, UserRole, KycStatus } from '@prisma/client';
 
 /**
  * Tests unitaires — PaymentService
@@ -60,6 +61,7 @@ const mockInstallmentBase = {
         fullName: 'Kofi Mensah',
         email: 'kofi@test.tg',
         phone: '+22890000000',
+        kycStatus: KycStatus.VALIDE,
       },
     },
     installments: [
@@ -376,6 +378,100 @@ describe('PaymentService', () => {
       await expect(
         service.initiatePayment('inst-001', PaymentProvider.STRIPE, 'user-001'),
       ).rejects.toThrow('annulée');
+    });
+
+    it('GATE KYC — rejette l\'acompte si le KYC n\'est pas validé (NON_SOUMIS), sans appel provider', async () => {
+      prisma.paymentInstallment.findUniqueOrThrow.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+        schedule: {
+          ...mockInstallmentBase.schedule,
+          reservation: {
+            ...mockInstallmentBase.schedule.reservation,
+            user: {
+              ...mockInstallmentBase.schedule.reservation.user,
+              kycStatus: KycStatus.NON_SOUMIS,
+            },
+          },
+        },
+      });
+
+      await expect(
+        service.initiatePayment('inst-001', PaymentProvider.STRIPE, 'user-001'),
+      ).rejects.toThrow(ConflictException);
+      await expect(
+        service.initiatePayment('inst-001', PaymentProvider.STRIPE, 'user-001'),
+      ).rejects.toThrow('identité');
+      expect(stripeClient.createCheckoutSession).not.toHaveBeenCalled();
+      expect(cinetPayClient.createPaymentSession).not.toHaveBeenCalled();
+    });
+
+    it('GATE KYC — rejette l\'acompte tant que la pièce est EN_ATTENTE (examen admin)', async () => {
+      prisma.paymentInstallment.findUniqueOrThrow.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+        schedule: {
+          ...mockInstallmentBase.schedule,
+          reservation: {
+            ...mockInstallmentBase.schedule.reservation,
+            user: {
+              ...mockInstallmentBase.schedule.reservation.user,
+              kycStatus: KycStatus.EN_ATTENTE,
+            },
+          },
+        },
+      });
+
+      await expect(
+        service.initiatePayment('inst-001', PaymentProvider.CINETPAY, 'user-001'),
+      ).rejects.toThrow(ConflictException);
+      expect(cinetPayClient.createPaymentSession).not.toHaveBeenCalled();
+    });
+
+    it('GATE KYC — rejette l\'acompte si la pièce a été rejetée (REJETE)', async () => {
+      prisma.paymentInstallment.findUniqueOrThrow.mockResolvedValue({
+        ...mockInstallmentBase,
+        status: 'EN_ATTENTE',
+        schedule: {
+          ...mockInstallmentBase.schedule,
+          reservation: {
+            ...mockInstallmentBase.schedule.reservation,
+            user: {
+              ...mockInstallmentBase.schedule.reservation.user,
+              kycStatus: KycStatus.REJETE,
+            },
+          },
+        },
+      });
+
+      await expect(
+        service.initiatePayment('inst-001', PaymentProvider.STRIPE, 'user-001'),
+      ).rejects.toThrow(ConflictException);
+      expect(stripeClient.createCheckoutSession).not.toHaveBeenCalled();
+    });
+
+    it('GATE KYC — ne bloque PAS une tranche hors acompte (ex : fondations) même si KYC non validé', async () => {
+      prisma.paymentInstallment.findUniqueOrThrow.mockResolvedValue({
+        ...mockInstallmentBase,
+        label: 'Tranche fondations',
+        status: 'EN_ATTENTE',
+        schedule: {
+          ...mockInstallmentBase.schedule,
+          reservation: {
+            ...mockInstallmentBase.schedule.reservation,
+            user: {
+              ...mockInstallmentBase.schedule.reservation.user,
+              kycStatus: KycStatus.NON_SOUMIS,
+            },
+          },
+        },
+      });
+      prisma.paymentInstallment.update.mockResolvedValue({});
+
+      const result = await service.initiatePayment('inst-001', PaymentProvider.STRIPE, 'user-001');
+
+      expect(result).toHaveProperty('paymentUrl');
+      expect(stripeClient.createCheckoutSession).toHaveBeenCalled();
     });
   });
 

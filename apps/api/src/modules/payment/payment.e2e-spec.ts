@@ -221,6 +221,33 @@ describe('PaymentModule — e2e HTTP (supertest)', () => {
     expect(res.status).toBe(400);
   });
 
+  it('POST /payments/installments/:id/pay sur l\'ACOMPTE avec KYC NON_SOUMIS -> 409 (gate identité)', async () => {
+    const user = await createUserFixture({ email: 'pay4@test.tg', phone: '+22840404040', password: 'Secret123!' });
+    // user.kycStatus reste NON_SOUMIS (défaut) : identité non soumise.
+    const { units } = await createProjectWithBlockAndUnits(1);
+    const { schedule } = await createReservationWithSchedule({
+      userId: user.id,
+      unitId: units[0].id,
+    });
+    // L'acompte (PAYE par défaut) est remis EN_ATTENTE pour le payer.
+    const acompte = schedule.installments.find((i) => i.label === 'Acompte réservation')!;
+    await testPrisma.paymentInstallment.update({
+      where: { id: acompte.id },
+      data: { status: 'EN_ATTENTE', provider: null, providerRef: null },
+    });
+    const token = await loginAndGetToken('pay4@test.tg', 'Secret123!');
+
+    const res = await request(app.getHttpServer())
+      .post(`/${API_PREFIX}/payments/installments/${acompte.id}/pay`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ provider: 'STRIPE' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toContain('identité');
+    expect(stripeClient.createCheckoutSession).not.toHaveBeenCalled();
+    expect(cinetPayClient.createPaymentSession).not.toHaveBeenCalled();
+  });
+
   // ──────────────────────────────────────────────────
   // POST /v1/payments/webhooks/cinetpay
   // ──────────────────────────────────────────────────

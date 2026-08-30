@@ -509,7 +509,6 @@ describe('AuthService', () => {
       const result = await service.uploadKyc('user-001', {
         buffer,
         mimetype: 'image/png',
-        originalname: 'passeport.jpg',
       });
 
       // Upload B2 : clé interne `kyc/<uuid>.png`, ContentType serveur
@@ -520,15 +519,13 @@ describe('AuthService', () => {
       expect(contentType).toBe('image/png');
 
       // La base référence la clé interne B2 (jamais un chemin disque, jamais
-      // le nom client brut)
-      expect(prisma.document.create).toHaveBeenCalledWith({
-        data: {
-          type: 'PIECE_IDENTITE',
-          name: 'passeport.jpg',
-          fileUrl: key,
-          kycOwnerId: 'user-001',
-        },
-      });
+      // le nom client brut) et un NOM GÉNÉRÉ CÔTÉ SERVEUR, sans PII.
+      const createCall = prisma.document.create.mock.calls[0][0];
+      expect(createCall.data.fileUrl).toBe(key);
+      expect(createCall.data.kycOwnerId).toBe('user-001');
+      expect(createCall.data.type).toBe('PIECE_IDENTITE');
+      expect(createCall.data.name).toMatch(/^Pièce d'identité — \d{2}\/\d{2}\/\d{4}$/);
+      expect(createCall.data.name).not.toContain('passeport');
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-001' },
@@ -547,7 +544,6 @@ describe('AuthService', () => {
       await service.uploadKyc('user-001', {
         buffer: Buffer.from('pdf'),
         mimetype: 'application/pdf',
-        originalname: 'cni.pdf',
       });
 
       const [key] = storage.putObject.mock.calls[0];

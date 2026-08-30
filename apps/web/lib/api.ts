@@ -654,6 +654,7 @@ export interface AdminUser {
   country: string;
   address: string | null;
   role: 'ACHETEUR' | 'COMMERCIAL' | 'ADMIN' | 'ARTISAN';
+  kycStatus: KycStatus;
   createdAt: string;
 }
 
@@ -782,6 +783,96 @@ export async function signContract(documentId: string, signatureBlob: Blob): Pro
     method: 'POST',
     body: form,
   });
+}
+
+// ────────────────────────────────────────────────────────────
+// Vérification d'identité (KYC)
+// ────────────────────────────────────────────────────────────
+
+export type KycStatus = 'NON_SOUMIS' | 'EN_ATTENTE' | 'VALIDE' | 'REJETE';
+
+export type KycDocumentType = 'cni' | 'passeport' | 'carte_sejour';
+
+export interface PortalKyc {
+  kycStatus: KycStatus;
+  latestDocument: {
+    id: string;
+    name: string;
+    createdAt: string;
+    rejectedAt: string | null;
+    rejectedReason: string | null;
+  } | null;
+}
+
+/**
+ * Dossier KYC de l'acheteur courant : statut + dernière pièce (et son
+ * motif de rejet pour la resoumission). Aucune clé B2 n'est exposée.
+ */
+export function fetchPortalKyc(): Promise<PortalKyc> {
+  return apiFetch<PortalKyc>('/v1/portal/kyc');
+}
+
+/**
+ * Soumission d'une pièce d'identité (multipart, guard JWT). L'API bascule
+ * le compte en EN_ATTENTE ; une nouvelle soumission est possible après
+ * rejet (le serveur lève 409 tant que la pièce précédente est en cours).
+ */
+export async function uploadKyc(
+  file: Blob,
+  documentType: KycDocumentType,
+): Promise<{ id: string; kycStatus: KycStatus }> {
+  const form = new FormData();
+  form.append('file', file, file instanceof File ? file.name : 'piece.png');
+  form.append('documentType', documentType);
+  return apiFetch<{ id: string; kycStatus: KycStatus }>('/v1/auth/kyc', {
+    method: 'POST',
+    body: form,
+  });
+}
+
+// ── Côté admin (revue des dossiers KYC) ─────────────────────
+
+export interface AdminKycEntry {
+  id: string;
+  fullName: string;
+  email: string;
+  kycStatus: KycStatus;
+  updatedAt: string;
+  documentCount: number;
+  latestDocument: {
+    id: string;
+    name: string;
+    createdAt: string;
+    rejectedAt: string | null;
+    rejectedReason: string | null;
+  } | null;
+}
+
+export function fetchAdminKyc(): Promise<AdminKycEntry[]> {
+  return apiFetch<AdminKycEntry[]>('/v1/admin/kyc');
+}
+
+export async function fetchKycDocumentUrl(documentId: string): Promise<{ url: string }> {
+  return apiFetch<{ url: string }>(`/v1/admin/kyc/${documentId}/file`);
+}
+
+export async function approveKyc(
+  documentId: string,
+): Promise<{ documentId: string; kycStatus: KycStatus }> {
+  return apiFetch<{ documentId: string; kycStatus: KycStatus }>(
+    `/v1/admin/kyc/${documentId}/approve`,
+    { method: 'POST' },
+  );
+}
+
+export async function rejectKyc(
+  documentId: string,
+  reason: string,
+): Promise<{ documentId: string; kycStatus: KycStatus }> {
+  return apiFetch<{ documentId: string; kycStatus: KycStatus }>(
+    `/v1/admin/kyc/${documentId}/reject`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  );
 }
 
 // ────────────────────────────────────────────────────────────

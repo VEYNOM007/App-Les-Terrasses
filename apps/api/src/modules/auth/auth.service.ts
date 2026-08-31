@@ -5,7 +5,8 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
 import { StorageService } from '../../common/storage/storage.service';
-import { DocumentType, KycStatus, UserRole } from '@prisma/client';
+import { DocumentSide, DocumentType, KycStatus, UserRole } from '@prisma/client';
+import { KycDocumentType, kycRequiresVerso } from './dto/kyc-upload.dto';
 
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_DAYS = 30;
@@ -318,26 +319,68 @@ export class AuthService {
   }
 
   /**
-   * Enregistre une pièce d'identité téléversée et passe le user en
-   * `kycStatus = EN_ATTENTE`. Le fichier (buffer en mémoire, validé en
-   * amont par multer : fileFilter + limits) est déposé sur B2 sous une
-   * clé interne `kyc/<uuid>.<ext>` ; la base ne référence que cette clé —
-   * jamais une URL B2, jamais un chemin disque. Le nom du document est
-   * généré côté serveur : le `originalname` client peut contenir des
-   * données personnelles (PII) et n'est jamais stocké.
+   * Enregistre un lot de pièce(s) d'identité (recto, et verso selon le type)
+   * et passe le user en `kycStatus = EN_ATTENTE`. Les fichiers (buffers en
+   * mémoire, validés en amont par multer : fileFilter + limits) sont déposés
+   * sur B2 sous des clés internes `kyc/<uuid>.<ext>` ; la base ne référence
+   * que ces clés — jamais une URL B2, jamais un chemin disque. Le nom des
+   * documents est généré côté serveur : l'`originalname` client peut contenir
+   * des données personnelles (PII) et n'est jamais stocké.
+   *
+   * Les faces 2 faces d'un même dépôt partagent le même `kycBatchId` afin
+   * que l'administration les traite (valider/rejeter) et les purge ensemble.
    */
-  async uploadKyc(userId: string, file: { buffer: Buffer; mimetype: string }) {
-    const ext = KYC_EXT_BY_MIME[file.mimetype] ?? '.bin';
-    const key = `kyc/${crypto.randomUUID()}${ext}`;
-    await this.storage.putObject(key, file.buffer, file.mimetype);
+  async uploadKyc(
+    userId: string,
+    documentType: KycDocumentType,
+    files?: { recto?: Express.Multer.File[]; verso?: Express.Multer.File[] },
+  ) {
+    const recto = files?.recto?.[0];
+    const verso = files?.verso?.[0];
 
-    await this.prisma.document.create({
-      data: {
+    if (!recto) {
+      throw new BadRequestException('Une première face (recto) est requise.');
+    }
+    if (kycRequiresVerso(documentType) && !verso) {
+      throw new BadRequestException(
+        'Ce type de pièce exige le verso : envoyez les deux faces (recto et verso).',
+      );
+    }
+
+    const faces: { buffer: Buffer; mimetype: string; side: DocumentSide }[] = [
+      { buffer: recto.buffer, mimetype: recto.mimetype, side: DocumentSide.RECTO },
+    ];
+    if (verso) {
+      faces.push({ buffer: verso.buffer, mimetype: verso.mimetype, side: DocumentSide.VERSO });
+    }
+
+    const kycBatchId = crypto.randomUUID();
+    const uploadedKeys: string[] = [];
+    try {
+      for (const face of faces) {
+        const ext = KYC_EXT_BY_MIME[face.mimetype] ?? '.bin';
+        const key = `kyc/${crypto.randomUUID()}${ext}`;
+        await this.storage.putObject(key, face.buffer, face.mimetype);
+        uploadedKeys.push(key);
+      }
+    } catch (err) {
+      // Nettoyage : un dépôt B2 partiel (échec entre 2 faces) ne doit pas
+      // laisser d'objets orphelins.
+      for (const key of uploadedKeys) {
+        await this.storage.deleteObject(key).catch(() => undefined);
+      }
+      throw err;
+    }
+
+    await this.prisma.document.createMany({
+      data: faces.map((face, index) => ({
         type: DocumentType.PIECE_IDENTITE,
         name: `Pièce d'identité — ${new Date().toLocaleDateString('fr-FR')}`,
-        fileUrl: key,
+        fileUrl: uploadedKeys[index],
+        side: face.side,
+        kycBatchId,
         kycOwnerId: userId,
-      },
+      })),
     });
 
     return this.prisma.user.update({

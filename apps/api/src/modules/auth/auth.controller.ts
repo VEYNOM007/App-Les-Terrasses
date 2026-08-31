@@ -8,12 +8,12 @@ import {
   Patch,
   Post,
   Res,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -58,18 +58,28 @@ const KYC_ALLOWED_MIMES = new Set(['image/png', 'image/jpeg', 'application/pdf']
  * serveur par le service (clé interne B2 `kyc/<uuid>.<ext>`, extension
  * dérivée du MIME) — on n'utilise jamais le nom fourni par le client,
  * source classique de path traversal.
+ *
+ * Deux champs optionnels : `recto` et `verso` (1 fichier max chacun). La
+ * complétude (verso requis selon le type de pièce) est validée par le
+ * service, pas ici — le même filtre MIME/taille s'applique aux deux faces.
  */
-const kycFileInterceptor = FileInterceptor('file', {
-  storage: memoryStorage(),
-  limits: { fileSize: KYC_MAX_SIZE },
-  fileFilter: (_req, file, cb) => {
-    if (!KYC_ALLOWED_MIMES.has(file.mimetype)) {
-      cb(new BadRequestException('Format non supporté : PNG, JPG ou PDF uniquement.'), false);
-      return;
-    }
-    cb(null, true);
+const kycFileInterceptor = FileFieldsInterceptor(
+  [
+    { name: 'recto', maxCount: 1 },
+    { name: 'verso', maxCount: 1 },
+  ],
+  {
+    storage: memoryStorage(),
+    limits: { fileSize: KYC_MAX_SIZE },
+    fileFilter: (_req, file, cb) => {
+      if (!KYC_ALLOWED_MIMES.has(file.mimetype)) {
+        cb(new BadRequestException('Format non supporté : PNG, JPG ou PDF uniquement.'), false);
+        return;
+      }
+      cb(null, true);
+    },
   },
-});
+);
 
 function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
   res.cookie(ACCESS_TOKEN_COOKIE, accessToken, {
@@ -167,10 +177,10 @@ export class AuthController {
   @UseInterceptors(kycFileInterceptor)
   async uploadKyc(
     @Body() body: KycUploadDto,
-    @UploadedFile() file: Express.Multer.File | undefined,
+    @UploadedFiles()
+    files: { recto?: Express.Multer.File[]; verso?: Express.Multer.File[] } | undefined,
     @CurrentUser() user: AuthUser,
   ) {
-    if (!file) throw new BadRequestException('Fichier manquant.');
-    return this.authService.uploadKyc(user.id, file);
+    return this.authService.uploadKyc(user.id, body.documentType, files);
   }
 }

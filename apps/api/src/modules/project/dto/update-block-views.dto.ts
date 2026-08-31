@@ -1,12 +1,6 @@
 import { Type } from 'class-transformer';
-import {
-  IsArray,
-  IsIn,
-  IsOptional,
-  IsString,
-  IsUrl,
-  ValidateNested,
-} from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsImageUrlOrPath } from '../../../common/decorators/is-image-url-or-path';
 
 export class BlockViewHotspotDto {
   @IsString()
@@ -41,7 +35,7 @@ export class BlockViewDto {
   @IsString()
   category!: string;
 
-  @IsUrl()
+  @IsImageUrlOrPath()
   imageUrl!: string;
 
   @IsString()

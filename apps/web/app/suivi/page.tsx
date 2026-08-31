@@ -26,6 +26,7 @@ import {
   EyeOff,
   UserCheck,
   Upload,
+  ImagePlus,
 } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import SignaturePad from '../../components/SignaturePad';
@@ -135,6 +136,8 @@ export default function SuiviAcquereur() {
   const [kycUploading, setKycUploading] = useState(false);
   const [kycUploadError, setKycUploadError] = useState('');
   const [kycUploadSuccess, setKycUploadSuccess] = useState('');
+  const [kycRecto, setKycRecto] = useState<File | null>(null);
+  const [kycVerso, setKycVerso] = useState<File | null>(null);
 
   const [schedulesMap, setSchedulesMap] = useState<Record<string, PaymentScheduleResponse>>({});
   const [scheduleLoadingMap, setScheduleLoadingMap] = useState<Record<string, boolean>>({});
@@ -325,21 +328,40 @@ export default function SuiviAcquereur() {
     }
   };
 
-  const handleKycUpload = async (file: File) => {
+  const kycTypeRequiresVerso = (type: KycDocumentType) =>
+    type === 'cni' || type === 'carte_sejour';
+
+  const handleKycUpload = async () => {
     setKycUploadError('');
     setKycUploadSuccess('');
-    if (!['image/png', 'image/jpeg', 'application/pdf'].includes(file.type)) {
-      setKycUploadError('Formats acceptés : PNG, JPG ou PDF.');
+    const recto = kycRecto;
+    if (!recto) {
+      setKycUploadError('Ajoutez au moins la première face (recto).');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setKycUploadError('La pièce ne doit pas dépasser 5 Mo.');
+    const verso = kycTypeRequiresVerso(kycType) ? kycVerso : null;
+    if (kycTypeRequiresVerso(kycType) && !verso) {
+      setKycUploadError(
+        'Ce type de pièce exige le verso : ajoutez la deuxième face avant de transmettre.',
+      );
       return;
+    }
+    for (const file of [recto, verso].filter((f): f is File => f !== null)) {
+      if (!['image/png', 'image/jpeg', 'application/pdf'].includes(file.type)) {
+        setKycUploadError('Formats acceptés : PNG, JPG ou PDF.');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setKycUploadError('Chaque face ne doit pas dépasser 5 Mo.');
+        return;
+      }
     }
     setKycUploading(true);
     try {
-      await uploadKyc(file, kycType);
+      await uploadKyc({ recto, verso }, kycType);
       setKycUploadSuccess('Pièce transmise — elle est en cours de vérification.');
+      setKycRecto(null);
+      setKycVerso(null);
       await loadKyc();
     } catch (err) {
       setKycUploadError(err instanceof Error ? err.message : 'Transmission impossible.');
@@ -841,7 +863,17 @@ export default function SuiviAcquereur() {
                     }}
                     className="inline-flex items-center gap-1.5 border border-paper/30 hover:border-sand text-paper font-mono text-xs px-3 py-1.5 rounded transition-all"
                   >
-                    <Eye className="w-3.5 h-3.5" /> Voir ma pièce
+                    <Eye className="w-3.5 h-3.5" /> Voir le recto
+                  </button>
+                )}
+                {kyc.versoDocument && (
+                  <button
+                    onClick={() => {
+                      if (kyc.versoDocument) void handleViewKycPiece(kyc.versoDocument.id);
+                    }}
+                    className="inline-flex items-center gap-1.5 border border-paper/30 hover:border-sand text-paper font-mono text-xs px-3 py-1.5 rounded transition-all"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Voir le verso
                   </button>
                 )}
               </div>
@@ -882,7 +914,11 @@ export default function SuiviAcquereur() {
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <select
                   value={kycType}
-                  onChange={(e) => setKycType(e.target.value as KycDocumentType)}
+                  onChange={(e) => {
+                    setKycType(e.target.value as KycDocumentType);
+                    setKycVerso(null);
+                    setKycUploadError('');
+                  }}
                   disabled={kycUploading || kyc.kycStatus === 'EN_ATTENTE'}
                   className="bg-ink border border-paper/25 rounded px-3 py-2 text-sm font-mono text-paper focus:border-laterite-light focus:outline-none disabled:opacity-50"
                 >
@@ -890,17 +926,14 @@ export default function SuiviAcquereur() {
                   <option value="passeport">Passeport</option>
                   <option value="carte_sejour">Carte de séjour</option>
                 </select>
+
                 <label
-                  className={`inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-4 py-2 rounded transition-all font-semibold cursor-pointer ${
+                  className={`inline-flex items-center gap-2 border border-laterite/60 text-laterite-light font-mono text-xs px-4 py-2 rounded transition-all cursor-pointer ${
                     kycUploading || kyc.kycStatus === 'EN_ATTENTE' ? 'opacity-50 pointer-events-none' : ''
                   }`}
                 >
-                  {kycUploading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  {kycUploading ? 'Transmission en cours…' : 'Envoyer ma pièce'}
+                  {kycRecto ? <CheckCircle2 className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                  {kycRecto ? `Recto : ${kycRecto.name}` : 'Recto'}
                   <input
                     type="file"
                     accept="image/png,image/jpeg,application/pdf"
@@ -909,10 +942,50 @@ export default function SuiviAcquereur() {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       e.target.value = '';
-                      if (file) void handleKycUpload(file);
+                      if (file) setKycRecto(file);
                     }}
                   />
                 </label>
+
+                {kycTypeRequiresVerso(kycType) && (
+                  <label
+                    className={`inline-flex items-center gap-2 border border-sand/60 text-sand font-mono text-xs px-4 py-2 rounded transition-all cursor-pointer ${
+                      kycUploading || kyc.kycStatus === 'EN_ATTENTE' ? 'opacity-50 pointer-events-none' : ''
+                    }`}
+                  >
+                    {kycVerso ? <CheckCircle2 className="w-4 h-4" /> : <ImagePlus className="w-4 h-4" />}
+                    {kycVerso ? `Verso : ${kycVerso.name}` : 'Verso'}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,application/pdf"
+                      className="hidden"
+                      disabled={kycUploading || kyc.kycStatus === 'EN_ATTENTE'}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (file) setKycVerso(file);
+                      }}
+                    />
+                  </label>
+                )}
+
+                <button
+                  onClick={() => void handleKycUpload()}
+                  disabled={
+                    kycUploading ||
+                    kyc.kycStatus === 'EN_ATTENTE' ||
+                    !kycRecto ||
+                    (kycTypeRequiresVerso(kycType) && !kycVerso)
+                  }
+                  className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-4 py-2 rounded transition-all font-semibold disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {kycUploading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  {kycUploading ? 'Transmission en cours…' : 'Transmettre'}
+                </button>
               </div>
 
               {kycUploadError && (

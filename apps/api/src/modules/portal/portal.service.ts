@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ContractSignerType } from '@prisma/client';
+import { ContractSignerType, DocumentSide } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
 
@@ -122,10 +122,11 @@ export class PortalService {
         kycStatus: true,
         kycDocuments: {
           orderBy: { createdAt: 'desc' },
-          take: 1,
           select: {
             id: true,
             name: true,
+            side: true,
+            kycBatchId: true,
             createdAt: true,
             rejectedAt: true,
             rejectedReason: true,
@@ -137,11 +138,31 @@ export class PortalService {
     if (!user) throw new NotFoundException('Utilisateur introuvable.');
 
     const latest = user.kycDocuments[0] ?? null;
+    const toPublic = (
+      doc: { id: string; name: string; createdAt: Date; rejectedAt: Date | null; rejectedReason: string | null },
+    ) => ({
+      id: doc.id,
+      name: doc.name,
+      createdAt: doc.createdAt,
+      rejectedAt: doc.rejectedAt,
+      rejectedReason: doc.rejectedReason,
+    });
+
+    // Verso du même lot que la face la plus récente, pour que l'acheteur
+    // puisse consulter ses deux faces (recto + verso) d'une CNI / carte de
+    // séjour. Ignoré si la face la plus récente est déjà le verso.
+    let versoDocument: ReturnType<typeof toPublic> | null = null;
+    if (latest?.kycBatchId) {
+      const verso = user.kycDocuments.find(
+        (d) => d.kycBatchId === latest.kycBatchId && d.side === DocumentSide.VERSO,
+      );
+      if (verso && verso.id !== latest.id) versoDocument = toPublic(verso);
+    }
+
     return {
       kycStatus: user.kycStatus,
-      latestDocument: latest
-        ? { id: latest.id, name: latest.name, createdAt: latest.createdAt, rejectedAt: latest.rejectedAt, rejectedReason: latest.rejectedReason }
-        : null,
+      latestDocument: latest ? toPublic(latest) : null,
+      versoDocument,
     };
   }
 }

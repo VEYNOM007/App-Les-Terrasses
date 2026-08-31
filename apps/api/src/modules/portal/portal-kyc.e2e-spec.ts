@@ -82,7 +82,11 @@ describe('PortalService — dossier KYC (e2e HTTP)', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ kycStatus: KycStatus.NON_SOUMIS, latestDocument: null });
+    expect(res.body).toEqual({
+      kycStatus: KycStatus.NON_SOUMIS,
+      latestDocument: null,
+      versoDocument: null,
+    });
   });
 
   it('pièce rejetée -> expose le motif, sans jamais fuiter la clé B2', async () => {

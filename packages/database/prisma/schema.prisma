@@ -107,6 +107,13 @@ enum DocumentType {
   DEVIS
 }
 
+// Face d'une pièce d'identité (KYC). Une CNI et une carte de séjour exigent
+// RECTO + VERSO ; un passeport n'a qu'une face (RECTO seul). Non-KYC => null.
+enum DocumentSide {
+  RECTO
+  VERSO
+}
+
 // Qui a signé un contrat : le propriétaire (acheteur ou artisan) signe
 // d'abord (PROPRIETAIRE), puis un admin contresigne (ADMIN). L'ordre et
 // l'unicité sont appliqués en base via @@unique([documentId, signerType]).
@@ -544,6 +551,13 @@ model Document {
   kycOwnerId String?
   kycOwner   User?   @relation("KycDocuments", fields: [kycOwnerId], references: [id])
 
+  // Face d'une pièce d'identité (RECTO/VERSO) et identifiant du "lot" auquel
+  // elle appartient : les faces d'un même dépôt KYC partagent le même
+  // `kycBatchId` (ex. le recto et le verso d'une CNI). `null` pour les
+  // documents non-KYC (contrats, quittances, ...).
+  side        DocumentSide?
+  kycBatchId  String?
+
   // Rejet KYC : conservés pour le motif affiché à l'acheteur et pour la purge
   // automatique à 15 jours des pièces rejetées (décision produit).
   rejectedAt      DateTime?
@@ -563,6 +577,7 @@ model Document {
   @@index([reservationId])
   @@index([artisanAssignmentId])
   @@index([kycOwnerId])
+  @@index([kycBatchId])
   @@map("documents")
 }
 

@@ -285,10 +285,11 @@ describe('PortalService', () => {
           kycStatus: true,
           kycDocuments: {
             orderBy: { createdAt: 'desc' },
-            take: 1,
             select: {
               id: true,
               name: true,
+              side: true,
+              kycBatchId: true,
               createdAt: true,
               rejectedAt: true,
               rejectedReason: true,
@@ -305,6 +306,7 @@ describe('PortalService', () => {
           rejectedAt: new Date('2026-08-13T10:00:00.000Z'),
           rejectedReason: 'Pièce illisible — veuillez soumettre une copie nette.',
         },
+        versoDocument: null,
       });
       // La clé de fichier B2 ne doit jamais transiter vers le portail.
       expect(JSON.stringify(result)).not.toContain('fileUrl');
@@ -320,7 +322,43 @@ describe('PortalService', () => {
 
       const result = await service.getKyc('user-002');
 
-      expect(result).toEqual({ kycStatus: 'NON_SOUMIS', latestDocument: null });
+      expect(result).toEqual({
+        kycStatus: 'NON_SOUMIS',
+        latestDocument: null,
+        versoDocument: null,
+      });
+    });
+
+    it('devrait exposer le verso du même lot que la face la plus récente', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-003',
+        kycStatus: 'EN_ATTENTE',
+        kycDocuments: [
+          {
+            id: 'doc-recto',
+            name: 'Pièce d\'identité — 15/08/2026',
+            side: 'RECTO',
+            kycBatchId: 'batch-9',
+            createdAt: new Date('2026-08-15T08:00:00.000Z'),
+            rejectedAt: null,
+            rejectedReason: null,
+          },
+          {
+            id: 'doc-verso',
+            name: 'Pièce d\'identité — 15/08/2026',
+            side: 'VERSO',
+            kycBatchId: 'batch-9',
+            createdAt: new Date('2026-08-15T08:00:00.000Z'),
+            rejectedAt: null,
+            rejectedReason: null,
+          },
+        ],
+      });
+
+      const result = await service.getKyc('user-003');
+
+      expect(result.latestDocument).toMatchObject({ id: 'doc-recto' });
+      expect(result.versoDocument).toMatchObject({ id: 'doc-verso' });
     });
 
     it('devrait renvoyer 404 si le compte n\'existe pas', async () => {

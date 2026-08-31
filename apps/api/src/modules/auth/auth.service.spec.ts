@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
 import { StorageService } from '../../common/storage/storage.service';
+import { KycDocumentType } from './dto/kyc-upload.dto';
 
 /**
  * Tests unitaires — AuthService (refresh tokens durcis)
@@ -67,6 +68,7 @@ const createMockPrisma = () => {
     },
     document: {
       create: jest.fn(),
+      createMany: jest.fn(),
     },
     refreshToken: {
       create: jest.fn(),
@@ -500,32 +502,61 @@ describe('AuthService', () => {
   // ──────────────────────────────────────────────────
 
   describe('uploadKyc', () => {
-    it('devrait déposer le fichier sur B2 sous une clé interne et référencer la clé en base', async () => {
+    it("devrait refuser un lot sans face recto (BadRequest)", async () => {
+      await expect(service.uploadKyc('user-001', KycDocumentType.PASSEPORT, {})).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(storage.putObject).not.toHaveBeenCalled();
+      expect(prisma.document.createMany).not.toHaveBeenCalled();
+    });
+
+    it("devrait exiger le verso pour une CNI (lot incomplet -> BadRequest)", async () => {
+      await expect(
+        service.uploadKyc('user-001', KycDocumentType.CNI, {
+          recto: [{ buffer: Buffer.from('recto'), mimetype: 'image/png' } as Express.Multer.File],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.putObject).not.toHaveBeenCalled();
+      expect(prisma.document.createMany).not.toHaveBeenCalled();
+    });
+
+    it('devrait déposer recto+verso sur B2 et référencer les 2 faces du même kycBatchId en base', async () => {
       storage.putObject.mockResolvedValue(undefined);
-      prisma.document.create.mockResolvedValue({ id: 'doc-001' });
+      prisma.document.createMany.mockResolvedValue({ count: 2 });
       prisma.user.update.mockResolvedValue({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
 
-      const buffer = Buffer.from('fake-png-bytes');
-      const result = await service.uploadKyc('user-001', {
-        buffer,
-        mimetype: 'image/png',
+      const recto = Buffer.from('fake-recto');
+      const verso = Buffer.from('fake-verso');
+      const result = await service.uploadKyc('user-001', KycDocumentType.CNI, {
+        recto: [{ buffer: recto, mimetype: 'image/png' } as Express.Multer.File],
+        verso: [{ buffer: verso, mimetype: 'image/png' } as Express.Multer.File],
       });
 
-      // Upload B2 : clé interne `kyc/<uuid>.png`, ContentType serveur
-      expect(storage.putObject).toHaveBeenCalledTimes(1);
-      const [key, uploaded, contentType] = storage.putObject.mock.calls[0];
-      expect(key).toMatch(/^kyc\/[0-9a-f-]+\.png$/);
-      expect(uploaded).toBe(buffer);
-      expect(contentType).toBe('image/png');
+      // Upload B2 : 2 objets, clé interne `kyc/<uuid>.png`, ContentType serveur
+      expect(storage.putObject).toHaveBeenCalledTimes(2);
+      const keys = storage.putObject.mock.calls.map((c: string[]) => c[0]);
+      expect(keys[0]).toMatch(/^kyc\/[0-9a-f-]+\.png$/);
+      expect(keys[1]).toMatch(/^kyc\/[0-9a-f-]+\.png$/);
+      expect(storage.putObject.mock.calls[0][1]).toBe(recto);
+      expect(storage.putObject.mock.calls[1][1]).toBe(verso);
+      expect(storage.putObject.mock.calls[0][2]).toBe('image/png');
 
-      // La base référence la clé interne B2 (jamais un chemin disque, jamais
-      // le nom client brut) et un NOM GÉNÉRÉ CÔTÉ SERVEUR, sans PII.
-      const createCall = prisma.document.create.mock.calls[0][0];
-      expect(createCall.data.fileUrl).toBe(key);
-      expect(createCall.data.kycOwnerId).toBe('user-001');
-      expect(createCall.data.type).toBe('PIECE_IDENTITE');
-      expect(createCall.data.name).toMatch(/^Pièce d'identité — \d{2}\/\d{2}\/\d{4}$/);
-      expect(createCall.data.name).not.toContain('passeport');
+      // La base référence les clés internes B2 (jamais un chemin disque,
+      // jamais le nom client brut) et un NOM GÉNÉRÉ CÔTÉ SERVEUR, sans PII,
+      // avec les faces reliées par le même kycBatchId.
+      const createManyCall = prisma.document.createMany.mock.calls[0][0];
+      expect(createManyCall.data).toHaveLength(2);
+      const [rectoData, versoData] = createManyCall.data;
+      expect(rectoData.fileUrl).toBe(keys[0]);
+      expect(rectoData.side).toBe('RECTO');
+      expect(versoData.fileUrl).toBe(keys[1]);
+      expect(versoData.side).toBe('VERSO');
+      expect(rectoData.kycBatchId).toBe(versoData.kycBatchId);
+      expect(rectoData.kycBatchId).toMatch(/[0-9a-f-]{36}/);
+      expect(rectoData.kycOwnerId).toBe('user-001');
+      expect(rectoData.type).toBe('PIECE_IDENTITE');
+      expect(rectoData.name).toMatch(/^Pièce d'identité — \d{2}\/\d{2}\/\d{4}$/);
+      expect(rectoData.name).not.toContain('passeport');
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-001' },
@@ -536,19 +567,23 @@ describe('AuthService', () => {
       expect(result).toEqual({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
     });
 
-    it('devrait choisir l\'extension .pdf pour un MIME application/pdf', async () => {
+    it("devrait déposer une seule face (recto) pour un passeport (verso non requis)", async () => {
       storage.putObject.mockResolvedValue(undefined);
-      prisma.document.create.mockResolvedValue({ id: 'doc-002' });
+      prisma.document.createMany.mockResolvedValue({ count: 1 });
       prisma.user.update.mockResolvedValue({ id: 'user-001', kycStatus: 'EN_ATTENTE' });
 
-      await service.uploadKyc('user-001', {
-        buffer: Buffer.from('pdf'),
-        mimetype: 'application/pdf',
+      await service.uploadKyc('user-001', KycDocumentType.PASSEPORT, {
+        recto: [{ buffer: Buffer.from('recto'), mimetype: 'application/pdf' } as Express.Multer.File],
       });
 
+      expect(storage.putObject).toHaveBeenCalledTimes(1);
       const [key] = storage.putObject.mock.calls[0];
       expect(key).toMatch(/^kyc\/[0-9a-f-]+\.pdf$/);
       expect(storage.putObject.mock.calls[0][2]).toBe('application/pdf');
+
+      const createManyCall = prisma.document.createMany.mock.calls[0][0];
+      expect(createManyCall.data).toHaveLength(1);
+      expect(createManyCall.data[0].side).toBe('RECTO');
     });
   });
 

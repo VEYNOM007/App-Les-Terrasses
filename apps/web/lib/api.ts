@@ -801,15 +801,18 @@ export type KycStatus = 'NON_SOUMIS' | 'EN_ATTENTE' | 'VALIDE' | 'REJETE';
 
 export type KycDocumentType = 'cni' | 'passeport' | 'carte_sejour';
 
+export interface KycDocumentPublic {
+  id: string;
+  name: string;
+  createdAt: string;
+  rejectedAt: string | null;
+  rejectedReason: string | null;
+}
+
 export interface PortalKyc {
   kycStatus: KycStatus;
-  latestDocument: {
-    id: string;
-    name: string;
-    createdAt: string;
-    rejectedAt: string | null;
-    rejectedReason: string | null;
-  } | null;
+  latestDocument: KycDocumentPublic | null;
+  versoDocument: KycDocumentPublic | null;
 }
 
 /**
@@ -821,16 +824,29 @@ export function fetchPortalKyc(): Promise<PortalKyc> {
 }
 
 /**
- * Soumission d'une pièce d'identité (multipart, guard JWT). L'API bascule
- * le compte en EN_ATTENTE ; une nouvelle soumission est possible après
- * rejet (le serveur lève 409 tant que la pièce précédente est en cours).
+ * Soumission d'un lot de pièce(s) d'identité (multipart, guard JWT). Une CNI
+ * et une carte de séjour exigent le recto ET le verso (2 champs `recto` +
+ * `verso`) ; un passeport n'envoie que le recto. L'API bascule le compte en
+ * EN_ATTENTE ; une nouvelle soumission est possible après rejet (le serveur
+ * lève 409 tant que le lot précédent est en cours).
  */
 export async function uploadKyc(
-  file: Blob,
+  files: { recto: Blob; verso?: Blob | null },
   documentType: KycDocumentType,
 ): Promise<{ id: string; kycStatus: KycStatus }> {
   const form = new FormData();
-  form.append('file', file, file instanceof File ? file.name : 'piece.png');
+  form.append(
+    'recto',
+    files.recto,
+    files.recto instanceof File ? files.recto.name : 'recto.png',
+  );
+  if (files.verso) {
+    form.append(
+      'verso',
+      files.verso,
+      files.verso instanceof File ? files.verso.name : 'verso.png',
+    );
+  }
   form.append('documentType', documentType);
   return apiFetch<{ id: string; kycStatus: KycStatus }>('/v1/auth/kyc', {
     method: 'POST',
@@ -847,13 +863,8 @@ export interface AdminKycEntry {
   kycStatus: KycStatus;
   updatedAt: string;
   documentCount: number;
-  latestDocument: {
-    id: string;
-    name: string;
-    createdAt: string;
-    rejectedAt: string | null;
-    rejectedReason: string | null;
-  } | null;
+  latestDocument: KycDocumentPublic | null;
+  versoDocument: KycDocumentPublic | null;
 }
 
 export function fetchAdminKyc(): Promise<AdminKycEntry[]> {

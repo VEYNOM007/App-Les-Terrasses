@@ -14,8 +14,10 @@ describe('KycService', () => {
     document: {
       findUnique: jest.Mock;
       findFirst: jest.Mock;
+      findMany: jest.Mock;
       delete: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
     user: { update: jest.Mock; findMany: jest.Mock };
     $transaction: jest.Mock;
@@ -77,8 +79,10 @@ describe('KycService', () => {
       document: {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         delete: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       user: { update: jest.fn(), findMany: jest.fn() },
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
@@ -103,14 +107,39 @@ describe('KycService', () => {
   describe('purgeRejectedDocument', () => {
     it('purge réelle : objet B2 supprimé PUIS ligne base supprimée', async () => {
       prisma.document.findUnique.mockResolvedValue(rejectedDoc);
+      prisma.document.findMany.mockResolvedValue([rejectedDoc]);
       prisma.document.delete.mockResolvedValue(rejectedDoc);
 
       await service.purgeRejectedDocument('doc-kyc-1');
 
+      expect(prisma.document.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'doc-kyc-1', kycOwnerId: 'user-1', type: DocumentType.PIECE_IDENTITE },
+        }),
+      );
       expect(storage.deleteObject).toHaveBeenCalledWith('kyc/4f7a2d1e.png');
       expect(prisma.document.delete).toHaveBeenCalledWith({
         where: { id: 'doc-kyc-1' },
       });
+    });
+
+    it('purge toutes les faces du même lot (recto + verso)', async () => {
+      const versoFace = { ...rejectedDoc, id: 'doc-kyc-1-v', side: 'VERSO', fileUrl: 'kyc/verso.png' };
+      prisma.document.findUnique.mockResolvedValue({ ...rejectedDoc, kycBatchId: 'batch-1' });
+      prisma.document.findMany.mockResolvedValue([rejectedDoc, versoFace]);
+      prisma.document.delete.mockResolvedValue(rejectedDoc);
+
+      await service.purgeRejectedDocument('doc-kyc-1');
+
+      expect(prisma.document.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { kycBatchId: 'batch-1', kycOwnerId: 'user-1', type: DocumentType.PIECE_IDENTITE },
+        }),
+      );
+      expect(storage.deleteObject).toHaveBeenCalledTimes(2);
+      expect(storage.deleteObject).toHaveBeenCalledWith('kyc/4f7a2d1e.png');
+      expect(storage.deleteObject).toHaveBeenCalledWith('kyc/verso.png');
+      expect(prisma.document.delete).toHaveBeenCalledTimes(2);
     });
 
     it('ne purge pas un document introuvable', async () => {
@@ -141,6 +170,7 @@ describe('KycService', () => {
 
     it('purgée même si le statut courant du user a évolué (resoumission/validation)', async () => {
       prisma.document.findUnique.mockResolvedValue(rejectedDoc);
+      prisma.document.findMany.mockResolvedValue([rejectedDoc]);
       await service.purgeRejectedDocument('doc-kyc-1');
       expect(storage.deleteObject).toHaveBeenCalledWith('kyc/4f7a2d1e.png');
       expect(prisma.document.delete).toHaveBeenCalledWith({
@@ -150,6 +180,7 @@ describe('KycService', () => {
 
     it('délègue l\'erreur si la suppression objet échoue (retry BullMQ)', async () => {
       prisma.document.findUnique.mockResolvedValue(rejectedDoc);
+      prisma.document.findMany.mockResolvedValue([rejectedDoc]);
       storage.deleteObject.mockRejectedValue(new Error('S3 timeout'));
       await expect(service.purgeRejectedDocument('doc-kyc-1')).rejects.toThrow('S3 timeout');
       expect(prisma.document.delete).not.toHaveBeenCalled();
@@ -166,8 +197,8 @@ describe('KycService', () => {
           kycStatus: KycStatus.EN_ATTENTE,
           updatedAt: new Date('2026-08-28T10:00:00Z'),
           kycDocuments: [
-            pendingDoc,
-            rejectedDoc,
+            { ...pendingDoc, side: null, kycBatchId: null },
+            { ...rejectedDoc, side: null, kycBatchId: null },
           ],
         },
       ]);
@@ -186,12 +217,59 @@ describe('KycService', () => {
           email: 'moussa@test.tg',
           kycStatus: KycStatus.EN_ATTENTE,
           updatedAt: new Date('2026-08-28T10:00:00Z'),
-          latestDocument: pendingDoc,
+          latestDocument: {
+            id: 'doc-kyc-2',
+            name: pendingDoc.name,
+            createdAt: pendingDoc.createdAt,
+            rejectedAt: null,
+            rejectedReason: null,
+          },
+          versoDocument: null,
           documentCount: 2,
         },
       ]);
       // Le tableau complet de pièces n'est pas exposé — seulement la plus récente.
       expect(result[0]).not.toHaveProperty('kycDocuments');
+    });
+
+    it('expose le verso du même lot que la pièce la plus récente', async () => {
+      const verso = {
+        ...pendingDoc,
+        id: 'doc-kyc-2-v',
+        side: 'VERSO',
+        kycBatchId: 'batch-1',
+      };
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'user-1',
+          fullName: 'Moussa Keita',
+          email: 'moussa@test.tg',
+          kycStatus: KycStatus.EN_ATTENTE,
+          updatedAt: new Date('2026-08-28T10:00:00Z'),
+          kycDocuments: [
+            { ...pendingDoc, side: 'RECTO', kycBatchId: 'batch-1' },
+            verso,
+          ],
+        },
+      ]);
+
+      const result = await service.listAdminKyc();
+
+      expect(result[0].latestDocument).toEqual({
+        id: 'doc-kyc-2',
+        name: pendingDoc.name,
+        createdAt: pendingDoc.createdAt,
+        rejectedAt: null,
+        rejectedReason: null,
+      });
+      expect(result[0].versoDocument).toEqual({
+        id: 'doc-kyc-2-v',
+        name: verso.name,
+        createdAt: verso.createdAt,
+        rejectedAt: null,
+        rejectedReason: null,
+      });
+      expect(result[0].documentCount).toBe(2);
     });
   });
 
@@ -239,21 +317,21 @@ describe('KycService', () => {
     it('exige un motif non vide (obligatoire)', async () => {
       await expect(service.reject('doc-kyc-2', '   ')).rejects.toThrow(BadRequestException);
       await expect(service.reject('doc-kyc-2', '')).rejects.toThrow(BadRequestException);
-      expect(prisma.document.update).not.toHaveBeenCalled();
+      expect(prisma.document.updateMany).not.toHaveBeenCalled();
       expect(retentionQueue.add).not.toHaveBeenCalled();
     });
 
     it('rejette : motifts → REJETE, purge planifiée 15 j (jobId = documentId), notification avec motif', async () => {
       prisma.document.findUnique.mockResolvedValue(pendingDoc);
       prisma.document.findFirst.mockResolvedValue(pendingDoc);
-      prisma.document.update.mockResolvedValue({ ...pendingDoc, rejectedAt: new Date() });
+      prisma.document.updateMany.mockResolvedValue({ count: 1 });
       prisma.user.update.mockResolvedValue({ id: 'user-1', kycStatus: KycStatus.REJETE });
 
       const result = await service.reject('doc-kyc-2', '  Document flou, illisible.  ');
 
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      expect(prisma.document.update).toHaveBeenCalledWith({
-        where: { id: 'doc-kyc-2' },
+      expect(prisma.document.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['doc-kyc-2'] } },
         data: expect.objectContaining({ rejectedReason: 'Document flou, illisible.' }),
       });
       expect(prisma.user.update).toHaveBeenCalledWith({
@@ -272,6 +350,30 @@ describe('KycService', () => {
           body: expect.stringContaining('Document flou, illisible.'),
         }),
       );
+      expect(result).toEqual({ documentId: 'doc-kyc-2', kycStatus: KycStatus.REJETE });
+    });
+
+    it('rejette le lot complet (recto + verso) en une seule transaction', async () => {
+      const verso = { ...pendingDoc, id: 'doc-kyc-2-v', side: 'VERSO', kycBatchId: 'batch-1' };
+      prisma.document.findUnique.mockResolvedValue({ ...pendingDoc, side: 'RECTO', kycBatchId: 'batch-1' });
+      prisma.document.findFirst.mockResolvedValue({ ...pendingDoc, side: 'RECTO', kycBatchId: 'batch-1' });
+      prisma.document.findMany.mockResolvedValue([
+        { ...pendingDoc, side: 'RECTO', kycBatchId: 'batch-1' },
+        verso,
+      ]);
+      prisma.document.updateMany.mockResolvedValue({ count: 2 });
+      prisma.user.update.mockResolvedValue({ id: 'user-1', kycStatus: KycStatus.REJETE });
+
+      const result = await service.reject('doc-kyc-2', 'Flou.');
+
+      expect(prisma.document.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['doc-kyc-2', 'doc-kyc-2-v'] } },
+        data: expect.objectContaining({ rejectedReason: 'Flou.' }),
+      });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { kycStatus: KycStatus.REJETE },
+      });
       expect(result).toEqual({ documentId: 'doc-kyc-2', kycStatus: KycStatus.REJETE });
     });
 

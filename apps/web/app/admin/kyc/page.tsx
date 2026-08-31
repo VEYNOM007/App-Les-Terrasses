@@ -72,13 +72,13 @@ export default function AdminKycPage() {
     if (user) void load();
   }, [user, load]);
 
-  const handleView = async (entry: AdminKycEntry) => {
-    const docId = entry.latestDocument?.id;
-    if (!docId) return;
+  const handleView = async (entry: AdminKycEntry, docId?: string) => {
+    const target = docId ?? entry.latestDocument?.id;
+    if (!target) return;
     setViewingId(entry.id);
     setActionError('');
     try {
-      const { url } = await fetchKycDocumentUrl(docId);
+      const { url } = await fetchKycDocumentUrl(target);
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Aperçu impossible.');
@@ -247,8 +247,17 @@ export default function AdminKycPage() {
                               ) : (
                                 <Eye className="w-3.5 h-3.5" />
                               )}{' '}
-                              Voir
+                              Voir recto
                             </button>
+                            {entry.versoDocument && (
+                              <button
+                                onClick={() => void handleView(entry, entry.versoDocument!.id)}
+                                disabled={viewingId !== null}
+                                className="inline-flex items-center gap-1.5 border border-paper/30 hover:border-sand text-paper font-mono text-xs px-2.5 py-1.5 rounded transition-all disabled:opacity-50"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> Voir verso
+                              </button>
+                            )}
                             <button
                               onClick={() => setConfirmingApproveId(entry.id)}
                               disabled={approvingId !== null}

@@ -24,6 +24,7 @@ import {
   AdminProject,
 } from '../../../lib/api';
 import { createHotspot } from '../../../lib/catalog/viewer-hotspots';
+import { createBlankView, findViewsMissingImage } from '../../../lib/catalog/block-views';
 import {
   Save,
   Plus,
@@ -192,6 +193,20 @@ export default function AdminCataloguePage() {
   const handleSaveAll = async (): Promise<boolean> => {
     if (!projectId) return false;
     setSaveError(null);
+
+    // Garde-fou UX : une vue ajoutée sans image (imageUrl vide) bloque la
+    // sauvegarde avec un message clair AVANT l'appel réseau. Le serveur reste
+    // le filet de sécurité final, mais ici on évite au dev/à Moussa un 400
+    // technique (« doit être une URL absolue… ») peu explicite.
+    const missingImageViews = findViewsMissingImage(data.views);
+    if (missingImageViews.length > 0) {
+      setSaveError(
+        `Veuillez uploader une image avant d'enregistrer : « ${missingImageViews[0].title} »` +
+          (missingImageViews.length > 1 ? ` (+${missingImageViews.length - 1} autre${missingImageViews.length > 2 ? 's' : ''})` : ''),
+      );
+      return false;
+    }
+
     try {
       await adminUpdateProject(projectId, {
         name: data.name,
@@ -510,16 +525,7 @@ export default function AdminCataloguePage() {
   };
 
   const handleAddNewView = () => {
-    const newId = 'view-' + Date.now();
-    const newView: ComplexView = {
-      id: newId,
-      title: 'Nouvelle Vue HD',
-      subtitle: 'Description courte de la vue',
-      category: 'aerial',
-      imageUrl: '/masterplan-les-terrasses.jpg',
-      description: 'Détails de cette vue d\'ensemble...',
-      hotspots: [],
-    };
+    const newView = createBlankView({ id: 'view-' + Date.now() });
     setData((prev) => (prev ? { ...prev, views: [...prev.views, newView] } : prev));
     setEditingView(newView);
   };
@@ -1348,7 +1354,7 @@ export default function AdminCataloguePage() {
                       />
                     )}
                   </div>
-                  <label className="block text-paper/70 mb-1 mt-3">URL de l'image (Ex: /masterplan-les-terrasses.jpg ou HTTPS)</label>
+                  <label className="block text-paper/70 mb-1 mt-3">URL de l'image — laissez vide et utilisez « Uploader l'image » ci-dessus (ou collez une URL absolue https://…)</label>
                   <input
                     type="text"
                     value={editingView.imageUrl}

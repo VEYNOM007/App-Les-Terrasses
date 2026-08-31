@@ -29,7 +29,15 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new Error(error.message || `Erreur API: ${res.status}`);
   }
 
-  return res.json();
+  // Réponse de succès sans corps (204 No Content, ou 2xx vide) : le handler
+  // backend a retourné `undefined`. `res.json()` sur un corps vide lève
+  // "Unexpected end of JSON input" — on retombe alors sur `undefined` (typé T
+  // ou void) au lieu de planter.
+  try {
+    return await res.json();
+  } catch {
+    return undefined as T;
+  }
 }
 
 // ────────────────────────────────────────────────────────────

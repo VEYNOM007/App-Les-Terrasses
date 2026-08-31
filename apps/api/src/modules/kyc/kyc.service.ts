@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { DocumentType, KycStatus } from '@prisma/client';
+import { DocumentSide, DocumentType, KycStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { NotificationService } from '../notification/notification.service';
@@ -15,6 +15,8 @@ type KycDocument = {
   type: DocumentType;
   fileUrl: string;
   kycOwnerId: string | null;
+  kycBatchId: string | null;
+  side?: DocumentSide | null;
   rejectedAt: Date | null;
 };
 
@@ -23,7 +25,7 @@ type KycDocument = {
  *
  * Transitions d'état : rejet (REJETE + rejectedAt/rejectedReason + job de
  * purge à 15 j) et validation (VALIDE). Un ADMIN ne peut traiter QUE la
- * pièce la plus récente du user (`ensureIsLatestKycDocument`) : une vieille
+ * pièce la plus récente du user (`ensureIsLatestKycBatch`) : une vieille
  * pièce rejetée n'est jamais ré-activable, et une resoumission rend le
  * traitement précédent obsolète (409).
  *
@@ -69,11 +71,22 @@ export class KycService {
       return;
     }
 
-    await this.storage.deleteObject(document.fileUrl);
-    await this.prisma.document.delete({ where: { id: documentId } });
+    // Purge du LOT complet : une pièce à 2 faces (recto + verso) partage le
+    // même `kycBatchId`. On supprime l'objet B2 PUIS la ligne base pour
+    // chaque face — un échec laisse une ligne resoumise au retry BullMQ
+    // (DeleteObject est idempotent).
+    const batchIds = document.kycBatchId ? { kycBatchId: document.kycBatchId } : { id: documentId };
+    const faces = await this.prisma.document.findMany({
+      where: { ...batchIds, type: DocumentType.PIECE_IDENTITE, kycOwnerId: document.kycOwnerId },
+    });
+
+    for (const face of faces) {
+      await this.storage.deleteObject(face.fileUrl);
+      await this.prisma.document.delete({ where: { id: face.id } });
+    }
 
     this.logger.log(
-      `Pièce KYC rejetée ${documentId} purgée après ${KYC_REJECTED_RETENTION_DAYS} jours (objet B2 + base).`,
+      `Pièce KYC rejetée ${documentId} purgée après ${KYC_REJECTED_RETENTION_DAYS} jours (${faces.length} face(s), objets B2 + base).`,
     );
   }
 
@@ -102,6 +115,8 @@ export class KycService {
           select: {
             id: true,
             name: true,
+            side: true,
+            kycBatchId: true,
             createdAt: true,
             rejectedAt: true,
             rejectedReason: true,
@@ -111,11 +126,33 @@ export class KycService {
       orderBy: { updatedAt: 'desc' },
     });
 
-    return users.map(({ kycDocuments, ...user }) => ({
-      ...user,
-      latestDocument: kycDocuments[0] ?? null,
-      documentCount: kycDocuments.length,
-    }));
+    return users.map(({ kycDocuments, ...user }) => {
+      const latest = kycDocuments[0] ?? null;
+      const toPublic = (
+        doc: { id: string; name: string; createdAt: Date; rejectedAt: Date | null; rejectedReason: string | null },
+      ) => ({
+        id: doc.id,
+        name: doc.name,
+        createdAt: doc.createdAt,
+        rejectedAt: doc.rejectedAt,
+        rejectedReason: doc.rejectedReason,
+      });
+
+      let versoDocument: ReturnType<typeof toPublic> | null = null;
+      if (latest?.kycBatchId) {
+        const verso = kycDocuments.find(
+          (d) => d.kycBatchId === latest.kycBatchId && d.side === DocumentSide.VERSO,
+        );
+        if (verso) versoDocument = toPublic(verso);
+      }
+
+      return {
+        ...user,
+        latestDocument: latest ? toPublic(latest) : null,
+        versoDocument,
+        documentCount: kycDocuments.length,
+      };
+    });
   }
 
   /**
@@ -134,7 +171,7 @@ export class KycService {
     if (document.rejectedAt) {
       throw new ConflictException('Document déjà rejeté : validation impossible.');
     }
-    await this.ensureIsLatestKycDocument(document);
+    await this.ensureIsLatestKycBatch(document);
 
     await this.prisma.user.update({
       where: { id: document.kycOwnerId! },
@@ -169,11 +206,15 @@ export class KycService {
     if (document.rejectedAt) {
       throw new ConflictException('Ce document est déjà rejeté.');
     }
-    await this.ensureIsLatestKycDocument(document);
+    await this.ensureIsLatestKycBatch(document);
+
+    // Rejet du LOT complet : toutes les faces d'une même pièce (recto +
+    // verso) sont marquées rejetées ensemble et purgées ensemble à 15 jours.
+    const faces = await this.getKycBatchFaces(document);
 
     await this.prisma.$transaction([
-      this.prisma.document.update({
-        where: { id: documentId },
+      this.prisma.document.updateMany({
+        where: { id: { in: faces.map((f) => f.id) } },
         data: { rejectedAt: new Date(), rejectedReason: trimmedReason },
       }),
       this.prisma.user.update({
@@ -213,20 +254,35 @@ export class KycService {
   }
 
   /**
-   * Seule la pièce la plus récente d'un user est actionnable. Une pièce
-   * rejetée puis dépassée par une resoumission devient inerte (ex : on ne
-   * peut pas re-valider l'ancienne pièce rejetée, ni la re-rejeter).
+   * Seul le lot le plus récent d'un user est actionnable. Un lot rejeté puis
+   * dépassé par une resoumission devient inerte (ex : on ne peut pas
+   * re-valider l'ancien lot rejeté, ni le re-rejeter). Le lot = les faces
+   * partageant le même `kycBatchId` que le document passé.
    */
-  private async ensureIsLatestKycDocument(document: KycDocument): Promise<void> {
+  private async ensureIsLatestKycBatch(document: KycDocument): Promise<void> {
     const latest = await this.prisma.document.findFirst({
       where: { kycOwnerId: document.kycOwnerId!, type: DocumentType.PIECE_IDENTITE },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!latest || latest.id !== document.id) {
+    const latestBatchId = latest?.kycBatchId ?? latest?.id ?? null;
+    const currentBatchId = document.kycBatchId ?? document.id;
+
+    if (!latest || latestBatchId !== currentBatchId) {
       throw new ConflictException(
-        'Une pièce plus récente a été soumise : ce document n\'est plus actionnable.',
+        'Un lot plus récent a été soumis : ce document n\'est plus actionnable.',
       );
     }
+  }
+
+  /**
+   * Toutes les faces du même lot que `document`. Pour les données antérieures
+   * à la migration (sans `kycBatchId`), se limite au document lui-même.
+   */
+  private async getKycBatchFaces(document: KycDocument): Promise<KycDocument[]> {
+    if (!document.kycBatchId) return [document];
+    return this.prisma.document.findMany({
+      where: { kycBatchId: document.kycBatchId, type: DocumentType.PIECE_IDENTITE },
+    });
   }
 }

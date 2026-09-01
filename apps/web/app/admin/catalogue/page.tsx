@@ -558,8 +558,6 @@ export default function AdminCataloguePage() {
           <div className="flex flex-wrap items-center gap-3">
             <a
               href="/catalogue"
-              target="_blank"
-              rel="noopener noreferrer"
               className="bg-ink-card hover:bg-paper/10 border border-paper/20 text-paper font-mono text-xs px-4 py-2.5 rounded-lg inline-flex items-center gap-2 transition-all"
             >
               <Eye className="w-4 h-4 text-sand" /> Aperçu Onglet Catalogue

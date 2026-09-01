@@ -91,8 +91,6 @@ export default function CatalogGrid({ onSelectUnit }: { onSelectUnit?: (typology
             </p>
             <a
               href="/catalogue"
-              target="_blank"
-              rel="noopener noreferrer"
               className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-5 py-3 rounded inline-flex items-center gap-2 shrink-0 transition-all shadow-lg font-bold"
             >
               Ouvrir le Catalogue 3D ↗

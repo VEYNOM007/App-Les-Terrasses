@@ -34,8 +34,6 @@ export default function Hero() {
               </a>
               <a
                 href="/catalogue"
-                target="_blank"
-                rel="noopener noreferrer"
                 className="bg-lagoon hover:bg-lagoon-light text-paper font-mono text-sm px-6 py-3.5 rounded-sm inline-flex items-center gap-2 transition-all shadow-lg hover:-translate-y-0.5"
               >
                 Ouvrir le Catalogue 3D ↗

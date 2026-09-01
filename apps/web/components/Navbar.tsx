@@ -37,7 +37,7 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-6 text-sm font-mono text-paper/80">
           <a href="/#mecanisme" className="hover:text-sand transition-colors">Le mécanisme</a>
           <a href="/#masterplan" className="hover:text-sand transition-colors">Plan de masse</a>
-          <a href="/catalogue" target="_blank" rel="noopener noreferrer" className="hover:text-sand transition-colors flex items-center gap-1 font-bold text-sand">Catalogue 3D ↗</a>
+          <a href="/catalogue" className="hover:text-sand transition-colors flex items-center gap-1 font-bold text-sand">Catalogue 3D ↗</a>
           <a href="/#reserver" className="hover:text-sand transition-colors">Pré-inscription</a>
         </div>
 

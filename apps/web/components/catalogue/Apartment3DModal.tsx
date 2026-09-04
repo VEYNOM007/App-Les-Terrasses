@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { UnitDetailView } from '../../lib/catalog/unit-detail';
+import ImageLightbox from '../ImageLightbox';
 import FinancialSimulator from './FinancialSimulator';
 import {
   X,
@@ -39,6 +40,7 @@ export default function Apartment3DModal({
   const [activeTab, setActiveTab] = useState<ModalTab>('3d');
   const [showOptionModal, setShowOptionModal] = useState<boolean>(false);
   const [optionHeld, setOptionHeld] = useState<boolean>(false);
+  const [photoLightboxOpen, setPhotoLightboxOpen] = useState(false);
 
   if (!isOpen || !unit) return null;
 
@@ -141,7 +143,8 @@ export default function Apartment3DModal({
                     <img
                       src={currentPhoto.url}
                       alt={currentPhoto.altText}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover cursor-zoom-in"
+                      onClick={() => setPhotoLightboxOpen(true)}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-transparent to-transparent pointer-events-none" />
 
@@ -407,6 +410,15 @@ export default function Apartment3DModal({
             )}
           </div>
         </div>
+      )}
+
+      {currentPhoto && (
+        <ImageLightbox
+          src={currentPhoto.url}
+          alt={currentPhoto.altText}
+          isOpen={photoLightboxOpen}
+          onClose={() => setPhotoLightboxOpen(false)}
+        />
       )}
     </div>
   );

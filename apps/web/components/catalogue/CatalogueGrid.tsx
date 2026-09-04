@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Eye, RefreshCw } from 'lucide-react';
+import ImageLightbox from '../ImageLightbox';
 import { fetchTypologies, fetchUnit } from '../../lib/api';
 import {
   buildCards,
@@ -56,6 +57,8 @@ function UnitCardView({
   onOpenUnit: (unitId: string) => void;
   onOpenReservation: (unitId: string) => void;
 }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
   return (
     <div className="bg-ink-card border border-paper/20 rounded-xl overflow-hidden hover:border-sand transition-all flex flex-col justify-between group relative shadow-xl">
       {card.statusBadge && (
@@ -64,7 +67,21 @@ function UnitCardView({
         </span>
       )}
 
-      <CardThumbnail card={card} />
+      <button
+        type="button"
+        onClick={() => card.thumbnailUrl && setLightboxOpen(true)}
+        className="block w-full text-left cursor-pointer"
+      >
+        <CardThumbnail card={card} />
+      </button>
+      {card.thumbnailUrl && (
+        <ImageLightbox
+          src={card.thumbnailUrl}
+          alt={card.name}
+          isOpen={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
 
       <div className="p-5">
         <div className="text-[11px] font-mono text-sand uppercase mb-1">

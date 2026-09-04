@@ -143,3 +143,48 @@ jobs:
           outputs: type=cacheonly
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Non-régression responsivité : aucune page publique ne doit déborder
+  # horizontalement (scrollWidth == innerWidth). Tourne contre le build de
+  # prod local via un serveur local (jamais la prod en ligne). #bug navbar.
+  responsive-e2e:
+    name: Responsive overflow (serveur local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://api.immo-les-terrasse.com
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @residence-catalog/database exec prisma generate
+
+      - name: Build web
+        run: pnpm --filter web build
+
+      - name: Install Python + Playwright (chromium)
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Starts le serveur local puis lance le test d'overflow
+        run: |
+          nohup pnpm --filter web exec next start -p 3000 > /tmp/web.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:3000/login >/dev/null 2>&1 && break
+            sleep 2
+          done
+          python scripts/responsive-overflow.py --base-url http://127.0.0.1:3000

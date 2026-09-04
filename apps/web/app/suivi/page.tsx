@@ -41,6 +41,7 @@ import {
   changePassword,
   fetchPortalKyc,
   uploadKyc,
+  fetchTypologies,
   PortalDashboard,
   PortalDocument,
   PaymentScheduleResponse,
@@ -162,6 +163,8 @@ export default function SuiviAcquereur() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
+  const [hasAvailableUnits, setHasAvailableUnits] = useState(true);
+
   const activeReservations = useMemo(
     () => dashboards.filter((d) => ['EN_ATTENTE', 'CONFIRMEE', 'LIVREE'].includes(d.status)),
     [dashboards],
@@ -177,6 +180,17 @@ export default function SuiviAcquereur() {
       router.replace('/login?redirect=/suivi');
     }
   }, [isLoading, user, router]);
+
+  useEffect(() => {
+    fetchTypologies()
+      .then((groups) => {
+        const totalAvailable = groups.reduce((sum, g) => sum + g.availableUnits, 0);
+        setHasAvailableUnits(totalAvailable > 0);
+      })
+      .catch(() => {
+        setHasAvailableUnits(true);
+      });
+  }, []);
 
   const load = useCallback(async () => {
     setLoadingData(true);
@@ -459,10 +473,10 @@ export default function SuiviAcquereur() {
               unité pour activer votre suivi d'échéancier et de chantier.
             </p>
             <a
-              href="/#reserver"
+              href={hasAvailableUnits ? '/catalogue' : '/#reserver'}
               className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-6 py-3 rounded transition-all font-semibold"
             >
-              Parcourir le catalogue →
+              {hasAvailableUnits ? 'Voir le catalogue' : 'Pré-inscrire son intérêt'} →
             </a>
           </div>
         ) : (
@@ -481,10 +495,10 @@ export default function SuiviAcquereur() {
                     : "Vous n'avez pas encore réservé de logement. Parcourez le catalogue et réservez votre unité pour activer votre suivi d'échéancier et de chantier."}
                 </p>
                 <a
-                  href="/#reserver"
+                  href={hasAvailableUnits ? '/catalogue' : '/#reserver'}
                   className="inline-flex items-center gap-2 bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-6 py-3 rounded transition-all font-semibold"
                 >
-                  Parcourir le catalogue →
+                  {hasAvailableUnits ? 'Voir le catalogue' : 'Pré-inscrire son intérêt'} →
                 </a>
               </div>
             )}

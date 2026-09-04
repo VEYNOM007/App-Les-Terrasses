@@ -418,6 +418,8 @@ export default function Apartment3DModal({
           alt={currentPhoto.altText}
           isOpen={photoLightboxOpen}
           onClose={() => setPhotoLightboxOpen(false)}
+          gallery={photos.map((p) => ({ src: p.url, alt: p.altText }))}
+          initialIndex={safeIdx}
         />
       )}
     </div>

@@ -23,6 +23,7 @@ import {
   UnitType,
   AdminProject,
 } from '../../../lib/api';
+import { unitStatusMeta } from '../../../lib/catalog/unit-detail';
 import { createHotspot } from '../../../lib/catalog/viewer-hotspots';
 import { createBlankView, findViewsMissingImage } from '../../../lib/catalog/block-views';
 import {
@@ -791,6 +792,22 @@ export default function AdminCataloguePage() {
 
           {!loadingUnits && !unitsError && units.length > 0 && (
             <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {(['DISPONIBLE', 'RESERVE', 'VENDU', 'LIVRE', 'ARCHIVE'] as UnitStatus[]).map((s) => {
+                  const count = units.filter((u) => u.status === s).length;
+                  if (count === 0) return null;
+                  const meta = unitStatusMeta(s);
+                  return (
+                    <span
+                      key={s}
+                      className={`inline-flex items-center gap-1.5 border px-2.5 py-1 rounded font-mono text-[10px] font-bold ${meta.color} ${meta.bgColor} ${meta.borderColor}`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${meta.bgColor} border ${meta.borderColor}`} />
+                      {count} {meta.label}{count > 1 ? 's' : ''}
+                    </span>
+                  );
+                })}
+              </div>
               <div className="max-h-56 overflow-y-auto rounded-md border border-paper/15">
                 <table className="w-full text-left font-mono text-xs">
                   <thead className="bg-ink sticky top-0">
@@ -820,9 +837,14 @@ export default function AdminCataloguePage() {
                           {Number(u.price).toLocaleString('fr-FR')}
                         </td>
                         <td className="px-3 py-2">
-                          <span className="bg-paper/10 text-paper/80 border border-paper/20 px-2 py-0.5 rounded">
-                            {u.status}
-                          </span>
+                          {(() => {
+                            const sm = unitStatusMeta(u.status);
+                            return (
+                              <span className={`border px-2 py-0.5 rounded font-bold ${sm.color} ${sm.bgColor} ${sm.borderColor}`}>
+                                {sm.label}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-3 py-2 text-paper/80">{u.media.length}</td>
                         <td className="px-3 py-2">

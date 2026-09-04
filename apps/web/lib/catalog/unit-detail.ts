@@ -48,6 +48,53 @@ export function unitStatusLabel(status: UnitStatus): string {
   }
 }
 
+export interface UnitStatusMeta {
+  label: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}
+
+export function unitStatusMeta(status: UnitStatus): UnitStatusMeta {
+  switch (status) {
+    case 'DISPONIBLE':
+      return {
+        label: 'Disponible',
+        color: 'text-lagoon-light',
+        bgColor: 'bg-lagoon/15',
+        borderColor: 'border-lagoon/40',
+      };
+    case 'RESERVE':
+      return {
+        label: 'Réservé',
+        color: 'text-sand',
+        bgColor: 'bg-sand/15',
+        borderColor: 'border-sand/40',
+      };
+    case 'VENDU':
+      return {
+        label: 'Vendu',
+        color: 'text-laterite-light',
+        bgColor: 'bg-laterite/15',
+        borderColor: 'border-laterite/40',
+      };
+    case 'LIVRE':
+      return {
+        label: 'Livré',
+        color: 'text-lagoon',
+        bgColor: 'bg-lagoon/10',
+        borderColor: 'border-lagoon/30',
+      };
+    case 'ARCHIVE':
+      return {
+        label: 'Archivé',
+        color: 'text-paper/50',
+        bgColor: 'bg-paper/5',
+        borderColor: 'border-paper/20',
+      };
+  }
+}
+
 /**
  * Libellé honnête d'un média, aligné sur la hiérarchie de confiance :
  * un visuel marketing (PHOTO) est une illustration, jamais une photo réelle ;

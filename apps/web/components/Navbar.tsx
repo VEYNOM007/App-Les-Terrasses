@@ -25,7 +25,8 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <a href="/" className="font-serif text-xl font-semibold tracking-tight text-paper hover:opacity-90">
-            Terrasses<span className="text-laterite-light">·</span>Baguida
+            <span className="sm:hidden">TB</span>
+            <span className="hidden sm:inline">Terrasses<span className="text-laterite-light">·</span>Baguida</span>
           </a>
           {isStandalone && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-mono bg-lagoon/20 text-lagoon-light border border-lagoon/40 rounded">
@@ -89,9 +90,10 @@ export default function Navbar() {
               </a>
               <a
                 href="#reserver"
-                className="font-mono text-xs border border-paper/30 px-3 sm:px-4 py-2.5 rounded-sm hover:bg-laterite hover:border-laterite text-paper transition-all"
+                className="font-mono text-xs border border-paper/30 px-3 sm:px-4 py-2.5 rounded-sm hover:bg-laterite hover:border-laterite text-paper transition-all whitespace-nowrap"
               >
-                Réserver ma place →
+                <span className="sm:hidden">Réserver</span>
+                <span className="hidden sm:inline">Réserver ma place →</span>
               </a>
             </div>
           )}

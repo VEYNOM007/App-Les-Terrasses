@@ -1,4 +1,5 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationExceptionFilter } from './common/filters/validation-exception.filter';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
@@ -45,6 +46,11 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Filet de sécurité : transforme les erreurs de validation (class-validator,
+  // message en tableau) en messages français lisibles. Les erreurs métier
+  // (message en string, déjà rédigées pour l'utilisateur) restent intactes.
+  app.useGlobalFilters(new ValidationExceptionFilter());
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);

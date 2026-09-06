@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Smartphone, CheckCircle, User, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuth } from './AuthProvider';
+import Brand from './Brand';
 
 export default function Navbar() {
   const [isStandalone, setIsStandalone] = useState(false);
@@ -24,9 +25,8 @@ export default function Navbar() {
     <nav className="sticky top-0 z-50 bg-ink/90 backdrop-blur-md border-b border-paper/15">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <a href="/" className="font-serif text-xl font-semibold tracking-tight text-paper hover:opacity-90">
-            <span className="sm:hidden">TB</span>
-            <span className="hidden sm:inline">Terrasses<span className="text-laterite-light">·</span>Baguida</span>
+          <a href="/" className="hover:opacity-90 transition-opacity">
+            <Brand compact />
           </a>
           {isStandalone && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-mono bg-lagoon/20 text-lagoon-light border border-lagoon/40 rounded">

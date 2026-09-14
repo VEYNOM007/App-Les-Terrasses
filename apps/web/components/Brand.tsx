@@ -27,8 +27,14 @@ export default function Brand({ compact = false, wordmarkClassName = 'text-xl' }
   return (
     <span className="inline-flex flex-col items-start gap-1.5 leading-none">
       <span className="inline-flex items-center gap-2.5">
-        <TerraceIcon className="w-6 h-6 text-laterite-light shrink-0" />
-        <span className={`font-serif font-semibold tracking-tight text-paper leading-tight ${wordmarkClassName}`}>
+        <TerraceIcon
+          className={`text-laterite-light shrink-0 ${compact ? 'w-5 h-5 sm:w-6 sm:h-6' : 'w-6 h-6'}`}
+        />
+        <span
+          className={`font-serif font-semibold tracking-tight text-paper leading-tight whitespace-nowrap ${
+            compact ? 'text-lg sm:text-xl' : wordmarkClassName
+          }`}
+        >
           <span className={compact ? 'sm:hidden' : 'hidden'}>Immo</span>
           <span className={compact ? 'hidden sm:inline' : 'inline'}>
             Immo<span className="text-laterite-light">·</span>Les Terrasses

@@ -5,7 +5,7 @@ import { WifiOff, RefreshCw, Home } from 'lucide-react';
 // Elle est precachee par /public/sw.js pour servir de fallback hors-ligne.
 
 export const metadata = {
-  title: 'Hors-ligne — Terrasses de Baguida',
+  title: 'Hors-ligne — Immo Les Terrasses',
   robots: { index: false, follow: false },
 };
 
@@ -42,7 +42,7 @@ export default function OfflinePage() {
         </div>
 
         <p className="font-mono text-[11px] text-paper/45 pt-6 border-t border-paper/10">
-          Terrasses de Baguida — la reservation en ligne reste disponible
+          Immo Les Terrasses — la reservation en ligne reste disponible
           des que la connexion revient.
         </p>
       </div>

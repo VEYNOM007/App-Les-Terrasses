@@ -5,14 +5,14 @@ import PWARegister from '../components/PWARegister';
 import { AuthProvider } from '../components/AuthProvider';
 
 export const metadata: Metadata = {
-  title: 'Les Terrasses de Baguda — Réservez avant le lancement',
+  title: 'Immo Les Terrasses — Réservez avant le lancement',
   description: 'Studios, T2, T3 et T5 en résidence fermée à Baguida, Lomé (Togo). Réservez votre logement financé avant construction.',
   manifest: '/manifest.json',
-  applicationName: 'Terrasses de Baguda',
+  applicationName: 'Immo Les Terrasses',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Terrasses Baguida',
+    title: 'Immo Les Terrasses',
   },
   formatDetection: {
     telephone: false,
@@ -28,9 +28,9 @@ export const metadata: Metadata = {
     shortcut: ['/favicon.svg'],
   },
   openGraph: {
-    title: 'Les Terrasses de Baguda — Résidence Catalog PWA',
+    title: 'Immo Les Terrasses — Résidence Catalog PWA',
     description: 'Logements en résidence fermée à Lomé, Togo. Réservez en ligne avec garantie de pré-financement.',
-    siteName: 'Terrasses de Baguda',
+    siteName: 'Immo Les Terrasses',
     type: 'website',
     locale: 'fr_FR',
   },

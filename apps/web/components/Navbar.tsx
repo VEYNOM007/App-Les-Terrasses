@@ -1,21 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Smartphone, CheckCircle, User, LogOut, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, LogOut, ShieldCheck } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import Brand from './Brand';
 
 export default function Navbar() {
-  const [isStandalone, setIsStandalone] = useState(false);
   const { user, isLoading, logout } = useAuth();
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const standalone = (window.navigator as Navigator & { standalone?: boolean }).standalone;
-      const isPWA = window.matchMedia('(display-mode: standalone)').matches || (standalone ?? false);
-      setIsStandalone(!!isPWA);
-    }
-  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -28,11 +19,6 @@ export default function Navbar() {
           <a href="/" className="hover:opacity-90 transition-opacity">
             <Brand compact />
           </a>
-          {isStandalone && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-mono bg-lagoon/20 text-lagoon-light border border-lagoon/40 rounded">
-              <Smartphone className="w-3 h-3" /> PWA Active
-            </span>
-          )}
         </div>
 
         <div className="hidden md:flex items-center gap-6 text-sm font-mono text-paper/80">

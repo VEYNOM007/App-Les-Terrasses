@@ -131,7 +131,7 @@ export default function PWARegister() {
             </div>
             <div className="flex-1 space-y-2">
               <div className="font-serif text-sm font-semibold text-paper">
-                Installer Terrasses de Baguida
+                Installer Immo Les Terrasses
               </div>
               <div className="font-mono text-[11px] text-paper/70">
                 Acces direct depuis votre ecran d'accueil, fonctionnement hors-ligne.

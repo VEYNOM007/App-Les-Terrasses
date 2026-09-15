@@ -1,5 +1,5 @@
 /*
- * ServiceWorker — Terrasses de Baguida
+ * ServiceWorker — Immo Les Terrasses
  *
  * Strategies:
  *   - precache: shell minimal + offline fallback
@@ -11,12 +11,12 @@
  * Versionning: bump CACHE_VERSION pour forcer la migration.
  */
 
-const CACHE_VERSION = 'v2';
-const PRECACHE = `terrasses-precache-${CACHE_VERSION}`;
-const RUNTIME_HTML = `terrasses-html-${CACHE_VERSION}`;
-const RUNTIME_ASSET = `terrasses-asset-${CACHE_VERSION}`;
-const RUNTIME_FONT = `terrasses-font-${CACHE_VERSION}`;
-const RUNTIME_API = `terrasses-api-${CACHE_VERSION}`;
+const CACHE_VERSION = 'v3';
+const PRECACHE = `immo-les-terrasses-precache-${CACHE_VERSION}`;
+const RUNTIME_HTML = `immo-les-terrasses-html-${CACHE_VERSION}`;
+const RUNTIME_ASSET = `immo-les-terrasses-asset-${CACHE_VERSION}`;
+const RUNTIME_FONT = `immo-les-terrasses-font-${CACHE_VERSION}`;
+const RUNTIME_API = `immo-les-terrasses-api-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
   '/',

@@ -35,10 +35,7 @@ export default function Brand({ compact = false, wordmarkClassName = 'text-xl' }
             compact ? 'text-lg sm:text-xl' : wordmarkClassName
           }`}
         >
-          <span className={compact ? 'sm:hidden' : 'hidden'}>Immo</span>
-          <span className={compact ? 'hidden sm:inline' : 'inline'}>
-            Immo<span className="text-laterite-light">·</span>Les Terrasses
-          </span>
+          Immo<span className="text-laterite-light">·</span>Les Terrasses
         </span>
       </span>
       {!compact && (

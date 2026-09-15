@@ -14,8 +14,8 @@ export default function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 bg-ink/90 backdrop-blur-md border-b border-paper/15">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 md:h-16 flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-0 py-3 md:py-0">
+        <div className="flex items-center justify-center md:justify-start">
           <a href="/" className="hover:opacity-90 transition-opacity">
             <Brand compact />
           </a>
@@ -28,7 +28,7 @@ export default function Navbar() {
           <a href="/#reserver" className="hover:text-sand transition-colors">Pré-inscription</a>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center justify-center md:justify-end gap-2 sm:gap-3">
           {isLoading ? (
             <span className="font-mono text-xs text-paper/50">…</span>
           ) : user ? (

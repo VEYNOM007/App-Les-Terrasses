@@ -96,10 +96,10 @@ async function main() {
 
   // 1. Utilisateurs démo
   await prisma.user.upsert({
-    where: { email: 'admin@terrasses-baguida.tg' },
+    where: { email: 'admin@immo-les-terrasse.com' },
     update: {},
     create: {
-      email: 'admin@terrasses-baguida.tg',
+      email: 'admin@immo-les-terrasse.com',
       phone: '+22890000001',
       fullName: 'Administrateur Promotion',
       passwordHash: '$2b$10$e8K7b...demo',

@@ -1,5 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PDFDocument } from 'pdf-lib';
+import {
+  PDFDocument,
+  PDFRawStream,
+  PDFArray,
+  PDFRef,
+  decodePDFRawStream,
+} from 'pdf-lib';
 import {
   ContractPdfService,
   signatureBandLayout,
@@ -21,6 +27,57 @@ const createMockStorage = () => ({
   getSignedUrl: jest.fn(),
   deleteObject: jest.fn(),
 });
+
+/**
+ * Extrait le texte affiché d'un PDF généré par pdf-lib, en décodant le flux de
+ * contenu de la page 0 (résolution des refs, décompression FlateDecode, puis
+ * décodage des opérandes texte hex `<...>` et littéraux `(...)`). Vérifie au
+ * niveau du vrai document rendu, pas du code source.
+ */
+function extractPageText(document: PDFDocument, pageIndex: number): string {
+  const contents = document.getPage(pageIndex).node.Contents();
+
+  const resolved: PDFRawStream[] = [];
+  if (contents instanceof PDFArray) {
+    for (const item of contents.asArray()) {
+      if (item instanceof PDFRef) {
+        const target = document.context.lookup(item);
+        if (target instanceof PDFRawStream) resolved.push(target);
+      } else if (item instanceof PDFRawStream) {
+        resolved.push(item);
+      }
+    }
+  } else if (contents instanceof PDFRawStream) {
+    resolved.push(contents);
+  }
+
+  const rawStream = resolved.map((stream) => {
+    const decoded = decodePDFRawStream(stream).decode();
+    return Buffer.from(decoded.buffer, decoded.byteOffset, decoded.byteLength);
+  });
+  const streamText = Buffer.concat(rawStream).toString('latin1');
+
+  const decodedStrings: string[] = [];
+  // Opérandes hex : <494D4D4F...> (pdf-lib encode les chaînes en hex)
+  const hexRe = /<([0-9a-fA-F]+)>/g;
+  let hexMatch: RegExpExecArray | null;
+  while ((hexMatch = hexRe.exec(streamText)) !== null) {
+    const bytes = hexMatch[1].match(/.{2}/g) ?? [];
+    decodedStrings.push(bytes.map((byte) => String.fromCharCode(parseInt(byte, 16))).join(''));
+  }
+  // Opérandes littéraux : (texte) avec échappements \n, \\(, \\), \\\\, \\NNN
+  const literalRe = /\(((?:[^()\\]|\\.)*)\)/g;
+  let literalMatch: RegExpExecArray | null;
+  while ((literalMatch = literalRe.exec(streamText)) !== null) {
+    const unescaped = literalMatch[1].replace(/\\([nrtbf()\\])/g, (_m, ch: string) => {
+      const map: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f' };
+      return map[ch] ?? ch;
+    });
+    decodedStrings.push(unescaped);
+  }
+
+  return decodedStrings.join('\n');
+}
 
 describe('ContractPdfService', () => {
   let service: ContractPdfService;
@@ -52,6 +109,25 @@ describe('ContractPdfService', () => {
     expect(body.subarray(0, 5).toString()).toBe('%PDF-');
     expect(body.length).toBeGreaterThan(500);
     expect(contentType).toBe('application/pdf');
+  });
+
+  it('affiche l\'en-tête de marque « IMMO LES TERRASSES » dans le flux PDF (rebrand)', async () => {
+    storage.putObject.mockResolvedValue(undefined);
+
+    await service.generate({
+      title: 'Contrat de test',
+      reference: 'contract-test-1',
+      sections: [
+        { heading: 'Parties', lines: ['Acheteur : Kofi Mensah', 'Projet : Résidence Test'] },
+      ],
+    });
+
+    const [, body] = storage.putObject.mock.calls[0];
+    const document = await PDFDocument.load(body);
+    const pageText = extractPageText(document, 0);
+
+    expect(pageText).toContain('IMMO LES TERRASSES');
+    expect(pageText).not.toContain('TERRASSES DE BAGUIDA');
   });
 
   it('contresigne un PDF existant : lit l\'original + PNG depuis B2, dépose la copie signée', async () => {

@@ -147,7 +147,7 @@ export class ContractPdfService {
       cursorY -= LINE_HEIGHT;
     };
 
-    page.drawText('TERRASSES DE BAGUIDA', {
+    page.drawText('IMMO LES TERRASSES', {
       x: MARGIN,
       y: cursorY,
       size: 10,

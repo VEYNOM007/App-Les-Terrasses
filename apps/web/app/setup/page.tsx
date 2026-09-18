@@ -79,7 +79,7 @@ function SetupForm() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@terrasses-baguida.tg"
+            placeholder="admin@immo-les-terrasse.com"
             className="w-full bg-paper/5 border border-paper/20 rounded p-2.5 text-sm text-paper font-sans focus:border-laterite-light outline-none"
           />
         </div>

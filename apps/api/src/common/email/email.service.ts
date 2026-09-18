@@ -8,7 +8,7 @@ export interface EmailSendResult {
 }
 
 const RESET_PASSWORD_ROUTE = '/reset-password';
-const RESET_PASSWORD_SUBJECT = 'Réinitialisation de votre mot de passe — Terrasses de Baguida';
+const RESET_PASSWORD_SUBJECT = 'Réinitialisation de votre mot de passe — Immo Les Terrasses';
 
 /**
  * Expéditeur d'emails générique (SMTP), indépendant du fournisseur :
@@ -82,7 +82,7 @@ export class EmailService {
       'Vous avez demandé la réinitialisation de votre mot de passe.\n' +
       `Cliquez sur le lien suivant pour choisir un nouveau mot de passe (valable 1 heure) :\n\n${resetUrl}\n\n` +
       "Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.\n\n" +
-      '— Terrasses de Baguida';
+      '— Immo Les Terrasses';
 
     const html =
       '<p>Bonjour,</p>\n' +
@@ -90,7 +90,7 @@ export class EmailService {
       `<p>Cliquez sur le lien suivant pour choisir un nouveau mot de passe (valable 1 heure) :<br/>\n` +
       `<a href="${resetUrl}">${resetUrl}</a></p>\n` +
       "<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>\n" +
-      '<p>— Terrasses de Baguida</p>';
+      '<p>— Immo Les Terrasses</p>';
 
     await this.getTransporter().sendMail({
       from: process.env.SMTP_FROM ?? 'no-reply@localhost',

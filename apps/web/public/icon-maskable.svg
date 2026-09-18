@@ -1,14 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Icone maskable : safe zone = 80% centre (O-blanc)
-       Tout le contenu doit tenir dans [51,461]x[51,461].
-       Le fond remplit toute la vue (couleur unie). -->
+  <!-- Icone PWA purpose "maskable" : le fond ink remplit TOUTE la vue (une
+       partie est rognee en cercle/squircle selon le launcher), le pictogramme
+       doit tenir dans le cercle de diametre 80 % (rayon 204.8 sur 512).
+       Picto 48x36 x scale 6.66667 -> largeur 320, hauteur 240, centre en 256.
+       Coin le plus eloigne (extreme bas-droit, r ~196) < 204.8 : aucune
+       rognure sur les launchers les plus agressifs. -->
   <rect width="512" height="512" fill="#152238"/>
 
-  <!-- Cadre terrasse - safe zone -->
-  <polygon points="96,200 416,200 416,360 96,360" fill="none" stroke="#D3714D" stroke-width="12"/>
-  <polygon points="120,220 392,220 392,340 120,340" fill="#1d3050" stroke="#D8C9A3" stroke-width="3"/>
-
-  <!-- Monogramme TB - centre strict -->
-  <text x="256" y="290" font-family="Fraunces, Georgia, serif" font-size="100" font-weight="700"
-        fill="#D3714D" text-anchor="middle" dominant-baseline="middle">TB</text>
+  <g transform="translate(256 256) scale(6.66667) translate(-24 -18)">
+    <rect x="0" y="2" width="48" height="9" rx="1.5" fill="#D3714D"/>
+    <rect x="13" y="14" width="35" height="9" rx="1.5" fill="#D3714D"/>
+    <rect x="26" y="26" width="22" height="9" rx="1.5" fill="#D3714D"/>
+  </g>
 </svg>

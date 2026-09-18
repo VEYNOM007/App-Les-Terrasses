@@ -102,7 +102,7 @@ describe('EmailService', () => {
       expect(mail).toMatchObject({
         from: 'no-reply@example.tg',
         to: 'kofi@test.tg',
-        subject: 'Réinitialisation de votre mot de passe — Terrasses de Baguida',
+        subject: 'Réinitialisation de votre mot de passe — Immo Les Terrasses',
       });
       expect(mail.text).toContain('https://app.example.tg/reset-password?token=raw-token-123');
       expect(mail.html).toContain('https://app.example.tg/reset-password?token=raw-token-123');

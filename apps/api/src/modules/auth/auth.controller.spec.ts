@@ -4,7 +4,7 @@ import { getCookieOptions } from './auth.controller';
  * Tests unitaires — options des cookies de session (auth.controller).
  *
  * Le `domain` n'est posé que si COOKIE_DOMAIN est défini (production
- * multi-sous-domaines : api-baguida.<domaine> -> baguida.<domaine>).
+ * multi-sous-domaines : api.<domaine-racine> -> <domaine-racine>).
  * Absent en dev local pour rester fonctionnel sur localhost.
  */
 describe('getCookieOptions', () => {

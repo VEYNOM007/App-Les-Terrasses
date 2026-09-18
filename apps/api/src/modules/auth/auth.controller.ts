@@ -33,7 +33,7 @@ export const REFRESH_TOKEN_COOKIE = 'refresh_token';
 /**
  * Options des cookies de session. Le `domain` n'est posé que si
  * COOKIE_DOMAIN est défini (production multi-sous-domaines : le cookie
- * posé par api-baguida.<domaine> doit être partagé avec baguida.<domaine>).
+ * posé par api.<domaine-racine> doit être partagé avec <domaine-racine>).
  * Les deux sous-domaines partagent le même registrable domain : c'est du
  * cross-origin mais same-site, donc SameSite=Lax suffit — pas de passage à
  * None (qui imposerait Secure absolu et affaiblirait la protection anti-CSRF).

@@ -1,10 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
-  <!-- Apple touch icon : pas de transparence, fond plein, padding generux -->
+  <!-- Apple touch icon : fond plein opaque (pas de transparence — iOS n'en
+       accepte pas et arrondit lui-meme les coins). Pictogramme escalier
+       48x36 x scale 2.5 -> 120x90, centre en (90,90), padding 30 partout. -->
   <rect width="180" height="180" fill="#152238"/>
 
-  <polygon points="24,60 156,60 156,135 24,135" fill="none" stroke="#D3714D" stroke-width="5"/>
-  <polygon points="36,72 144,72 144,123 36,123" fill="#1d3050" stroke="#D8C9A3" stroke-width="2"/>
-
-  <text x="90" y="103" font-family="Fraunces, Georgia, serif" font-size="42" font-weight="700"
-        fill="#D3714D" text-anchor="middle" dominant-baseline="middle">TB</text>
+  <g transform="translate(90 90) scale(2.5) translate(-24 -18)">
+    <rect x="0" y="2" width="48" height="9" rx="1.5" fill="#D3714D"/>
+    <rect x="13" y="14" width="35" height="9" rx="1.5" fill="#D3714D"/>
+    <rect x="26" y="26" width="22" height="9" rx="1.5" fill="#D3714D"/>
+  </g>
 </svg>

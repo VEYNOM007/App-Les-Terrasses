@@ -11,7 +11,7 @@
  * Versionning: bump CACHE_VERSION pour forcer la migration.
  */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const PRECACHE = `immo-les-terrasses-precache-${CACHE_VERSION}`;
 const RUNTIME_HTML = `immo-les-terrasses-html-${CACHE_VERSION}`;
 const RUNTIME_ASSET = `immo-les-terrasses-asset-${CACHE_VERSION}`;

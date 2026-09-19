@@ -11,7 +11,9 @@ import {
   ChevronRight,
   ShieldCheck,
   LayoutGrid,
+  Maximize,
 } from 'lucide-react';
+import ImageLightbox from '../ImageLightbox';
 
 interface ComplexOverviewViewerProps {
   views: ComplexView[];
@@ -40,6 +42,8 @@ function AerialPhotoView({
   onSelectBlock: (blockId: string) => void;
   activeBlockIds: string[];
 }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
   return (
     <div className="relative w-full bg-ink-dark flex flex-col items-center p-3 sm:p-6">
       <div className="relative w-full max-w-5xl">
@@ -49,6 +53,16 @@ function AerialPhotoView({
           className="w-full h-auto object-contain rounded-xl shadow-2xl"
           style={{ maxHeight: '75vh' }}
         />
+
+        {/* Fullscreen toggle button */}
+        <button
+          onClick={() => setLightboxOpen(true)}
+          className="absolute top-3 right-3 z-30 p-2.5 rounded-full bg-ink/80 hover:bg-lagoon text-paper border border-paper/30 hover:border-paper transition-all shadow-2xl"
+          aria-label="Agrandir la vue en plein écran"
+          title="Agrandir"
+        >
+          <Maximize className="w-4.5 h-4.5" />
+        </button>
 
         {/* Hotspot overlay */}
         {view.hotspots && view.hotspots.length > 0 && (
@@ -116,6 +130,13 @@ function AerialPhotoView({
            <ShieldCheck className="w-3.5 h-3.5" /> {titleDeed}
         </span>
       </div>
+
+      <ImageLightbox
+        src={view.imageUrl}
+        alt={view.title}
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+      />
     </div>
   );
 }

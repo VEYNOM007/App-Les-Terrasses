@@ -6,6 +6,7 @@ import { LogIn, AlertTriangle, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import { useAuth } from '../../components/AuthProvider';
+import { isAdminPath, safeRedirect } from '../../lib/safe-redirect';
 
 function LoginForm() {
   const router = useRouter();
@@ -17,6 +18,9 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const redirect = safeRedirect(searchParams.get('redirect'));
+  const isAdminRedirect = isAdminPath(redirect);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -24,9 +28,19 @@ function LoginForm() {
 
     try {
       const logged = await login(email, password);
-      const redirect = searchParams.get('redirect');
-      if (redirect && redirect.startsWith('/')) {
-        router.push(redirect);
+      const redirectTo = safeRedirect(searchParams.get('redirect'));
+
+      // Un acheteur qui visait l'administration doit le savoir tout de suite,
+      // plutot d'etre renvoye silencieusement vers son suivi.
+      if (isAdminPath(redirectTo) && logged.role !== 'ADMIN') {
+        setError(
+          'Ce compte ne dispose pas des droits administrateur. Utilisez un compte promoteur pour accéder à cet espace.',
+        );
+        return;
+      }
+
+      if (redirectTo) {
+        router.push(redirectTo);
       } else {
         router.push(logged.role === 'ADMIN' ? '/admin' : '/suivi');
       }
@@ -41,12 +55,14 @@ function LoginForm() {
     <div className="bg-ink-card border border-paper/30 rounded-lg max-w-md w-full p-6 sm:p-8 relative shadow-2xl">
       <div className="flex items-center gap-2 text-xs font-mono text-sand mb-1">
         <ShieldCheck className="w-4 h-4 text-lagoon-light" />
-        <span>ESPACE ACQUÉREUR SÉCURISÉ</span>
+        <span>{isAdminRedirect ? 'ESPACE PROMOTEUR SÉCURISÉ' : 'ESPACE ACQUÉREUR SÉCURISÉ'}</span>
       </div>
 
       <h1 className="font-serif text-2xl font-semibold text-paper mb-2">Connexion</h1>
       <p className="text-xs text-paper/70 font-mono mb-6">
-        Accédez à votre suivi de logement et à votre échéancier de paiement.
+        {isAdminRedirect
+          ? 'Accédez à l’administration du projet Les Terrasses de Baguida.'
+          : 'Accédez à votre suivi de logement et à votre échéancier de paiement.'}
       </p>
 
       {error && (
@@ -114,12 +130,22 @@ function LoginForm() {
         </button>
       </form>
 
-      <p className="text-xs text-paper/60 font-mono mt-5 text-center">
-        Pas encore de compte ?{' '}
-        <a href="/register" className="text-lagoon-light hover:underline">
-          Créer un compte
-        </a>
-      </p>
+      {isAdminRedirect ? (
+        <p className="mt-5 text-center font-mono text-xs text-paper/50">
+          Accès réservé au promoteur. Retour au{' '}
+          <a href="/" className="text-lagoon-light hover:underline">
+            site public
+          </a>
+          .
+        </p>
+      ) : (
+        <p className="mt-5 text-center font-mono text-xs text-paper/60">
+          Pas encore de compte ?{' '}
+          <a href="/register" className="text-lagoon-light hover:underline">
+            Créer un compte
+          </a>
+        </p>
+      )}
     </div>
   );
 }

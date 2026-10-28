@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import React from 'react';
 import PWARegister from '../components/PWARegister';
+import SourceCapture from '../components/SourceCapture';
 import { AuthProvider } from '../components/AuthProvider';
 
 export const metadata: Metadata = {
@@ -63,6 +64,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
       </head>
       <body className="bg-cream text-body font-sans antialiased">
+        <SourceCapture />
         <AuthProvider>
           {children}
         </AuthProvider>

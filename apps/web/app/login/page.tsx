@@ -17,6 +17,9 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const redirect = searchParams.get('redirect');
+  const isAdminRedirect = Boolean(redirect && redirect.startsWith('/admin'));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -24,9 +27,9 @@ function LoginForm() {
 
     try {
       const logged = await login(email, password);
-      const redirect = searchParams.get('redirect');
-      if (redirect && redirect.startsWith('/')) {
-        router.push(redirect);
+      const redirectTo = searchParams.get('redirect');
+      if (redirectTo && redirectTo.startsWith('/')) {
+        router.push(redirectTo);
       } else {
         router.push(logged.role === 'ADMIN' ? '/admin' : '/suivi');
       }
@@ -41,12 +44,14 @@ function LoginForm() {
     <div className="bg-ink-card border border-paper/30 rounded-lg max-w-md w-full p-6 sm:p-8 relative shadow-2xl">
       <div className="flex items-center gap-2 text-xs font-mono text-sand mb-1">
         <ShieldCheck className="w-4 h-4 text-lagoon-light" />
-        <span>ESPACE ACQUÉREUR SÉCURISÉ</span>
+        <span>{isAdminRedirect ? 'ESPACE PROMOTEUR SÉCURISÉ' : 'ESPACE ACQUÉREUR SÉCURISÉ'}</span>
       </div>
 
       <h1 className="font-serif text-2xl font-semibold text-paper mb-2">Connexion</h1>
       <p className="text-xs text-paper/70 font-mono mb-6">
-        Accédez à votre suivi de logement et à votre échéancier de paiement.
+        {isAdminRedirect
+          ? 'Accédez à l’administration du projet Les Terrasses de Baguida.'
+          : 'Accédez à votre suivi de logement et à votre échéancier de paiement.'}
       </p>
 
       {error && (

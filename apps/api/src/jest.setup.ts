@@ -11,3 +11,8 @@ process.env.DATABASE_URL_TEST =
   'postgresql://postgres:postgres@localhost:5432/residence_catalog_test?schema=public';
 process.env.DATABASE_URL = process.env.DATABASE_URL_TEST;
 process.env.REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
+
+// Les suites historiques testent le code de vente : on désactive le mode
+// étude de marché dans les tests. Le garde lui-même est testé isolément
+// (market-study.guard.spec.ts) avec les deux valeurs du flag.
+process.env.MARKET_STUDY_MODE = process.env.MARKET_STUDY_MODE ?? 'false';

@@ -1,18 +1,18 @@
 {
   "id": "/?source=pwa",
-  "name": "Immo Les Terrasses — Residences Catalog",
-  "short_name": "Immo Les Terrasses",
-  "description": "Plateforme de reservation et suivi de logements en residence fermee a Lome, Togo. Reservez en ligne avec garantie de pre-financement.",
+  "name": "Les Terrasses de Baguida — Projet à l'étude",
+  "short_name": "Les Terrasses",
+  "description": "Projet d'appartements à Baguida, Lomé (Togo). Donnez votre avis en 2 minutes : prix et plans indicatifs.",
   "lang": "fr",
   "dir": "ltr",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],
-  "background_color": "#152238",
-  "theme_color": "#152238",
+  "background_color": "#FBF7EF",
+  "theme_color": "#FBF7EF",
   "orientation": "portrait-primary",
-  "categories": ["business", "finance", "lifestyle", "shopping"],
+  "categories": ["business", "lifestyle"],
   "prefer_related_applications": false,
   "icons": [
     {
@@ -30,22 +30,16 @@
   ],
   "shortcuts": [
     {
+      "name": "Donnez votre avis",
+      "short_name": "Avis",
+      "description": "Répondre au questionnaire (2 minutes)",
+      "url": "/avis?src=pwa-shortcut"
+    },
+    {
       "name": "Voir le catalogue",
       "short_name": "Catalogue",
-      "description": "Studios, T2, T3, T5 et locaux commerciaux",
-      "url": "/?source=shortcut#catalogue"
-    },
-    {
-      "name": "Suivi de mon logement",
-      "short_name": "Suivi",
-      "description": "Echéancier et avancement chantier",
-      "url": "/suivi?source=shortcut"
-    },
-    {
-      "name": "Reservation 48h",
-      "short_name": "Reserver",
-      "description": "Bloquer une unite pendant 48h",
-      "url": "/?source=shortcut#reserver"
+      "description": "Studios, T2, T3 et T4 du projet",
+      "url": "/catalogue?src=pwa-shortcut"
     }
   ]
 }

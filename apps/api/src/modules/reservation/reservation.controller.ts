@@ -3,6 +3,7 @@ import { ReservationService } from './reservation.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthUser } from '../auth/auth-user.interface';
+import { MarketStudyGuard } from '../../common/market-study/market-study.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('reservations')
@@ -10,6 +11,7 @@ export class ReservationController {
   constructor(private readonly reservationService: ReservationService) {}
 
   @Post()
+  @UseGuards(MarketStudyGuard)
   create(@Body('unitId') unitId: string, @CurrentUser() user: AuthUser) {
     return this.reservationService.reserveUnit(unitId, user.id);
   }

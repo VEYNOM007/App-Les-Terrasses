@@ -16,6 +16,7 @@ import { PaymentService, CinetPayWebhookPayload } from './payment.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthUser } from '../auth/auth-user.interface';
+import { MarketStudyGuard } from '../../common/market-study/market-study.guard';
 import { PaymentProvider } from '@prisma/client';
 
 @Controller('payments')
@@ -26,7 +27,7 @@ export class PaymentController {
    * Initie le paiement d'une échéance. Le front reçoit une paymentUrl à
    * rediriger (CinetPay) ou une session à ouvrir (Stripe Checkout).
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, MarketStudyGuard)
   @Post('installments/:installmentId/pay')
   async payInstallment(
     @Param('installmentId') installmentId: string,

@@ -6,6 +6,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AdminCreateReservationDto } from './dto/create-admin-reservation.dto';
 import { AdminListReservationsQueryDto, UpdateReservationStatusDto } from './dto/reservation-status.dto';
+import { MarketStudyGuard } from '../../common/market-study/market-study.guard';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
@@ -33,6 +34,7 @@ export class AdminReservationController {
    * réellement engagé (offerPrice ?? unit.price).
    */
   @Post()
+  @UseGuards(MarketStudyGuard)
   async create(@Body() body: AdminCreateReservationDto) {
     const reservation = await this.reservationService.adminCreateReservation(body);
     const schedule = await this.paymentService.generateSchedule(reservation.id);

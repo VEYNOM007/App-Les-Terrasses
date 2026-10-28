@@ -94,6 +94,8 @@ services:
       # Requis : sans lui, le cookie posé par api.<domaine-racine> n'est
       # jamais partagé avec le frontend <domaine-racine> (auth web cassée).
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:?COOKIE_DOMAIN requis en prod (.domaine-racine)}
+      # true (défaut) : l'API refuse réservations et paiements.
+      MARKET_STUDY_MODE: ${MARKET_STUDY_MODE:-true}
     volumes:
       - prod-uploads:/app/deploy/uploads
     depends_on:
@@ -108,6 +110,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL requis en prod}
+        NEXT_PUBLIC_MARKET_STUDY_MODE: ${NEXT_PUBLIC_MARKET_STUDY_MODE:-true}
     container_name: residence-catalog-prod-web
     restart: unless-stopped
     init: true

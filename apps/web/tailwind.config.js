@@ -28,6 +28,8 @@ module.exports = {
         laterite: {
           DEFAULT: '#B5502E',
           light: '#D3714D',
+          // Variante lisible sur fond clair (6:1 sur blanc, AA pour le petit texte).
+          dark: '#9E4527',
         },
         lagoon: {
           DEFAULT: '#2E7D6B',

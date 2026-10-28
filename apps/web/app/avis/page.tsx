@@ -115,10 +115,10 @@ export default function AvisPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-12">
         {phase === 'intro' && (
-          <section className="card p-6 sm:p-10">
-            <p className="eyebrow text-laterite">Étude de marché · 2 minutes</p>
+          <section className="card p-5 sm:p-10">
+            <p className="eyebrow text-laterite-dark">Étude de marché · 2 minutes</p>
             <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">
               Les Terrasses de Baguida : donnez votre avis
             </h1>
@@ -168,7 +168,7 @@ export default function AvisPage() {
         {phase === 'form' && step && (
           <section>
             {/* Progression */}
-            <div className="mb-6">
+            <div className="mb-4 sm:mb-6">
               <div className="flex items-center justify-between text-xs text-muted">
                 <span className="font-medium">
                   Question {stepIndex + 1} sur {TOTAL_QUESTIONS}
@@ -190,11 +190,11 @@ export default function AvisPage() {
               </div>
             </div>
 
-            <div className="card p-6 sm:p-8">
-              <p className="eyebrow text-laterite">
+            <div className="card p-5 sm:p-8">
+              <p className="eyebrow text-laterite-dark">
                 {step.kind === 'contact' ? 'Dernière étape' : 'Votre avis'}
               </p>
-              <h1 className="mt-2 font-serif text-2xl font-semibold leading-tight text-ink sm:text-3xl">
+              <h1 className="mt-2 font-serif text-xl font-semibold leading-tight text-ink sm:text-3xl">
                 {step.title}
               </h1>
               {step.hint && <p className="mt-2 text-sm text-muted">{step.hint}</p>}
@@ -203,7 +203,7 @@ export default function AvisPage() {
                 {(step.kind === 'single' || step.kind === 'multi') && (
                   <fieldset>
                     <legend className="sr-only">{step.title}</legend>
-                    <div className="space-y-3">
+                    <div className="space-y-2.5 pb-2">
                       {step.options.map((option) => {
                         const checked =
                           step.kind === 'single'
@@ -213,7 +213,7 @@ export default function AvisPage() {
                         return (
                           <label
                             key={option.value}
-                            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all focus-within:ring-2 focus-within:ring-laterite/30 ${
+                            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all focus-within:ring-2 focus-within:ring-laterite/30 ${
                               checked
                                 ? 'border-laterite bg-laterite/5'
                                 : 'border-line bg-white hover:border-ink/20'
@@ -301,13 +301,13 @@ export default function AvisPage() {
                     </div>
                     <fieldset>
                       <legend className="sr-only">{step.title}</legend>
-                      <div className="space-y-3">
+                      <div className="space-y-2.5 pb-2">
                         {BUDGET_OPTIONS.map((option) => {
                           const checked = answers.budget === option.value;
                           return (
                             <label
                               key={option.value}
-                              className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition-all focus-within:ring-2 focus-within:ring-laterite/30 ${
+                              className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-all focus-within:ring-2 focus-within:ring-laterite/30 ${
                                 checked
                                   ? 'border-laterite bg-laterite/5'
                                   : 'border-line bg-white hover:border-ink/20'
@@ -414,14 +414,28 @@ export default function AvisPage() {
                 </p>
               )}
 
-              <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-8 flex flex-col gap-3 border-t border-line bg-white/95 px-6 py-3 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:flex-row sm:items-center sm:justify-between sm:border-0 sm:bg-transparent sm:px-0 sm:py-0">
-                <button onClick={goBack} className="btn-outline !py-3 !text-xs" disabled={submitting}>
-                  <ArrowLeft className="h-4 w-4" /> Retour
-                </button>
+              <div
+                className={`sticky bottom-0 z-10 -mx-5 -mb-5 mt-6 flex items-center gap-2.5 border-t border-line bg-white/95 px-4 py-2.5 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:gap-3 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 ${
+                  stepIndex === 0 ? 'sm:justify-end' : 'sm:justify-between'
+                }`}
+              >
+                <div
+                  className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-white to-transparent sm:hidden"
+                  aria-hidden="true"
+                />
+                {stepIndex > 0 && (
+                  <button
+                    onClick={goBack}
+                    className="btn-outline flex-1 !px-3 !py-2.5 !text-xs sm:flex-none sm:!px-5 sm:!py-3"
+                    disabled={submitting}
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Retour
+                  </button>
+                )}
                 <button
                   onClick={goNext}
                   disabled={submitting}
-                  className="btn-primary !py-3 !text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  className="btn-primary flex-1 !px-3 !py-2.5 !text-xs disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none sm:!px-5 sm:!py-3"
                 >
                   {submitting ? (
                     <>
@@ -429,7 +443,9 @@ export default function AvisPage() {
                     </>
                   ) : stepIndex === TOTAL_QUESTIONS - 1 ? (
                     <>
-                      Envoyer mes réponses <ArrowRight className="h-4 w-4" />
+                      <span className="sm:hidden">Envoyer</span>
+                      <span className="hidden sm:inline">Envoyer mes réponses</span>
+                      <ArrowRight className="h-4 w-4" />
                     </>
                   ) : (
                     <>

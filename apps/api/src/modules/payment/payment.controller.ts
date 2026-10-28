@@ -27,7 +27,7 @@ export class PaymentController {
    * Initie le paiement d'une échéance. Le front reçoit une paymentUrl à
    * rediriger (CinetPay) ou une session à ouvrir (Stripe Checkout).
    */
-  @UseGuards(JwtAuthGuard, MarketStudyGuard)
+  @UseGuards(MarketStudyGuard, JwtAuthGuard)
   @Post('installments/:installmentId/pay')
   async payInstallment(
     @Param('installmentId') installmentId: string,

@@ -1,46 +1,24 @@
-'use client';
-
-import React, { useState } from 'react';
+import React from 'react';
 import Navbar from '../components/Navbar';
+import MarketStudyBanner from '../components/MarketStudyBanner';
 import Hero from '../components/Hero';
+import ProjectShowcase from '../components/ProjectShowcase';
 import Mechanism from '../components/Mechanism';
-import MasterPlanInteractive from '../components/MasterPlanInteractive';
-import CatalogGrid, { UnitTypology } from '../components/CatalogGrid';
-import ReservationModal from '../components/ReservationModal';
-import LeadForm from '../components/LeadForm';
+import CatalogGrid from '../components/CatalogGrid';
+import SurveyCta from '../components/SurveyCta';
 import Footer from '../components/Footer';
 
 export default function Home() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedTypology, setSelectedTypology] = useState<UnitTypology | null>(null);
-
-  const handleSelectUnit = (typology: UnitTypology) => {
-    setSelectedTypology(typology);
-    setIsModalOpen(true);
-  };
-
-  const handleSelectBlock = (blockId: string) => {
-    setIsModalOpen(true);
-  };
-
   return (
-    <main className="min-h-screen bg-ink text-paper selection:bg-laterite selection:text-paper">
+    <main className="min-h-screen bg-cream text-body">
       <Navbar />
+      <MarketStudyBanner />
       <Hero />
+      <ProjectShowcase />
       <Mechanism />
-      <MasterPlanInteractive onSelectBlock={handleSelectBlock} />
-      <CatalogGrid onSelectUnit={handleSelectUnit} />
-      <LeadForm />
+      <CatalogGrid />
+      <SurveyCta />
       <Footer />
-
-      {/* Réservation : l'unité doit être réelle (cuid). Le parcours d'accueil
-          reste typologie-based (chantier dédié) — unitId null → l'invite
-          redirige vers le catalogue, aucun verrou n'est créé sans unité. */}
-      <ReservationModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        unitId={null}
-      />
     </main>
   );
 }

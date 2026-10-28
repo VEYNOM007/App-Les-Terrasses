@@ -5,14 +5,15 @@ import PWARegister from '../components/PWARegister';
 import { AuthProvider } from '../components/AuthProvider';
 
 export const metadata: Metadata = {
-  title: 'Immo Les Terrasses — Réservez avant le lancement',
-  description: 'Studios, T2, T3 et T5 en résidence fermée à Baguida, Lomé (Togo). Réservez votre logement financé avant construction.',
+  title: "Les Terrasses de Baguida — Projet à l'étude",
+  description:
+    "Un projet d'appartements à Baguida, Lomé (Togo). Donnez votre avis en 2 minutes : les réponses orientent les typologies, les prix et les plans. Sans engagement, sans paiement.",
   manifest: '/manifest.json',
-  applicationName: 'Immo Les Terrasses',
+  applicationName: 'Les Terrasses de Baguida',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Immo Les Terrasses',
+    title: 'Les Terrasses de Baguida',
   },
   formatDetection: {
     telephone: false,
@@ -28,16 +29,17 @@ export const metadata: Metadata = {
     shortcut: ['/favicon.svg'],
   },
   openGraph: {
-    title: 'Immo Les Terrasses — Résidence Catalog PWA',
-    description: 'Logements en résidence fermée à Lomé, Togo. Réservez en ligne avec garantie de pré-financement.',
-    siteName: 'Immo Les Terrasses',
+    title: "Les Terrasses de Baguida — Projet à l'étude",
+    description:
+      "Appartements à Baguida, Lomé (Togo). Projet à l'étude, prix et plans indicatifs. Donnez votre avis en 2 minutes.",
+    siteName: 'Les Terrasses de Baguida',
     type: 'website',
     locale: 'fr_FR',
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#152238',
+  themeColor: '#FBF7EF',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -60,7 +62,7 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
       </head>
-      <body className="bg-ink text-paper font-sans antialiased selection:bg-laterite selection:text-paper">
+      <body className="bg-cream text-body font-sans antialiased">
         <AuthProvider>
           {children}
         </AuthProvider>

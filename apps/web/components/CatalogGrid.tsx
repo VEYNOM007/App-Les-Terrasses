@@ -1,145 +1,162 @@
 'use client';
 
-import React from 'react';
-import { Home, ArrowUpRight, Check, Car } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ArrowRight, Home, RefreshCw } from 'lucide-react';
+import { fetchTypologies, TypologyGroup, UnitType } from '../lib/api';
+import { MARKET_STUDY_MODE } from '../lib/market-mode';
 
-export interface UnitTypology {
-  id: string;
-  name: string;
-  type: 'STUDIO' | 'T2' | 'T3' | 'T5' | 'COMMERCE';
-  surface: string;
-  description: string;
-  features: string[];
-  startingPrice: string;
-  badge?: string;
-  availableCount: number;
+const TYPE_LABELS: Record<UnitType, string> = {
+  STUDIO: 'Studio',
+  T2: 'T2',
+  T3: 'T3',
+  T4: 'T4',
+  T5: 'T5',
+  COMMERCE: 'Local commercial',
+};
+
+const TYPE_ORDER: UnitType[] = ['STUDIO', 'T2', 'T3', 'T4', 'T5', 'COMMERCE'];
+
+function formatPrice(value: string): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return 'Prix sur demande';
+  return `${new Intl.NumberFormat('fr-FR').format(amount)} FCFA`;
 }
 
-export const TYPOLOGIES: UnitTypology[] = [
-  {
-    id: 'studio',
-    name: 'Studio',
-    type: 'STUDIO',
-    surface: '≈ 25 m²',
-    description: 'Idéal premier achat ou investissement locatif à haut rendement. Cuisine ouverte, salle d\'eau moderne, espace optimisé.',
-    features: ['Cuisine aménagée', 'Balcon privatif', 'Accès parking pilotis'],
-    startingPrice: 'Sur grille de lancement',
-    availableCount: 14,
-  },
-  {
-    id: 't2',
-    name: 'Appartement T2',
-    type: 'T2',
-    surface: '≈ 45 m²',
-    description: 'Une chambre séparée, séjour spacieux, cuisine et nombreux rangements. Parfait pour jeune couple ou pied-à-terre.',
-    features: ['Chambre indépendante', 'Séjour lumineux', 'Espace bureau'],
-    startingPrice: 'Sur grille de lancement',
-    availableCount: 22,
-  },
-  {
-    id: 't3',
-    name: 'Appartement T3',
-    type: 'T3',
-    surface: '≈ 65 m²',
-    description: 'Deux chambres indépendantes, vaste séjour et terrasse traversante. Le format le plus demandé par les familles.',
-    features: ['2 chambres', 'Terrasse traversante', 'Suite parentale'],
-    startingPrice: 'Sur grille de lancement',
-    badge: 'Plus demandé',
-    availableCount: 18,
-  },
-  {
-    id: 't5',
-    name: 'Appartement T5',
-    type: 'T5',
-    surface: '≈ 100 m²',
-    description: 'Quatre chambres pour les familles nombreuses. Situé exclusivement au dernier étage des blocs C et D pour une tranquillité maximale.',
-    features: ['4 chambres', 'Dernier étage (vue)', 'Double sanitaires'],
-    startingPrice: 'Disponibilité limitée',
-    badge: 'Dernier étage',
-    availableCount: 6,
-  },
-  {
-    id: 'commerce',
-    name: 'Local Commercial',
-    type: 'COMMERCE',
-    surface: '≈ 50–80 m²',
-    description: 'Vitrines sur rue principale (façade nord). Idéal pour pharmacie, superette, salon ou cabinet professionnel.',
-    features: ['Vitrine sur rue', 'Accès livraison dédié', 'Fort passage'],
-    startingPrice: 'Sur devis',
-    badge: 'Façade Nord',
-    availableCount: 4,
-  },
-];
+function surfaceLabel(group: TypologyGroup): string {
+  const surfaces = group.units
+    .map((unit) => unit.surface)
+    .filter((surface): surface is number => Number.isFinite(surface) && surface > 0);
 
-export default function CatalogGrid({ onSelectUnit }: { onSelectUnit?: (typology: UnitTypology) => void }) {
+  if (surfaces.length === 0) return 'Surface sur plan';
+  const min = Math.min(...surfaces);
+  const max = Math.max(...surfaces);
+  return min === max ? `${min} m²` : `${min} – ${max} m²`;
+}
+
+function TypologyCard({ group }: { group: TypologyGroup }) {
   return (
-    <section id="catalogue" className="py-20 bg-ink border-b border-paper/10 scroll-mt-24">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 text-xs font-mono tracking-widest text-sand uppercase mb-2">
-              <span className="w-4 h-[1px] bg-laterite-light" />
-              Le Catalogue Officiel
-            </div>
-            <h2 className="font-serif text-3xl sm:text-4xl font-semibold text-paper">
-              Du Studio au T5, un même standard de finition
+    <article className="card flex h-full flex-col p-6 transition-shadow hover:shadow-lift">
+      <div className="flex items-center justify-between">
+        <span className="eyebrow text-muted">
+          {group.totalUnits} logement{group.totalUnits > 1 ? 's' : ''}
+        </span>
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-cream-dim text-laterite">
+          <Home className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </div>
+
+      <h3 className="mt-4 font-serif text-2xl font-semibold text-ink">
+        {TYPE_LABELS[group.type] ?? group.type}
+      </h3>
+      <p className="mt-1 text-sm text-muted">{surfaceLabel(group)}</p>
+
+      <div className="mt-6 flex items-baseline justify-between gap-3 border-t border-line pt-4">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted">
+          {MARKET_STUDY_MODE ? 'Prix indicatif' : 'À partir de'}
+        </span>
+        <span className="text-sm font-semibold text-laterite">
+          {formatPrice(group.minPrice)}
+        </span>
+      </div>
+
+      <a href="/catalogue" className="btn-outline mt-5 w-full !py-2.5 !text-xs">
+        Voir la fiche <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </a>
+    </article>
+  );
+}
+
+function GridSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="card animate-pulse p-6">
+          <div className="h-3 w-20 rounded bg-cream-deep" />
+          <div className="mt-5 h-7 w-32 rounded bg-cream-deep" />
+          <div className="mt-3 h-3 w-24 rounded bg-cream-deep" />
+          <div className="mt-8 h-10 w-full rounded-lg bg-cream-deep" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function CatalogGrid() {
+  const [groups, setGroups] = useState<TypologyGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const data = await fetchTypologies();
+      const sorted = [...data].sort(
+        (a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type),
+      );
+      setGroups(sorted);
+    } catch (cause) {
+      console.warn('[accueil] catalogue indisponible :', cause);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <section id="catalogue" className="scroll-mt-24 bg-cream py-16 sm:py-24">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+          <div className="max-w-2xl">
+            <p className="eyebrow text-laterite">Les typologies</p>
+            <h2 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">
+              Du studio au T4, un même standard de finition
             </h2>
-          </div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <p className="text-sm font-mono text-paper/60 max-w-md">
-              Finitions sobres et standardisées pour conserver des prix abordables, sans compromis sur la sécurité et le confort de la résidence fermée.
+            <p className="mt-4 text-base leading-relaxed text-muted">
+              Les surfaces et les prix ci-dessous sont ceux du projet tel
+              qu&apos;il est étudié aujourd&apos;hui. Ils seront confirmés avant
+              toute commercialisation.
             </p>
-            <a
-              href="/catalogue"
-              className="bg-laterite hover:bg-laterite-light text-paper font-mono text-xs px-5 py-3 rounded inline-flex items-center gap-2 shrink-0 transition-all shadow-lg font-bold"
-            >
-              Ouvrir le Catalogue 3D ↗
-            </a>
           </div>
+          <a href="/catalogue" className="btn-outline shrink-0">
+            Ouvrir le catalogue 3D <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </a>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-          {TYPOLOGIES.map((item) => (
-            <div
-              key={item.id}
-              className="bg-ink-card border border-paper/20 rounded-md p-6 flex flex-col justify-between hover:border-sand transition-all group relative"
-            >
-              {item.badge && (
-                <span className="absolute top-4 right-4 text-[10px] font-mono bg-laterite/20 text-laterite-light border border-laterite/40 px-2 py-0.5 rounded">
-                  {item.badge}
-                </span>
-              )}
+        <div className="mt-10">
+          {loading && <GridSkeleton />}
 
-              <div>
-                <div className="font-serif text-2xl font-semibold text-paper mb-1">{item.name}</div>
-                <div className="font-mono text-xs text-sand mb-4">{item.surface}</div>
-                <p className="text-xs text-paper/70 leading-relaxed mb-6 min-h-[60px]">
-                  {item.description}
-                </p>
-
-                <ul className="space-y-2 mb-6 pt-4 border-t border-paper/10 text-xs font-mono text-paper/80">
-                  {item.features.map((feat, fIdx) => (
-                    <li key={fIdx} className="flex items-center gap-2">
-                      <Check className="w-3.5 h-3.5 text-lagoon-light" />
-                      {feat}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="pt-4 border-t border-paper/15">
-                <div className="text-[11px] font-mono text-paper/50 uppercase">À PARTIR DE</div>
-                <div className="font-mono text-sm text-laterite-light font-bold mb-4">{item.startingPrice}</div>
-
-                <button
-                  onClick={() => onSelectUnit && onSelectUnit(item)}
-                  className="w-full bg-paper/10 hover:bg-laterite text-paper font-mono text-xs py-2.5 rounded transition-all flex items-center justify-center gap-1.5 group-hover:bg-laterite"
-                >
-                  Réserver <ArrowUpRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+          {!loading && error && (
+            <div className="card flex flex-col items-center gap-4 p-10 text-center">
+              <p className="text-sm text-ink">
+                Le catalogue est momentanément indisponible.
+              </p>
+              <p className="text-xs text-muted">
+                Réessayez dans un instant ; vos données ne sont pas en cause.
+              </p>
+              <button onClick={() => void load()} className="btn-outline !py-2.5 !text-xs">
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Réessayer
+              </button>
             </div>
-          ))}
+          )}
+
+          {!loading && !error && groups.length === 0 && (
+            <div className="card p-10 text-center text-sm text-muted">
+              Le catalogue est en cours de mise à jour.
+            </div>
+          )}
+
+          {!loading && !error && groups.length > 0 && (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.map((group) => (
+                <TypologyCard key={group.type} group={group} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -54,7 +54,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (isLoading || !user) {
     return (
       <main className="min-h-screen bg-ink text-paper flex flex-col">
-        <Navbar />
+        <Navbar variant="dark" />
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="flex items-center gap-3 font-mono text-xs text-paper/60">
             <Loader2 className="w-5 h-5 animate-spin text-laterite-light" /> Vérification de votre session…
@@ -68,7 +68,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (user.role !== 'ADMIN') {
     return (
       <main className="min-h-screen bg-ink text-paper flex flex-col">
-        <Navbar />
+        <Navbar variant="dark" />
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="bg-ink-card border border-paper/20 rounded-md p-10 text-center space-y-4 max-w-md">
             <div className="w-14 h-14 bg-laterite/15 text-laterite-light rounded-full flex items-center justify-center mx-auto border border-laterite/40">
@@ -87,7 +87,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <>
-      <Navbar />
+      <Navbar variant="dark" />
       <AdminNav />
       {children}
       <Footer />

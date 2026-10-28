@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import type { UnitDetailView } from '../../lib/catalog/unit-detail';
 import ImageLightbox from '../ImageLightbox';
 import FinancialSimulator from './FinancialSimulator';
+import { MARKET_STUDY_MODE, SURVEY_PATH } from '../../lib/market-mode';
 import {
   X,
   Building,
@@ -11,7 +12,6 @@ import {
   CheckCircle,
   Download,
   Calendar,
-  MessageSquare,
   Layers,
   Sparkles,
   ChevronLeft,
@@ -19,6 +19,7 @@ import {
   Clock,
   ArrowRight,
   ImageOff,
+  MessageCircle,
 } from 'lucide-react';
 
 interface Apartment3DModalProps {
@@ -45,7 +46,7 @@ export default function Apartment3DModal({
   if (!isOpen || !unit) return null;
 
   const photos = unit.gallery.filter(
-    (m) => m.type === 'RENDU_3D' || m.type === 'PHOTO' || m.type === 'PHOTO_REELLE',
+    (media) => media.type === 'RENDU_3D' || media.type === 'PHOTO' || media.type === 'PHOTO_REELLE',
   );
   const safeIdx = photos.length > 0 ? activePhotoIdx % photos.length : 0;
   const currentPhoto = photos[safeIdx];
@@ -55,8 +56,8 @@ export default function Apartment3DModal({
     alert(`Téléchargement de la Plaquette Commerciale PDF & Fiche Technique : ${unit.typeLabel} ${unit.blockName}`);
   };
 
-  const handleHoldOption = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleHoldOption = (event: React.FormEvent) => {
+    event.preventDefault();
     setOptionHeld(true);
     setTimeout(() => {
       setShowOptionModal(false);
@@ -64,24 +65,24 @@ export default function Apartment3DModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-ink-dark/95 backdrop-blur-xl flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
-      <div className="bg-ink border border-paper/20 rounded-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl relative">
-        {/* Modal Header */}
-        <div className="bg-ink/90 border-b border-paper/15 p-4 sm:p-5 flex justify-between items-center shrink-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-ink/60 p-3 backdrop-blur-sm sm:p-6">
+      <div className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-2xl">
+        {/* En-tête */}
+        <div className="flex shrink-0 items-center justify-between border-b border-line bg-white p-4 sm:p-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-laterite/20 border border-laterite/40 text-laterite-light flex items-center justify-center font-bold">
-              <Building className="w-5 h-5" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-laterite/20 bg-laterite/10 font-bold text-laterite">
+              <Building className="h-5 w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-sand uppercase tracking-wider">{unit.blockName}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="eyebrow text-laterite">{unit.blockName}</span>
                 {unit.statusLabel && (
-                  <span className="text-[10px] font-mono bg-laterite/20 text-laterite-light border border-laterite/40 px-2 py-0.5 rounded">
+                  <span className="rounded border border-laterite/20 bg-laterite/10 px-2 py-0.5 text-[10px] font-medium text-laterite">
                     {unit.statusLabel}
                   </span>
                 )}
               </div>
-              <h3 className="font-serif text-xl sm:text-2xl font-semibold text-paper">
+              <h3 className="font-serif text-xl font-semibold text-ink sm:text-2xl">
                 {unit.typeLabel} · Étage {unit.floor}
               </h3>
             </div>
@@ -89,113 +90,123 @@ export default function Apartment3DModal({
 
           <button
             onClick={onClose}
-            className="p-2 rounded-lg bg-ink-card hover:bg-paper/10 text-paper/70 hover:text-paper transition-all"
+            className="rounded-lg bg-cream-dim p-2 text-muted transition-colors hover:bg-cream-deep hover:text-ink"
+            aria-label="Fermer la fiche"
           >
-            <X className="w-6 h-6" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="bg-ink-dark border-b border-paper/15 px-4 sm:px-6 py-2 flex flex-wrap gap-2 text-xs font-mono shrink-0">
+        {/* Onglets */}
+        <div className="flex shrink-0 flex-wrap gap-2 border-b border-line bg-cream px-4 py-2.5 text-xs sm:px-6">
           <button
             onClick={() => setActiveTab('3d')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all ${
               activeTab === '3d'
-                ? 'bg-laterite text-paper font-bold shadow-md'
-                : 'text-paper/70 hover:text-paper hover:bg-paper/10'
+                ? 'bg-laterite font-semibold text-white shadow-card'
+                : 'text-muted hover:bg-white hover:text-ink'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-sand" /> Vue & Photos ({photos.length})
+            <Sparkles className="h-4 w-4" /> Vue & photos ({photos.length})
           </button>
           <button
             onClick={() => setActiveTab('plan')}
             disabled={!planUrl}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all ${
               activeTab === 'plan'
-                ? 'bg-laterite text-paper font-bold shadow-md'
+                ? 'bg-laterite font-semibold text-white shadow-card'
                 : planUrl
-                  ? 'text-paper/70 hover:text-paper hover:bg-paper/10'
-                  : 'text-paper/30 cursor-not-allowed'
+                  ? 'text-muted hover:bg-white hover:text-ink'
+                  : 'cursor-not-allowed text-muted/50'
             }`}
           >
-            <Maximize2 className="w-4 h-4" /> Plan Coté
+            <Maximize2 className="h-4 w-4" /> Plan coté
           </button>
-          <button
-            onClick={() => setActiveTab('finance')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-              activeTab === 'finance'
-                ? 'bg-laterite text-paper font-bold shadow-md'
-                : 'text-paper/70 hover:text-paper hover:bg-paper/10'
-            }`}
-          >
-            <Calendar className="w-4 h-4 text-lagoon-light" /> Échéancier de Paiement
-          </button>
+          {/* Le simulateur d'échéancier reste dans le code ; il n'est pas exposé en étude de marché. */}
+          {!MARKET_STUDY_MODE && (
+            <button
+              onClick={() => setActiveTab('finance')}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all ${
+                activeTab === 'finance'
+                  ? 'bg-laterite font-semibold text-white shadow-card'
+                  : 'text-muted hover:bg-white hover:text-ink'
+              }`}
+            >
+              <Calendar className="h-4 w-4" /> Échéancier de paiement
+            </button>
+          )}
         </div>
 
-        {/* Modal Main Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          {/* TAB 1: 3D PHOTO & RENDER GALLERY */}
+        {/* Contenu */}
+        <div className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
           {activeTab === '3d' && (
             <div className="space-y-4">
               {currentPhoto ? (
                 <>
-                  <div className="relative rounded-xl overflow-hidden bg-ink-dark border border-paper/15 aspect-video flex items-center justify-center group shadow-xl">
+                  <div className="group relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-line bg-cream-deep shadow-card">
                     <img
                       src={currentPhoto.url}
                       alt={currentPhoto.altText}
-                      className="w-full h-full object-cover cursor-zoom-in"
+                      className="h-full w-full cursor-zoom-in object-cover"
                       onClick={() => setPhotoLightboxOpen(true)}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-transparent to-transparent pointer-events-none" />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/80 via-transparent to-transparent" />
 
-                    {/* Photo Caption & Media Tag */}
-                    <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center bg-ink/80 backdrop-blur-md border border-paper/20 p-3 rounded-lg">
+                    <div className="absolute inset-x-4 bottom-4 flex items-center justify-between gap-3 rounded-lg border border-white/20 bg-ink/80 p-3 backdrop-blur-md">
                       <div>
-                        <span className="text-[10px] font-mono uppercase bg-laterite/30 text-sand px-2 py-0.5 rounded border border-laterite/40">
+                        <span className="rounded border border-laterite/40 bg-laterite/30 px-2 py-0.5 text-[10px] uppercase text-white">
                           {currentPhoto.mediaLabel}
                         </span>
-                        <h4 className="font-serif text-sm font-semibold text-paper mt-1">{currentPhoto.altText}</h4>
+                        <h4 className="mt-1 font-serif text-sm font-semibold text-white">
+                          {currentPhoto.altText}
+                        </h4>
                       </div>
-                      <span className="text-xs font-mono text-paper/60">
+                      <span className="text-xs text-white/70">
                         {safeIdx + 1} / {photos.length}
                       </span>
                     </div>
 
-                    {/* Left/Right Carousel Controls */}
                     {photos.length > 1 && (
                       <>
                         <button
                           onClick={() =>
-                            setActivePhotoIdx((prev) => (prev === 0 ? photos.length - 1 : prev - 1))
+                            setActivePhotoIdx((previous) =>
+                              previous === 0 ? photos.length - 1 : previous - 1,
+                            )
                           }
-                          className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-ink/80 hover:bg-laterite text-paper transition-all"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-ink/70 p-2 text-white transition-colors hover:bg-laterite"
+                          aria-label="Photo précédente"
                         >
-                          <ChevronLeft className="w-5 h-5" />
+                          <ChevronLeft className="h-5 w-5" />
                         </button>
                         <button
                           onClick={() =>
-                            setActivePhotoIdx((prev) => (prev === photos.length - 1 ? 0 : prev + 1))
+                            setActivePhotoIdx((previous) =>
+                              previous === photos.length - 1 ? 0 : previous + 1,
+                            )
                           }
-                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-ink/80 hover:bg-laterite text-paper transition-all"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-ink/70 p-2 text-white transition-colors hover:bg-laterite"
+                          aria-label="Photo suivante"
                         >
-                          <ChevronRight className="w-5 h-5" />
+                          <ChevronRight className="h-5 w-5" />
                         </button>
                       </>
                     )}
                   </div>
 
-                  {/* Thumbnails row */}
                   <div className="flex gap-3 overflow-x-auto pb-2">
-                    {photos.map((photo, pIdx) => (
+                    {photos.map((photo, photoIdx) => (
                       <button
                         key={photo.id}
-                        onClick={() => setActivePhotoIdx(pIdx)}
-                        className={`relative w-24 h-16 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
-                          safeIdx === pIdx ? 'border-laterite scale-105' : 'border-paper/20 opacity-70 hover:opacity-100'
+                        onClick={() => setActivePhotoIdx(photoIdx)}
+                        className={`relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border-2 transition-all ${
+                          safeIdx === photoIdx
+                            ? 'scale-105 border-laterite'
+                            : 'border-line opacity-70 hover:opacity-100'
                         }`}
                       >
-                        <img src={photo.url} alt={photo.altText} className="w-full h-full object-cover" />
-                        <span className="absolute bottom-1 right-1 text-[9px] font-mono bg-ink/80 px-1 rounded text-paper">
+                        <img src={photo.url} alt={photo.altText} className="h-full w-full object-cover" />
+                        <span className="absolute bottom-1 right-1 rounded bg-ink/80 px-1 text-[9px] text-white">
                           {photo.isRendu3D ? '3D' : 'PH'}
                         </span>
                       </button>
@@ -203,46 +214,44 @@ export default function Apartment3DModal({
                   </div>
                 </>
               ) : (
-                <div className="p-10 text-center bg-ink-card rounded-xl border border-paper/10 text-paper/60 font-mono text-xs space-y-2">
-                  <ImageOff className="w-8 h-8 mx-auto text-paper/40" />
+                <div className="space-y-2 rounded-xl border border-line bg-cream p-10 text-center text-xs text-muted">
+                  <ImageOff className="mx-auto h-8 w-8 text-muted/60" />
                   <p>Aucun visuel disponible pour cette unité.</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB 2: FLOOR PLAN */}
           {activeTab === 'plan' && planUrl && (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-              <div className="md:col-span-8 bg-ink-dark border border-paper/15 rounded-xl p-4 flex flex-col items-center">
-                <span className="text-xs font-mono text-sand mb-2 uppercase">Plan d'Architecture Coté · Échelle 1/50</span>
+            <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-12">
+              <div className="flex flex-col items-center rounded-xl border border-line bg-cream p-4 md:col-span-8">
+                <span className="mb-2 text-xs uppercase text-muted">Plan d&apos;architecture coté</span>
                 <img
                   src={planUrl}
                   alt="Plan d'architecture"
-                  className="w-full max-h-[400px] object-contain rounded-lg border border-paper/10"
+                  className="max-h-[400px] w-full rounded-lg border border-line bg-white object-contain"
                 />
               </div>
 
-              <div className="md:col-span-4 space-y-4 font-mono text-xs">
-                <div className="bg-ink-card border border-paper/15 p-4 rounded-xl space-y-3">
-                  <h4 className="font-serif text-sm font-semibold text-paper">Surfaces & Localisation</h4>
-
-                  <div className="space-y-2 border-t border-paper/10 pt-3">
+              <div className="space-y-4 text-xs md:col-span-4">
+                <div className="space-y-3 rounded-xl border border-line bg-white p-4 shadow-card">
+                  <h4 className="font-serif text-sm font-semibold text-ink">Surfaces & localisation</h4>
+                  <div className="space-y-2 border-t border-line pt-3">
                     <div className="flex justify-between">
-                      <span className="text-paper/60">Surface Habitable</span>
-                      <span className="font-bold text-paper">{unit.surfaceM2} m²</span>
+                      <span className="text-muted">Surface habitable</span>
+                      <span className="font-semibold text-ink">{unit.surfaceM2} m²</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-paper/60">Étage</span>
-                      <span className="font-bold text-paper">{unit.floor}</span>
+                      <span className="text-muted">Étage</span>
+                      <span className="font-semibold text-ink">{unit.floor}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-paper/60">Bloc</span>
-                      <span className="font-bold text-lagoon-light">{unit.blockName}</span>
+                      <span className="text-muted">Bloc</span>
+                      <span className="font-semibold text-lagoon">{unit.blockName}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-paper/60">Façade</span>
-                      <span className="font-bold text-paper">{unit.blockFrontage}</span>
+                      <span className="text-muted">Façade</span>
+                      <span className="font-semibold text-ink">{unit.blockFrontage}</span>
                     </div>
                   </div>
                 </div>
@@ -252,35 +261,33 @@ export default function Apartment3DModal({
                     href={unit.virtualTourUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block bg-paper/10 hover:bg-paper/20 border border-paper/20 text-paper px-4 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all"
+                    className="flex items-center justify-center gap-2 rounded-lg border border-line bg-cream px-4 py-3 text-xs text-ink transition-colors hover:bg-cream-deep"
                   >
-                    <Layers className="w-4 h-4 text-sand" /> Visite Virtuelle 360°
+                    <Layers className="h-4 w-4 text-laterite" /> Visite virtuelle 360°
                   </a>
                 )}
               </div>
             </div>
           )}
 
-          {/* TAB 3: FINANCIAL SIMULATOR */}
-          {activeTab === 'finance' && <FinancialSimulator unitId={unit.id} />}
+          {!MARKET_STUDY_MODE && activeTab === 'finance' && <FinancialSimulator unitId={unit.id} />}
 
-          {/* Description & Key Features overview bar */}
           {unit.description && (
-            <div className="bg-ink-card border border-paper/15 p-4 rounded-xl space-y-3">
-              <p className="text-xs sm:text-sm text-paper/80 leading-relaxed">{unit.description}</p>
+            <div className="rounded-xl border border-line bg-cream p-4">
+              <p className="text-sm leading-relaxed text-ink/80">{unit.description}</p>
             </div>
           )}
 
           {unit.highlights.length > 0 && (
-            <div className="bg-ink-card border border-paper/15 p-4 rounded-xl">
+            <div className="rounded-xl border border-line bg-white p-4">
               <div className="flex flex-wrap gap-2">
-                {unit.highlights.map((feat, fIdx) => (
+                {unit.highlights.map((feature) => (
                   <span
-                    key={fIdx}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-paper/5 border border-paper/15 text-xs font-mono text-paper/80"
+                    key={feature}
+                    className="inline-flex items-center gap-1.5 rounded border border-line bg-cream px-2.5 py-1 text-xs text-ink/80"
                   >
-                    <CheckCircle className="w-3.5 h-3.5 text-lagoon-light" />
-                    {feat}
+                    <CheckCircle className="h-3.5 w-3.5 text-lagoon" />
+                    {feature}
                   </span>
                 ))}
               </div>
@@ -288,123 +295,125 @@ export default function Apartment3DModal({
           )}
         </div>
 
-        {/* Modal Footer / Price & Call to Actions */}
-        <div className="bg-ink/95 border-t border-paper/15 p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 shrink-0">
+        {/* Pied : prix + actions */}
+        <div className="flex shrink-0 flex-col justify-between gap-4 border-t border-line bg-white p-4 sm:flex-row sm:items-center sm:p-5">
           <div>
-            <div className="text-[11px] font-mono text-paper/50 uppercase">
-              PRIX DU BIEN {unit.statusLabel ? `· ${unit.statusLabel.toUpperCase()}` : ''}
+            <div className="text-[11px] uppercase tracking-wide text-muted">
+              {MARKET_STUDY_MODE ? 'Prix indicatif' : 'Prix du bien'}
+              {unit.statusLabel ? ` · ${unit.statusLabel}` : ''}
             </div>
-            <div className="font-mono text-xl sm:text-2xl font-bold text-laterite-light">
+            <div className="text-xl font-semibold text-laterite sm:text-2xl">
               {unit.priceFormatted}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* Download PDF brochure button */}
-            <button
-              onClick={handleDownloadPdf}
-              className="border border-paper/20 hover:border-sand hover:bg-paper/5 text-paper px-4 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all"
-            >
-              <Download className="w-4 h-4 text-sand" /> Plaquette PDF
-            </button>
+            {MARKET_STUDY_MODE ? (
+              <>
+                <button onClick={onClose} className="btn-outline !py-2.5 !text-xs">
+                  Fermer
+                </button>
+                <a href={SURVEY_PATH} className="btn-primary !py-2.5 !text-xs">
+                  <MessageCircle className="h-4 w-4" /> Donnez votre avis
+                </a>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleDownloadPdf}
+                  className="btn-outline !py-2.5 !text-xs"
+                >
+                  <Download className="h-4 w-4" /> Plaquette PDF
+                </button>
 
-            {/* Hold Option 48h button */}
-            <button
-              onClick={() => setShowOptionModal(true)}
-              disabled={!unit.canReserve}
-              className="border border-laterite/40 bg-laterite/10 hover:bg-laterite/20 text-laterite-light px-4 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Clock className="w-4 h-4" /> Option Prioritaire 48h
-            </button>
+                <button
+                  onClick={() => setShowOptionModal(true)}
+                  disabled={!unit.canReserve}
+                  className="btn-outline !py-2.5 !text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Clock className="h-4 w-4" /> Option 48h
+                </button>
 
-            {/* Direct WhatsApp button */}
-            <a
-              href={`https://wa.me/22890000000?text=Bonjour,%20je%20suis%20intéressé(e)%20par%20le%20${encodeURIComponent(`${unit.typeLabel} - ${unit.blockName} Étage ${unit.floor}`)}%20à%20Baguida.`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-lagoon hover:bg-lagoon-light text-paper px-4 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all shadow-lg"
-            >
-              <MessageSquare className="w-4 h-4" /> WhatsApp Promoteur
-            </a>
-
-            {/* Reserve CTA */}
-            <button
-              onClick={() => {
-                onClose();
-                onOpenReservation(unit.id);
-              }}
-              disabled={!unit.canReserve}
-              className="bg-laterite hover:bg-laterite-light text-paper font-bold px-6 py-3 rounded-lg text-xs font-mono flex items-center justify-center gap-2 transition-all shadow-lg hover:scale-105 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
-            >
-              {unit.statusLabel ? unit.statusLabel : 'Réserver en ligne'} <ArrowRight className="w-4 h-4" />
-            </button>
+                <button
+                  onClick={() => {
+                    onClose();
+                    onOpenReservation(unit.id);
+                  }}
+                  disabled={!unit.canReserve}
+                  className="btn-primary !py-2.5 !text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {unit.statusLabel ? unit.statusLabel : 'Réserver en ligne'}{' '}
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Option Hold 48h Modal */}
-      {showOptionModal && (
-        <div className="fixed inset-0 z-60 bg-ink-dark/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-ink border border-paper/30 p-6 rounded-2xl max-w-md w-full space-y-4 relative shadow-2xl">
+      {/* Option 48h — code de vente conservé, inaccessible en mode étude. */}
+      {showOptionModal && !MARKET_STUDY_MODE && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md space-y-4 rounded-2xl border border-line bg-white p-6 shadow-2xl">
             <button
               onClick={() => setShowOptionModal(false)}
-              className="absolute top-4 right-4 text-paper/50 hover:text-paper"
+              className="absolute right-4 top-4 text-muted hover:text-ink"
+              aria-label="Fermer"
             >
-              <X className="w-5 h-5" />
+              <X className="h-5 w-5" />
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-sand/20 text-sand border border-sand/30">
-                <Clock className="w-6 h-6" />
+              <div className="rounded-xl border border-laterite/20 bg-laterite/10 p-2.5 text-laterite">
+                <Clock className="h-6 w-6" />
               </div>
               <div>
-                <h4 className="font-serif text-lg font-semibold text-paper">Bloquer une Option 48h</h4>
-                <p className="text-xs font-mono text-paper/60">Sans engagement financier immédiat</p>
+                <h4 className="font-serif text-lg font-semibold text-ink">Bloquer une option 48h</h4>
+                <p className="text-xs text-muted">Sans engagement financier immédiat</p>
               </div>
             </div>
 
             {optionHeld ? (
-              <div className="p-4 rounded-xl bg-lagoon/20 border border-lagoon/40 text-center space-y-2">
-                <CheckCircle className="w-8 h-8 text-lagoon-light mx-auto" />
-                <p className="font-serif text-base text-paper font-semibold">Option enregistrée pour 48 heures !</p>
-                <p className="text-xs font-mono text-paper/70">
-                  Un conseiller commercial va vous contacter par téléphone / WhatsApp pour valider les éléments du contrat.
+              <div className="space-y-2 rounded-xl border border-lagoon/30 bg-lagoon/10 p-4 text-center">
+                <CheckCircle className="mx-auto h-8 w-8 text-lagoon" />
+                <p className="font-serif text-base font-semibold text-ink">
+                  Option enregistrée pour 48 heures
+                </p>
+                <p className="text-xs text-muted">
+                  Un conseiller commercial vous contactera pour valider les éléments du contrat.
                 </p>
               </div>
             ) : (
-              <form onSubmit={handleHoldOption} className="space-y-3 font-mono text-xs">
+              <form onSubmit={handleHoldOption} className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-paper/70 mb-1">Nom & Prénom</label>
+                  <label className="mb-1 block text-muted">Nom & prénom</label>
                   <input
                     type="text"
                     required
-                    placeholder="ex: Koffi Mensah"
-                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper placeholder-paper/40 focus:border-sand outline-none"
+                    placeholder="ex. Koffi Mensah"
+                    className="w-full rounded-lg border border-line bg-cream p-2.5 text-ink placeholder:text-muted/60 focus:border-laterite focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-paper/70 mb-1">Numéro Téléphone / WhatsApp</label>
+                  <label className="mb-1 block text-muted">Téléphone / WhatsApp</label>
                   <input
                     type="tel"
                     required
-                    placeholder="ex: +228 90 12 34 56"
-                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper placeholder-paper/40 focus:border-sand outline-none"
+                    placeholder="ex. +228 90 12 34 56"
+                    className="w-full rounded-lg border border-line bg-cream p-2.5 text-ink placeholder:text-muted/60 focus:border-laterite focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-paper/70 mb-1">Adresse Email</label>
+                  <label className="mb-1 block text-muted">Adresse e-mail</label>
                   <input
                     type="email"
                     required
-                    placeholder="ex: mensah@gmail.com"
-                    className="w-full bg-ink-card border border-paper/20 rounded-lg p-2.5 text-paper placeholder-paper/40 focus:border-sand outline-none"
+                    placeholder="ex. mensah@example.com"
+                    className="w-full rounded-lg border border-line bg-cream p-2.5 text-ink placeholder:text-muted/60 focus:border-laterite focus:outline-none"
                   />
                 </div>
-                <button
-                  type="submit"
-                  className="w-full bg-laterite hover:bg-laterite-light text-paper font-bold py-3 rounded-lg transition-all"
-                >
-                  Confirmer mon Option Bloquée 48h
+                <button type="submit" className="btn-primary w-full !text-xs">
+                  Confirmer mon option 48h
                 </button>
               </form>
             )}
@@ -418,7 +427,7 @@ export default function Apartment3DModal({
           alt={currentPhoto.altText}
           isOpen={photoLightboxOpen}
           onClose={() => setPhotoLightboxOpen(false)}
-          gallery={photos.map((p) => ({ src: p.url, alt: p.altText }))}
+          gallery={photos.map((photo) => ({ src: photo.url, alt: photo.altText }))}
           initialIndex={safeIdx}
         />
       )}

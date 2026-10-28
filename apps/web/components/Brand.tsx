@@ -21,25 +21,39 @@ function TerraceIcon({ className }: { className?: string }) {
 export interface BrandProps {
   compact?: boolean;
   wordmarkClassName?: string;
+  /** onLight = fond crème/blanc ; onDark = fond marine. */
+  variant?: 'onLight' | 'onDark';
 }
 
-export default function Brand({ compact = false, wordmarkClassName = 'text-xl' }: BrandProps) {
+export default function Brand({
+  compact = false,
+  wordmarkClassName = 'text-xl',
+  variant = 'onLight',
+}: BrandProps) {
+  const onDark = variant === 'onDark';
+
   return (
     <span className="inline-flex flex-col items-start gap-1.5 leading-none">
       <span className="inline-flex items-center gap-2.5">
         <TerraceIcon
-          className={`text-laterite-light shrink-0 ${compact ? 'w-5 h-5 sm:w-6 sm:h-6' : 'w-6 h-6'}`}
+          className={`shrink-0 ${onDark ? 'text-laterite-light' : 'text-laterite'} ${
+            compact ? 'w-5 h-5 sm:w-6 sm:h-6' : 'w-6 h-6'
+          }`}
         />
         <span
-          className={`font-serif font-semibold tracking-tight text-paper leading-tight whitespace-nowrap ${
-            compact ? 'text-lg sm:text-xl' : wordmarkClassName
-          }`}
+          className={`font-serif font-semibold tracking-tight leading-tight whitespace-nowrap ${
+            onDark ? 'text-paper' : 'text-ink'
+          } ${compact ? 'text-lg sm:text-xl' : wordmarkClassName}`}
         >
-          Immo<span className="text-laterite-light">·</span>Les Terrasses
+          Immo<span className={onDark ? 'text-laterite-light' : 'text-laterite'}>·</span>Les Terrasses
         </span>
       </span>
       {!compact && (
-        <span className="hidden sm:block font-mono text-[10px] uppercase tracking-[0.3em] text-paper/50">
+        <span
+          className={`hidden sm:block font-mono text-[10px] uppercase tracking-[0.3em] ${
+            onDark ? 'text-paper/50' : 'text-muted'
+          }`}
+        >
           Résidences · Lomé, Togo
         </span>
       )}

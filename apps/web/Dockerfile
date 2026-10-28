@@ -16,6 +16,9 @@ FROM deps AS build
 # l'API (ex. https://api.residence-catalog.tg) doit être fournie ici.
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Mode étude de marché : inliné au build. Défaut = true.
+ARG NEXT_PUBLIC_MARKET_STUDY_MODE=true
+ENV NEXT_PUBLIC_MARKET_STUDY_MODE=$NEXT_PUBLIC_MARKET_STUDY_MODE
 COPY . .
 RUN pnpm --filter web build
 

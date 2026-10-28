@@ -146,7 +146,7 @@ function ResetPasswordForm() {
 export default function ResetPasswordPage() {
   return (
     <main className="min-h-screen bg-ink text-paper flex flex-col">
-      <Navbar />
+      <Navbar variant="dark" />
       <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute -right-24 top-16 h-64 w-64 rounded-full border border-lagoon/20" />
         <div className="absolute -left-32 bottom-8 h-72 w-72 rounded-full border border-laterite/20" />

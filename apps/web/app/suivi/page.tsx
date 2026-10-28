@@ -414,7 +414,7 @@ export default function SuiviAcquereur() {
   if (isLoading || !user) {
     return (
       <main className="min-h-screen bg-ink text-paper flex flex-col">
-        <Navbar />
+        <Navbar variant="dark" />
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="flex items-center gap-3 font-mono text-xs text-paper/60">
             <Loader2 className="w-5 h-5 animate-spin text-laterite-light" /> Vérification de votre session…
@@ -427,7 +427,7 @@ export default function SuiviAcquereur() {
 
   return (
     <main className="min-h-screen bg-ink text-paper flex flex-col">
-      <Navbar />
+      <Navbar variant="dark" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex-1 w-full space-y-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-paper/15">

@@ -1,90 +1,202 @@
 'use client';
 
 import React, { useState } from 'react';
-import { User, LogOut, ShieldCheck } from 'lucide-react';
+import { User, LogOut, ShieldCheck, Menu, X, ArrowRight } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import Brand from './Brand';
+import { MARKET_STUDY_MODE, SURVEY_PATH } from '../lib/market-mode';
 
-export default function Navbar() {
+const PUBLIC_LINKS = [
+  { href: '/#projet', label: 'Le projet' },
+  { href: '/catalogue', label: 'Catalogue 3D' },
+  { href: '/#avis', label: 'Votre avis' },
+] as const;
+
+interface NavbarProps {
+  /** light = fond crème (site public) ; dark = back-office inchangé. */
+  variant?: 'light' | 'dark';
+}
+
+export default function Navbar({ variant = 'light' }: NavbarProps) {
   const { user, isLoading, logout } = useAuth();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const dark = variant === 'dark';
 
-  const handleLogout = async () => {
-    await logout();
-  };
+  const shell = dark
+    ? 'bg-ink/90 border-paper/15 text-paper'
+    : 'bg-cream/90 border-line text-ink';
+  const linkClass = dark
+    ? 'text-paper/75 hover:text-sand'
+    : 'text-ink/70 hover:text-laterite';
+  const secondaryButton = dark
+    ? 'border-paper/30 text-paper hover:bg-paper/10'
+    : 'border-ink/15 text-ink hover:border-ink/30 hover:bg-ink/5';
+
+  const ctaHref = MARKET_STUDY_MODE ? SURVEY_PATH : '/catalogue';
+  const ctaLabel = MARKET_STUDY_MODE ? 'Donnez votre avis' : 'Réserver ma place';
 
   return (
-    <nav className="sticky top-0 z-50 bg-ink/90 backdrop-blur-md border-b border-paper/15">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 md:h-16 flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-0 py-3 md:py-0">
-        <div className="flex items-center justify-center md:justify-start">
-          <a href="/" className="hover:opacity-90 transition-opacity">
-            <Brand compact />
-          </a>
+    <nav
+      className={`sticky top-0 z-50 border-b backdrop-blur-md ${shell}`}
+      aria-label="Navigation principale"
+    >
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        <a href="/" className="shrink-0 hover:opacity-90" aria-label="Accueil">
+          <Brand compact variant={dark ? 'onDark' : 'onLight'} />
+        </a>
+
+        {/* Liens desktop */}
+        <div className="hidden items-center gap-7 text-sm md:flex">
+          {PUBLIC_LINKS.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className={`transition-colors ${linkClass} ${
+                item.href === '/catalogue' ? 'font-semibold' : 'font-medium'
+              }`}
+            >
+              {item.label}
+            </a>
+          ))}
         </div>
 
-        <div className="hidden md:flex items-center gap-6 text-sm font-mono text-paper/80">
-          <a href="/#mecanisme" className="hover:text-sand transition-colors">Le mécanisme</a>
-          <a href="/#masterplan" className="hover:text-sand transition-colors">Plan de masse</a>
-          <a href="/catalogue" className="hover:text-sand transition-colors flex items-center gap-1 font-bold text-sand">Catalogue 3D ↗</a>
-          <a href="/#reserver" className="hover:text-sand transition-colors">Pré-inscription</a>
-        </div>
-
-        <div className="flex items-center justify-center md:justify-end gap-2 sm:gap-3">
+        {/* Actions desktop */}
+        <div className="hidden items-center gap-2 md:flex">
           {isLoading ? (
-            <span className="font-mono text-xs text-paper/50">…</span>
+            <span className={`font-mono text-xs ${dark ? 'text-paper/50' : 'text-muted'}`}>…</span>
           ) : user ? (
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="font-mono text-xs text-paper/60 hidden lg:inline-block max-w-[160px] truncate" title={user.email}>
+            <>
+              <span
+                className={`hidden max-w-[150px] truncate font-mono text-xs lg:inline ${
+                  dark ? 'text-paper/60' : 'text-muted'
+                }`}
+                title={user.email}
+              >
                 {user.fullName || user.email}
               </span>
               {user.role === 'ADMIN' && (
                 <a
                   href="/admin"
-                  title="Admin"
-                  aria-label="Admin"
-                  className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-laterite/40 bg-laterite/15 text-laterite-light px-2 sm:px-3 py-2 rounded-sm hover:bg-laterite/25 transition-all"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-laterite/40 bg-laterite/10 px-3 py-2 font-mono text-xs text-laterite transition-colors hover:bg-laterite/20"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span className="hidden lg:inline">Admin</span>
+                  <ShieldCheck className="h-3.5 w-3.5" /> Admin
                 </a>
               )}
               <a
                 href="/suivi"
-                title="Suivi"
-                aria-label="Suivi"
-                className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-lagoon/40 bg-lagoon/15 text-lagoon-light px-2 sm:px-3 py-2 rounded-sm hover:bg-lagoon/25 transition-all"
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 font-mono text-xs transition-colors ${secondaryButton}`}
               >
-                <User className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Suivi</span>
+                <User className="h-3.5 w-3.5" /> Suivi
               </a>
               <button
-                onClick={handleLogout}
-                title="Déconnexion"
+                onClick={() => void logout()}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 font-mono text-xs transition-colors ${secondaryButton}`}
                 aria-label="Déconnexion"
-                className="inline-flex items-center justify-center gap-1.5 font-mono text-xs border border-paper/30 px-2 sm:px-3 py-2 rounded-sm hover:bg-paper/10 text-paper/80 transition-all"
               >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Déconnexion</span>
+                <LogOut className="h-3.5 w-3.5" />
               </button>
-            </div>
+            </>
           ) : (
-            <div className="flex items-center gap-2 sm:gap-3">
+            <a
+              href="/login"
+              className={`rounded-lg border px-3 py-2.5 font-mono text-xs transition-colors ${secondaryButton}`}
+            >
+              Connexion
+            </a>
+          )}
+
+          <a href={ctaHref} className="btn-primary !px-4 !py-2.5 !text-xs">
+            {ctaLabel} <ArrowRight className="h-3.5 w-3.5" />
+          </a>
+        </div>
+
+        {/* Actions mobile */}
+        <div className="flex items-center gap-2 md:hidden">
+          {/* Sous 360px, le CTA est accessible par le menu et le hero :
+              l'afficher ici ferait deborder l'en-tete a 320px. */}
+          <a
+            href={ctaHref}
+            className="btn-primary hidden !px-4 !py-2.5 !text-xs min-[360px]:inline-flex"
+          >
+            {MARKET_STUDY_MODE ? 'Avis' : 'Réserver'}
+          </a>
+          <button
+            onClick={() => setMobileOpen((open) => !open)}
+            className={`rounded-lg border p-2.5 transition-colors ${secondaryButton}`}
+            aria-expanded={mobileOpen}
+            aria-controls="menu-mobile"
+            aria-label={mobileOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Panneau mobile */}
+      {mobileOpen && (
+        <div id="menu-mobile" className={`border-t md:hidden ${dark ? 'border-paper/10' : 'border-line'}`}>
+          <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
+            {PUBLIC_LINKS.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className={`rounded-lg px-3 py-3 text-sm font-medium transition-colors ${
+                  dark ? 'text-paper/80 hover:bg-paper/10' : 'text-ink/80 hover:bg-ink/5'
+                }`}
+              >
+                {item.label}
+              </a>
+            ))}
+            <div className={`my-2 border-t ${dark ? 'border-paper/10' : 'border-line'}`} />
+            {user ? (
+              <>
+                {user.role === 'ADMIN' && (
+                  <a
+                    href="/admin"
+                    onClick={() => setMobileOpen(false)}
+                    className={`rounded-lg px-3 py-3 text-sm font-medium ${
+                      dark ? 'text-paper/80 hover:bg-paper/10' : 'text-ink/80 hover:bg-ink/5'
+                    }`}
+                  >
+                    Espace promoteur
+                  </a>
+                )}
+                <a
+                  href="/suivi"
+                  onClick={() => setMobileOpen(false)}
+                  className={`rounded-lg px-3 py-3 text-sm font-medium ${
+                    dark ? 'text-paper/80 hover:bg-paper/10' : 'text-ink/80 hover:bg-ink/5'
+                  }`}
+                >
+                  Mon suivi
+                </a>
+                <button
+                  onClick={() => {
+                    setMobileOpen(false);
+                    void logout();
+                  }}
+                  className={`rounded-lg px-3 py-3 text-left text-sm font-medium ${
+                    dark ? 'text-paper/60 hover:bg-paper/10' : 'text-muted hover:bg-ink/5'
+                  }`}
+                >
+                  Déconnexion
+                </button>
+              </>
+            ) : (
               <a
                 href="/login"
-                className="font-mono text-xs border border-paper/30 px-3 sm:px-4 py-2.5 rounded-sm hover:bg-paper/10 text-paper transition-all"
+                onClick={() => setMobileOpen(false)}
+                className={`rounded-lg px-3 py-3 text-sm font-medium ${
+                  dark ? 'text-paper/80 hover:bg-paper/10' : 'text-ink/80 hover:bg-ink/5'
+                }`}
               >
                 Connexion
               </a>
-              <a
-                href="#reserver"
-                className="font-mono text-xs border border-paper/30 px-3 sm:px-4 py-2.5 rounded-sm hover:bg-laterite hover:border-laterite text-paper transition-all whitespace-nowrap"
-              >
-                <span className="sm:hidden">Réserver</span>
-                <span className="hidden sm:inline">Réserver ma place →</span>
-              </a>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </nav>
   );
 }

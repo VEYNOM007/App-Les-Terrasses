@@ -1,5 +1,7 @@
 'use client';
 
+import type { SurveySubmission } from './survey/validation';
+
 /**
  * Client API backend (NestJS).
  * En dev, l'API tourne sur http://localhost:3001 (configurable).
@@ -968,5 +970,53 @@ export function fetchPaymentHistory(): Promise<PaymentHistoryItem[]> {
  */
 export function cancelReservation(reservationId: string): Promise<void> {
   return apiFetch<void>(`/v1/reservations/${reservationId}`, { method: 'DELETE' });
+}
+
+// ────────────────────────────────────────────────────────────
+// Étude de marché — questionnaire public
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Envoi anonyme du questionnaire. Le contact éventuel est transmis à part
+ * dans le payload : l'API le stocke dans une table séparée.
+ */
+export function submitSurvey(payload: SurveySubmission): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>('/v1/survey', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+// Étude de marché — administration (cookie ADMIN requis)
+// ────────────────────────────────────────────────────────────
+
+export interface AdminSurveyEntry {
+  id: string;
+  source: string | null;
+  residence: string;
+  togoLink: string;
+  projectGoal: string;
+  preference: string;
+  whyText: string | null;
+  budget: string;
+  budgetCurrency: string;
+  size: string;
+  decisionMakers: string[];
+  blockers: string[];
+  reassurances: string[];
+  experienceText: string | null;
+  createdAt: string;
+  contact: { email: string | null; whatsapp: string | null; consent: boolean } | null;
+}
+
+export function fetchAdminSurveys(): Promise<AdminSurveyEntry[]> {
+  return apiFetch<AdminSurveyEntry[]>('/v1/admin/surveys');
+}
+
+/** URL de l'export CSV, filtrée par source si fournie. */
+export function adminSurveyExportUrl(source?: string): string {
+  const query = source ? `?source=${encodeURIComponent(source)}` : '';
+  return `${API_BASE_URL}/v1/admin/surveys/export.csv${query}`;
 }
 

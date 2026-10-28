@@ -150,7 +150,7 @@ async function main() {
       location: 'Baguida, Lomé (Titre Foncier RM 100/71)',
       amenities: ['gardiennage', 'aire_de_jeux', 'auvents_solaires', 'parking_pilotis'],
       status: ProjectStatus.PUBLIE,
-      siteMapImageUrl: '/images/masterplan-les-terrasses.jpg',
+      siteMapImageUrl: '/masterplan-les-terrasses.jpg',
       // Infos marketing stockées en base (fini catalogData.ts côté front).
       marketingInfo: {
         name: 'Résidence Les Terrasses · Baguida',
@@ -224,7 +224,7 @@ async function main() {
           title: 'Plan de Masse Officiel',
           subtitle: 'Plan Cadastral & Découpe des Blocs (Titre Foncier RM 100/71)',
           category: 'masterplan',
-          imageUrl: '/images/masterplan-les-terrasses.jpg',
+          imageUrl: '/masterplan-les-terrasses.jpg',
           description:
             "Plan de masse vectoriel officiel à l'échelle 1/500. Cliquez sur les blocs pour explorer les appartements.",
           hotspots: [
@@ -239,7 +239,7 @@ async function main() {
           title: 'Vue Aérienne HD du Complexe',
           subtitle: 'Vue Rendu Photoréaliste Haute Définition · Baguida',
           category: 'aerial',
-          imageUrl: '/images/masterplan-les-terrasses.jpg',
+          imageUrl: '/masterplan-les-terrasses.jpg',
           description:
             'Vue aérienne officielle. Survolez et cliquez sur les boutons interactifs placés sur les bâtiments pour réserver votre bien.',
           hotspots: [

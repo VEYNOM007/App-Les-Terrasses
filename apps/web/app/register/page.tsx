@@ -213,7 +213,7 @@ function RegisterForm() {
 export default function RegisterPage() {
   return (
     <main className="min-h-screen bg-ink text-paper flex flex-col">
-      <Navbar />
+      <Navbar variant="dark" />
       <div className="flex-1 flex items-center justify-center p-4">
         <Suspense fallback={null}>
           <RegisterForm />

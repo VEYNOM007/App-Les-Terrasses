@@ -19,6 +19,7 @@ import { ContractModule } from './modules/contract/contract.module';
 import { LaunchModule } from './modules/launch/launch.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { KycModule } from './modules/kyc/kyc.module';
+import { SurveyModule } from './modules/survey/survey.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { KycModule } from './modules/kyc/kyc.module';
     LaunchModule,
     AdminModule,
     KycModule,
+    SurveyModule,
   ],
 })
 export class AppModule {}

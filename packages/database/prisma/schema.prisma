@@ -739,3 +739,50 @@ model ParkingSpot {
   @@index([status, type])
   @@map("parking_spots")
 }
+
+// ---------------------------------------------------
+// ÉTUDE DE MARCHÉ — QUESTIONNAIRE
+// ---------------------------------------------------
+// Les réponses sont stockées sans identifiant (anonymes par défaut).
+// Le contact éventuel vit dans une table séparée, avec son consentement
+// horodaté : la suppression du contact ne touche pas aux réponses, et
+// l'export admin joint les deux uniquement à la demande.
+
+model SurveyResponse {
+  id             String   @id @default(cuid())
+  source         String? // ?src= (QR code / flyer), assaini côté API
+  residence      String
+  togoLink       String
+  projectGoal    String
+  preference     String
+  whyText        String?
+  budget         String
+  budgetCurrency String
+  size           String
+  decisionMakers String[]
+  blockers       String[]
+  reassurances   String[]
+  experienceText String?
+  createdAt      DateTime @default(now())
+
+  contact SurveyContact?
+
+  @@index([source])
+  @@index([createdAt])
+  @@map("survey_responses")
+}
+
+model SurveyContact {
+  id             String    @id @default(cuid())
+  responseId     String    @unique
+  response       SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  email          String?
+  whatsapp       String?
+  consent        Boolean   @default(false)
+  consentAt      DateTime?
+  consentVersion String
+  createdAt      DateTime  @default(now())
+
+  @@index([email])
+  @@map("survey_contacts")
+}

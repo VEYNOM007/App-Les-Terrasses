@@ -5,29 +5,46 @@
 :root {
   --ink: #152238;
   --ink-2: #1d3050;
-  --paper: #F4EFE4;
-  --paper-dim: #E7DFCE;
-  --laterite: #B5502E;
-  --laterite-light: #D3714D;
-  --lagoon: #2E7D6B;
-  --lagoon-light: #4FA893;
-  --sand: #D8C9A3;
-  --slate: #5A6E8C;
-  --line: rgba(244, 239, 228, 0.16);
+  --cream: #fbf7ef;
+  --cream-2: #f4ede1;
+  --white: #ffffff;
+  --laterite: #b5502e;
+  --laterite-light: #d3714d;
+  --lagoon: #2e7d6b;
+  --lagoon-light: #4fa893;
+  --sand: #d8c9a3;
+  --body: #1f2933;
+  --muted: #5b6673;
+  --line: #e4dacb;
+  /* Surfaces du back-office (inchangées) */
+  --paper: #f4efe4;
+  --paper-dim: #e7dfce;
+  --line-dark: rgba(244, 239, 228, 0.16);
   --line-strong: rgba(244, 239, 228, 0.32);
 }
 
 html {
   scroll-behavior: smooth;
-  background-color: var(--ink);
-  color: var(--paper);
+  background-color: var(--cream);
+  color: var(--body);
 }
 
 body {
-  background-color: var(--ink);
-  color: var(--paper);
+  background-color: var(--cream);
+  color: var(--body);
   font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: var(--laterite);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--laterite);
+  outline-offset: 2px;
 }
 
 .mono {
@@ -38,8 +55,38 @@ body {
   font-family: 'Fraunces', serif;
 }
 
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-semibold transition-all duration-200;
+  }
+
+  /* Terracotta #B5502E : 5,4:1 avec le blanc — conforme AA. */
+  .btn-primary {
+    @apply btn bg-laterite text-white shadow-card hover:bg-[#9E4527] active:translate-y-px;
+  }
+
+  /* Bouton secondaire sur fond clair. */
+  .btn-outline {
+    @apply btn border border-ink/15 bg-white text-ink hover:border-ink/30 hover:bg-cream;
+  }
+
+  /* Bouton secondaire posé sur une image sombre. */
+  .btn-ghost {
+    @apply btn border border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20;
+  }
+
+  .eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-[0.18em];
+  }
+
+  .card {
+    @apply rounded-2xl border border-line bg-white shadow-card;
+  }
+}
+
+/* Animations du plan de bornage (hero historique, conservé). */
 .plot-outline {
-  fill: rgba(213, 113, 77, 0.06);
+  fill: rgba(181, 80, 46, 0.06);
   stroke: var(--laterite-light);
   stroke-width: 2;
   stroke-dasharray: 900;
@@ -59,7 +106,7 @@ body {
 }
 
 .plot-pt {
-  fill: var(--paper);
+  fill: var(--ink);
   opacity: 0;
   animation: fadeIn 0.4s ease forwards;
 }
@@ -67,7 +114,7 @@ body {
 .plot-pt-label {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 9px;
-  fill: var(--sand);
+  fill: var(--laterite);
   opacity: 0;
   animation: fadeIn 0.4s ease forwards;
 }
@@ -75,5 +122,18 @@ body {
 @keyframes fadeIn {
   to {
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

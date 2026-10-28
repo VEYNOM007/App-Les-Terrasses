@@ -112,7 +112,12 @@ export default function Navbar({ variant = 'light' }: NavbarProps) {
 
         {/* Actions mobile */}
         <div className="flex items-center gap-2 md:hidden">
-          <a href={ctaHref} className="btn-primary !px-4 !py-2.5 !text-xs">
+          {/* Sous 360px, le CTA est accessible par le menu et le hero :
+              l'afficher ici ferait deborder l'en-tete a 320px. */}
+          <a
+            href={ctaHref}
+            className="btn-primary hidden !px-4 !py-2.5 !text-xs min-[360px]:inline-flex"
+          >
             {MARKET_STUDY_MODE ? 'Avis' : 'Réserver'}
           </a>
           <button

@@ -44,13 +44,17 @@ function AdminNav() {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isLoading } = useAuth();
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.replace('/login?redirect=/admin');
+      // On conserve la page demandee (ex. /admin/catalogue) : apres connexion,
+      // le promoteur revient la ou il voulait aller, pas sur une page generique.
+      const target = pathname && pathname.startsWith('/admin') ? pathname : '/admin';
+      router.replace(`/login?redirect=${encodeURIComponent(target)}`);
     }
-  }, [isLoading, user, router]);
+  }, [isLoading, user, router, pathname]);
 
   if (isLoading || !user) {
     return (

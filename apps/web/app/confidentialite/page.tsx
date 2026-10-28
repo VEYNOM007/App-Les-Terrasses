@@ -19,10 +19,10 @@ const SECTIONS = [
         contrat de vente n&apos;est proposé et aucun paiement n&apos;est
         accepté. Pour toute question ou demande de suppression :{' '}
         <a
-          href="mailto:veynom.investi@gmail.com"
+          href="mailto:immo.les.terrasses@gmail.com"
           className="font-medium text-laterite underline underline-offset-4"
         >
-          veynom.investi@gmail.com
+          immo.les.terrasses@gmail.com
         </a>
         .
       </>
@@ -72,10 +72,10 @@ const SECTIONS = [
         Vous pouvez demander l&apos;accès, la rectification, la suppression ou la
         limitation de vos données, et vous opposer à leur utilisation. Écrivez à{' '}
         <a
-          href="mailto:veynom.investi@gmail.com"
+          href="mailto:immo.les.terrasses@gmail.com"
           className="font-medium text-laterite underline underline-offset-4"
         >
-          veynom.investi@gmail.com
+          immo.les.terrasses@gmail.com
         </a>
         . Une réponse vous sera apportée dans les meilleurs délais.
       </>

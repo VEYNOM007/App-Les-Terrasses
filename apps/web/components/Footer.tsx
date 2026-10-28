@@ -47,10 +47,10 @@ export default function Footer() {
             <ul className="mt-4 space-y-3 text-sm">
               <li>
                 <a
-                  href="mailto:veynom.investi@gmail.com"
+                  href="mailto:immo.les.terrasses@gmail.com"
                   className="break-all transition-colors hover:text-paper"
                 >
-                  veynom.investi@gmail.com
+                  immo.les.terrasses@gmail.com
                 </a>
               </li>
               <li>

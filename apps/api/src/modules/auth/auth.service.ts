@@ -44,15 +44,16 @@ export class AuthService {
   ) {}
 
   async register(data: { email: string; phone: string; password: string; fullName: string; country?: string; address?: string }) {
+    const email = data.email.trim().toLowerCase();
     const existing = await this.prisma.user.findFirst({
-      where: { OR: [{ email: data.email }, { phone: data.phone }] },
+      where: { OR: [{ email }, { phone: data.phone }] },
     });
     if (existing) throw new ConflictException('Email ou téléphone déjà utilisé.');
 
     const passwordHash = await bcrypt.hash(data.password, 10);
     const user = await this.prisma.user.create({
       data: {
-        email: data.email,
+        email,
         phone: data.phone,
         passwordHash,
         fullName: data.fullName,
@@ -78,15 +79,16 @@ export class AuthService {
       throw new ForbiddenException('Un administrateur existe déjà. Utilisez la page de connexion.');
     }
 
+    const email = data.email.trim().toLowerCase();
     const existing = await this.prisma.user.findFirst({
-      where: { OR: [{ email: data.email }, { phone: data.phone }] },
+      where: { OR: [{ email }, { phone: data.phone }] },
     });
     if (existing) throw new ConflictException('Email ou téléphone déjà utilisé.');
 
     const passwordHash = await bcrypt.hash(data.password, 10);
     const user = await this.prisma.user.create({
       data: {
-        email: data.email,
+        email,
         phone: data.phone,
         passwordHash,
         fullName: data.fullName,
@@ -99,7 +101,8 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new UnauthorizedException('Identifiants invalides.');
     }

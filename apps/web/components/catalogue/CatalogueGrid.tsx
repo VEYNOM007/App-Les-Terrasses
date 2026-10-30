@@ -6,8 +6,8 @@ import ImageLightbox from '../ImageLightbox';
 import { fetchTypologies, fetchUnit } from '../../lib/api';
 import {
   buildCards,
+  buildTypeFilters,
   selectRepresentativeUnit,
-  TYPE_LABELS,
   UnitCard,
 } from '../../lib/catalog/catalogue-grid';
 import { MARKET_STUDY_MODE } from '../../lib/market-mode';
@@ -184,13 +184,7 @@ export default function CatalogueGrid({ onOpenUnit, onOpenReservation }: Catalog
     }
   }, []);
 
-  const filters = useMemo(() => {
-    const types = Array.from(new Set(cards.map((card) => card.type)));
-    return [
-      { key: 'ALL', label: 'Tous' },
-      ...types.map((type) => ({ key: type, label: TYPE_LABELS[type] ?? type })),
-    ];
-  }, [cards]);
+  const filters = useMemo(() => buildTypeFilters(cards), [cards]);
 
   useEffect(() => {
     void load();

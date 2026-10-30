@@ -28,7 +28,7 @@ export const BUDGET_VALUES = ['LT_20M', '20_35M', '35_50M', '50_75M', 'GT_75M'] 
 
 export const BUDGET_CURRENCY_VALUES = ['XOF', 'EUR'] as const;
 
-export const SIZE_VALUES = ['STUDIO', 'T2', 'T3', 'T4'] as const;
+export const SIZE_VALUES = ['STUDIO', 'T2', 'T3', 'T4', 'T5'] as const;
 
 export const DECISION_MAKER_VALUES = [
   'MOI',
@@ -100,6 +100,7 @@ export const SURVEY_FIELD_LABELS: Record<string, Record<string, string>> = {
     T2: 'T2',
     T3: 'T3',
     T4: 'T4',
+    T5: 'T5',
   },
   decisionMakers: {
     MOI: 'Moi',

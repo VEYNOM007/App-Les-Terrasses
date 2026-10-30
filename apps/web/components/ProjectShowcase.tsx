@@ -36,8 +36,8 @@ export default function ProjectShowcase() {
               Une résidence pensée pour Lomé et pour la diaspora
             </h2>
             <p className="mt-5 text-base leading-relaxed text-muted">
-              Les Terrasses prévoit des studios, des T2, des T3 et des T4 dans
-              une résidence fermée, avec des espaces communs plantés. Le projet
+              Les Terrasses prévoit des studios, des T2, des T3, des T4 et des
+              T5 dans une résidence fermée, avec des espaces communs plantés. Le projet
               est encore à l&apos;étude : les plans, les typologies et les prix
               seront affinés avec les réponses au questionnaire.
             </p>

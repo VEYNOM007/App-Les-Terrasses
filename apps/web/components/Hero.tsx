@@ -34,7 +34,7 @@ export default function Hero() {
           </h1>
 
           <p className="mt-5 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
-            Studios, T2, T3 et T4 dans une résidence fermée à Gbodjomé.
+            Studios, T2, T3, T4 et T5 dans une résidence fermée à Gbodjomé.
             Le projet est à l&apos;étude : vos réponses orientent les
             typologies, les prix et les plans.
           </p>

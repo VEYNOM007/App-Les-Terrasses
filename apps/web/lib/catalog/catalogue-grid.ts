@@ -26,6 +26,25 @@ export const TYPE_LABELS: Record<string, string> = {
   COMMERCE: 'Local Commercial',
 };
 
+export interface TypeFilter {
+  key: string;
+  label: string;
+}
+
+/**
+ * Filtres de typologie affichés au-dessus de la grille.
+ *
+ * Source unique : les cartes réellement chargées. Une typologie sans aucun
+ * lot (ex. COMMERCE tant qu'aucun local n'existe) n'a donc jamais de filtre.
+ */
+export function buildTypeFilters(cards: Pick<UnitCard, 'type'>[]): TypeFilter[] {
+  const types = Array.from(new Set(cards.map((card) => card.type)));
+  return [
+    { key: 'ALL', label: 'Tous' },
+    ...types.map((type) => ({ key: type, label: TYPE_LABELS[type] ?? type })),
+  ];
+}
+
 /**
  * Point de passage unique pour convertir un montant (Decimal Prisma) reçu en
  * string depuis l'API. Échoue bruyamment sur un format inattendu plutôt que de

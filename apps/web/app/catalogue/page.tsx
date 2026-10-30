@@ -111,7 +111,7 @@ export default function CataloguePage() {
           <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
             <div className="max-w-3xl">
               <p className="eyebrow text-laterite">
-                Catalogue 3D · Baguida, Lomé
+                Catalogue 3D · Gbodjomé, Lomé
               </p>
               <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink sm:text-5xl">
                 Le projet, <em className="italic text-laterite">logement par logement</em>

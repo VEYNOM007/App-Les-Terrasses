@@ -20,6 +20,7 @@
 ## Projets actifs
 - CertifAuto : certification automobile, Next.js + NestJS + Supabase + Railway
 - AfricoShip : transport France-Afrique, Next.js 14 + NestJS + Prisma + Flutterwave
+- Les Terrasses : résidence à Gbodjomé, Lomé (Togo)
 
 ## Workflow multi-model
 - GLM 4.7 : planification et developpement

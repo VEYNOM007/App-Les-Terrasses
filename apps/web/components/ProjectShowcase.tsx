@@ -8,8 +8,8 @@ import { MARKET_STUDY_MODE, SURVEY_PATH } from '../lib/market-mode';
 const FACTS = [
   {
     icon: MapPin,
-    title: 'Baguida, à l’est de Lomé',
-    detail: 'Un terrain arboré, à quelques minutes du littoral.',
+    title: 'Gbodjomé, Lomé',
+    detail: 'Un terrain arboré.',
   },
   {
     icon: ShieldCheck,
@@ -36,11 +36,10 @@ export default function ProjectShowcase() {
               Une résidence pensée pour Lomé et pour la diaspora
             </h2>
             <p className="mt-5 text-base leading-relaxed text-muted">
-              Les Terrasses de Baguida prévoit des studios, des T2, des T3 et
-              des T4 dans une résidence fermée, avec des espaces communs
-              plantés. Le projet est encore à l&apos;étude : les plans, les
-              typologies et les prix seront affinés avec les réponses au
-              questionnaire.
+              Les Terrasses prévoit des studios, des T2, des T3 et des T4 dans
+              une résidence fermée, avec des espaces communs plantés. Le projet
+              est encore à l&apos;étude : les plans, les typologies et les prix
+              seront affinés avec les réponses au questionnaire.
             </p>
 
             <ul className="mt-8 space-y-5">
@@ -95,7 +94,7 @@ export default function ProjectShowcase() {
 
       <ImageLightbox
         src="/masterplan-les-terrasses.jpg"
-        alt="Plan de masse du projet Les Terrasses de Baguida"
+        alt="Plan de masse du projet Les Terrasses"
         isOpen={lightboxOpen}
         onClose={() => setLightboxOpen(false)}
       />

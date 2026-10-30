@@ -4,17 +4,17 @@ import React from 'react';
 import PWARegister from '../components/PWARegister';
 import SourceCapture from '../components/SourceCapture';
 import { AuthProvider } from '../components/AuthProvider';
+import { PROJECT_BRAND, PROJECT_LOCATION, PROJECT_TITLE_STUDY } from '../lib/project-info';
 
 export const metadata: Metadata = {
-  title: "Les Terrasses de Baguida — Projet à l'étude",
-  description:
-    "Un projet d'appartements à Baguida, Lomé (Togo). Donnez votre avis en 2 minutes : les réponses orientent les typologies, les prix et les plans. Sans engagement, sans paiement.",
+  title: PROJECT_TITLE_STUDY,
+  description: `Un projet d'appartements à ${PROJECT_LOCATION}. Donnez votre avis en 2 minutes : les réponses orientent les typologies, les prix et les plans. Sans engagement, sans paiement.`,
   manifest: '/manifest.json',
-  applicationName: 'Les Terrasses de Baguida',
+  applicationName: PROJECT_BRAND,
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Les Terrasses de Baguida',
+    title: PROJECT_BRAND,
   },
   formatDetection: {
     telephone: false,
@@ -30,10 +30,9 @@ export const metadata: Metadata = {
     shortcut: ['/favicon.svg'],
   },
   openGraph: {
-    title: "Les Terrasses de Baguida — Projet à l'étude",
-    description:
-      "Appartements à Baguida, Lomé (Togo). Projet à l'étude, prix et plans indicatifs. Donnez votre avis en 2 minutes.",
-    siteName: 'Les Terrasses de Baguida',
+    title: PROJECT_TITLE_STUDY,
+    description: `Appartements à ${PROJECT_LOCATION}. Projet à l'étude, prix et plans indicatifs. Donnez votre avis en 2 minutes.`,
+    siteName: PROJECT_BRAND,
     type: 'website',
     locale: 'fr_FR',
   },

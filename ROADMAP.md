@@ -1,4 +1,4 @@
-# ROADMAP — Terrasses de Baguida (Residence Catalog)
+# ROADMAP — Les Terrasses (Residence Catalog)
 
 > Snapshot au 2026-08-02. Ce document reflete l'etat reel du code (pas les
 > intentions). Toute modification de portee doit etre refletée ici au moment
@@ -10,7 +10,7 @@
 ## 1. Vision produit
 
 Plateforme de vente de logements en residence fermée (studios / T2 / T3 / T5 /
-locaux commerciaux) à Baguida, Lomé (Togo). Differentiateur : **financement par
+locaux commerciaux) à Gbodjomé, Lomé (Togo). Differentiateur : **financement par
 lot conditionné aux pré-ventes** — on ne construit que ce qui est déjà financé
 par les acheteurs. La PWA web grand public est l'entree principale (catalogue,
 réservation 48h, suivi acquéreur), avec des espaces dedies artisans et admin.

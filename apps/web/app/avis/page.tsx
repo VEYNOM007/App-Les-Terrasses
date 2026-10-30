@@ -120,7 +120,7 @@ export default function AvisPage() {
           <section className="card p-5 sm:p-10">
             <p className="eyebrow text-laterite-dark">Étude de marché · 2 minutes</p>
             <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">
-              Les Terrasses de Baguida : donnez votre avis
+              Les Terrasses : donnez votre avis
             </h1>
             <p className="mt-5 text-base leading-relaxed text-muted">
               Projet à l&apos;étude, sans engagement ni paiement. 2 minutes,

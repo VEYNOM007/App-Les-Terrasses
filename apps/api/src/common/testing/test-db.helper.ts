@@ -122,7 +122,7 @@ export async function createProjectWithBlockAndUnits(
     data: {
       name: `Projet Test ${Date.now()}`,
       description: 'Projet de test',
-      location: 'Baguida',
+      location: 'Gbodjomé',
       status: 'PUBLIE',
     },
   });

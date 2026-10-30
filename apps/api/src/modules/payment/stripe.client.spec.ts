@@ -64,7 +64,7 @@ describe('StripeClient', () => {
   const checkoutParams: StripeCheckoutRequest = {
     transactionId: 'TX-123',
     amountEurCents: 76225,
-    description: 'Paiement Acompte réservation - Résidence Baguida',
+    description: 'Paiement Acompte réservation - Résidence Les Terrasses',
     installmentId: 'inst-001',
   };
 

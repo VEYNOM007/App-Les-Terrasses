@@ -164,7 +164,7 @@ export class PaymentService {
         transactionId,
         amount: Number(installment.amount),
         currency: installment.schedule.currency,
-        description: `Paiement ${installment.label} - Résidence Baguida`,
+        description: `Paiement ${installment.label} - Résidence Les Terrasses`,
         installmentId: installment.id,
         customerName: user.fullName,
         customerEmail: user.email,
@@ -197,7 +197,7 @@ export class PaymentService {
       const session = await this.stripeClient.createCheckoutSession({
         transactionId,
         amountEurCents,
-        description: `Paiement ${installment.label} - Résidence Baguida`,
+        description: `Paiement ${installment.label} - Résidence Les Terrasses`,
         installmentId: installment.id,
         customerEmail: user.email,
       });

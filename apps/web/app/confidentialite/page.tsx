@@ -3,8 +3,10 @@ import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import MarketStudyBanner from '../../components/MarketStudyBanner';
 
+import { PROJECT_LOCATION } from '../../lib/project-info';
+
 export const metadata = {
-  title: 'Confidentialité des données — Les Terrasses de Baguida',
+  title: 'Confidentialité des données — Les Terrasses',
   description:
     "Comment les réponses au questionnaire d'étude de marché sont collectées, utilisées et supprimées.",
 };
@@ -14,10 +16,10 @@ const SECTIONS = [
     title: 'Qui traite vos données ?',
     body: (
       <>
-        Le projet <strong>Les Terrasses de Baguida</strong> (Baguida, Lomé,
-        Togo). Le projet n&apos;a pas encore d&apos;entité légale : aucun
-        contrat de vente n&apos;est proposé et aucun paiement n&apos;est
-        accepté. Pour toute question ou demande de suppression :{' '}
+        Le projet <strong>Les Terrasses</strong> ({PROJECT_LOCATION}). Le projet
+        n&apos;a pas encore d&apos;entité légale : aucun contrat de vente
+        n&apos;est proposé et aucun paiement n&apos;est accepté. Pour toute
+        question ou demande de suppression :{' '}
         <a
           href="mailto:immo.les.terrasses@gmail.com"
           className="font-medium text-laterite underline underline-offset-4"

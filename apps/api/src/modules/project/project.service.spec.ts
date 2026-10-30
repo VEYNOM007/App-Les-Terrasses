@@ -66,8 +66,8 @@ describe('ProjectService', () => {
 
   it('mappe les champs du DTO lors de la création d’un projet', async () => {
     const data: CreateProjectDto = {
-      name: 'Terrasses de Baguida',
-      location: 'Lomé, Togo',
+      name: 'Les Terrasses',
+      location: 'Gbodjomé, Lomé',
       description: 'Résidence fermée',
       amenities: ['Piscine'],
       coverImage: 'https://example.com/cover.jpg',

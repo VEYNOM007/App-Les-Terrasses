@@ -56,6 +56,17 @@ export const REASSURANCE_VALUES = [
   'VISITE_SUR_PLACE',
 ] as const;
 
+export const TOP_ATOUTS_VALUES = ['securite', 'parc', 'services', 'conciergerie', 'mer', 'commerces'] as const;
+
+export const TOP_ATOUTS_LABELS: Record<string, string> = {
+  securite: 'Résidence fermée et sécurisée',
+  parc: 'Parc central planté',
+  services: 'Services partagés entre résidents',
+  conciergerie: 'Option de conciergerie pour louer votre appartement',
+  mer: 'À environ 550 m de la mer et 3 minutes d’Agbodrafo en voiture',
+  commerces: 'Locaux commerciaux prévus dans la résidence',
+};
+
 /** Version du texte de consentement accepté par le répondant. */
 export const SURVEY_CONSENT_VERSION = '2026-10-28';
 
@@ -101,6 +112,14 @@ export const SURVEY_FIELD_LABELS: Record<string, Record<string, string>> = {
     T3: 'T3',
     T4: 'T4',
     T5: 'T5',
+  },
+  topAtouts: {
+    securite: 'Résidence fermée et sécurisée',
+    parc: 'Parc central planté',
+    services: 'Services partagés entre résidents',
+    conciergerie: 'Option de conciergerie pour louer votre appartement',
+    mer: 'À environ 550 m de la mer et 3 minutes d’Agbodrafo en voiture',
+    commerces: 'Locaux commerciaux prévus dans la résidence',
   },
   decisionMakers: {
     MOI: 'Moi',

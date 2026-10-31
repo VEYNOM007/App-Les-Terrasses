@@ -20,6 +20,10 @@ export interface SurveySubmission {
   blockers: string[];
   reassurances: string[];
   experienceText: string | null;
+  intentBefore?: number | null;
+  intentAfter?: number | null;
+  topAtouts?: string[];
+  remainingBlockers?: string | null;
   contact: SurveyContactPayload | null;
 }
 
@@ -71,13 +75,21 @@ export function contactError(answers: SurveyAnswers): string | null {
 export function isStepComplete(step: SurveyStep, answers: SurveyAnswers): boolean {
   switch (step.kind) {
     case 'single':
-      return typeof answers[step.key] === 'string' && (answers[step.key] as string).length > 0;
+      return answers[step.key].length > 0;
     case 'multi':
-      return Array.isArray(answers[step.key]) && (answers[step.key] as string[]).length > 0;
-    case 'text': {
+      return answers[step.key].length > 0;
+    case 'text':
+      return answers[step.key].length <= step.maxLength;
+    case 'intent': {
       const value = answers[step.key];
-      return typeof value === 'string' && value.length <= step.maxLength;
+      return value !== null && value >= 1 && value <= 5;
     }
+    case 'atouts':
+      return true;
+    case 'topAtouts':
+      return answers.topAtouts.length <= 3;
+    case 'remainingBlockers':
+      return answers.remainingBlockers.length <= step.maxLength;
     case 'budget':
       return answers.budget.length > 0;
     case 'contact':
@@ -92,6 +104,14 @@ export function stepErrorMessage(step: SurveyStep): string {
     case 'multi':
       return 'Choisissez au moins une réponse pour continuer.';
     case 'text':
+      return 'Votre texte est trop long.';
+    case 'intent':
+      return 'Donnez une note de 1 à 5 pour continuer.';
+    case 'atouts':
+      return 'Faites défiler pour continuer.';
+    case 'topAtouts':
+      return 'Sélectionnez 1 à 3 atouts pour continuer.';
+    case 'remainingBlockers':
       return 'Votre texte est trop long.';
     case 'budget':
       return 'Choisissez une fourchette de budget.';
@@ -127,6 +147,10 @@ export function buildSubmission(
     blockers: [...answers.blockers],
     reassurances: [...answers.reassurances],
     experienceText: trimmedOrNull(answers.experienceText),
+    intentBefore: typeof answers.intentBefore === 'number' ? answers.intentBefore : null,
+    intentAfter: typeof answers.intentAfter === 'number' ? answers.intentAfter : null,
+    topAtouts: Array.isArray(answers.topAtouts) ? [...answers.topAtouts].slice(0, 3) : [],
+    remainingBlockers: trimmedOrNull(answers.remainingBlockers),
     contact: hasContact
       ? {
           email: email.length > 0 ? email : null,

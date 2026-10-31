@@ -21,6 +21,10 @@ export interface SurveyCsvRow {
   reassurances: string[];
   whyText: string | null;
   experienceText: string | null;
+  intentBefore: number | null;
+  intentAfter: number | null;
+  topAtouts: string[];
+  remainingBlockers: string | null;
   contact: SurveyCsvContact | null;
 }
 
@@ -39,6 +43,11 @@ const HEADERS = [
   'Rassurances',
   'Pourquoi (texte)',
   'Expérience (texte)',
+  'Intention avant (1-5)',
+  'Intention après (1-5)',
+  'Écart',
+  'Atouts choisis',
+  'Frein restant (texte)',
   'E-mail',
   'WhatsApp',
   'Consentement',
@@ -81,6 +90,13 @@ export function toCsv(rows: SurveyCsvRow[]): string {
         labels('reassurances', row.reassurances),
         row.whyText ?? '',
         row.experienceText ?? '',
+        row.intentBefore ?? '',
+        row.intentAfter ?? '',
+        row.intentBefore !== null && row.intentAfter !== null
+          ? row.intentAfter - row.intentBefore
+          : '',
+        labels('topAtouts', row.topAtouts),
+        row.remainingBlockers ?? '',
         row.contact?.email ?? '',
         row.contact?.whatsapp ?? '',
         row.contact?.consent ? 'Oui' : 'Non',

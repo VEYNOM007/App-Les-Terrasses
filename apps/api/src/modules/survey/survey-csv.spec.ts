@@ -16,6 +16,10 @@ const ROW: SurveyCsvRow = {
   reassurances: ['TITRE_PAR_LOT', 'SUIVI_PHOTO'],
   whyText: 'Le calme ; la sécurité',
   experienceText: null,
+  intentBefore: 2,
+  intentAfter: 5,
+  topAtouts: ['securite', 'parc', 'mer'],
+  remainingBlockers: null,
   contact: { email: 'vous@exemple.com', whatsapp: null, consent: true },
 };
 
@@ -58,6 +62,24 @@ describe('toCsv', () => {
   it('gère une réponse sans contact', () => {
     const csv = toCsv([{ ...ROW, contact: null }]);
     expect(csv).toContain('Non\r\n');
+  });
+
+  it('exporte l’intention avant/après, l’écart et les atouts', () => {
+    const csv = toCsv([ROW]);
+    expect(csv).toContain('Intention avant (1-5)');
+    expect(csv).toContain('Intention après (1-5)');
+    expect(csv).toContain('Écart');
+    expect(csv).toContain('Atouts choisis');
+    expect(csv).toContain('3');
+    expect(csv).toContain(
+      'Résidence fermée et sécurisée | Parc central planté | À environ 550 m de la mer et 3 minutes d’Agbodrafo en voiture',
+    );
+  });
+
+  it('laisse vides les colonnes d’intention quand les notes sont absentes', () => {
+    const csv = toCsv([{ ...ROW, intentBefore: null, intentAfter: null }]);
+    const line = csv.trim().split('\r\n')[1];
+    expect(line).toContain(';;;');
   });
 });
 

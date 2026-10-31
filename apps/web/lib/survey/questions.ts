@@ -20,6 +20,10 @@ export interface SurveyAnswers {
   blockers: string[];
   reassurances: string[];
   experienceText: string;
+  intentBefore: number | null;
+  intentAfter: number | null;
+  topAtouts: string[];
+  remainingBlockers: string;
   contactEmail: string;
   contactWhatsapp: string;
   consent: boolean;
@@ -75,12 +79,71 @@ export interface ContactQuestion {
   hint: string;
 }
 
+export type IntentKey = 'intentBefore' | 'intentAfter';
+export type TopAtoutsKey = 'topAtouts';
+export type RemainingBlockersKey = 'remainingBlockers';
+
+export interface IntentQuestion {
+  key: IntentKey;
+  kind: 'intent';
+  title: string;
+  hint: string;
+}
+
+export interface AtoutsScreen {
+  key: 'atouts';
+  kind: 'atouts';
+  title: string;
+  subtitle: string;
+  items: string[];
+  footnote: string;
+}
+
+export interface TopAtoutsQuestion {
+  key: TopAtoutsKey;
+  kind: 'topAtouts';
+  title: string;
+  hint: string;
+  options: Array<{ value: string; label: string }>;
+}
+
+export interface RemainingBlockersQuestion {
+  key: RemainingBlockersKey;
+  kind: 'remainingBlockers';
+  title: string;
+  hint: string;
+  placeholder: string;
+  maxLength: number;
+}
+
 export type SurveyStep =
   | SingleQuestion
   | MultiQuestion
   | TextQuestion
   | BudgetQuestion
-  | ContactQuestion;
+  | ContactQuestion
+  | IntentQuestion
+  | AtoutsScreen
+  | TopAtoutsQuestion
+  | RemainingBlockersQuestion;
+
+export const ATOUTS_ITEMS = [
+  'Résidence fermée et sécurisée',
+  'Parc central planté',
+  'Services partagés entre résidents',
+  'Option de conciergerie pour louer votre appartement',
+  'À environ 550 m de la mer et 3 minutes d’Agbodrafo en voiture',
+  'Locaux commerciaux prévus dans la résidence',
+];
+
+export const TOP_ATOUTS_OPTIONS = [
+  { value: 'securite', label: 'Résidence fermée et sécurisée' },
+  { value: 'parc', label: 'Parc central planté' },
+  { value: 'services', label: 'Services partagés entre résidents' },
+  { value: 'conciergerie', label: 'Option de conciergerie pour louer votre appartement' },
+  { value: 'mer', label: 'Proximité de la mer / Agbodrafo' },
+  { value: 'commerces', label: 'Locaux commerciaux prévus dans la résidence' },
+];
 
 export const SURVEY_STEPS: SurveyStep[] = [
   {
@@ -216,6 +279,42 @@ export const SURVEY_STEPS: SurveyStep[] = [
     rows: 5,
   },
   {
+    key: 'intentBefore',
+    kind: 'intent',
+    title: 'Si un appartement dans cette résidence vous était proposé, seriez-vous intéressé(e) ?',
+    hint: 'Notez votre intention avant de découvrir le détail du programme, de 1 (pas du tout) à 5 (très intéressé(e)).',
+  },
+  {
+    key: 'atouts',
+    kind: 'atouts',
+    title: 'Ce que prévoit le projet',
+    subtitle: 'Les éléments prévus au programme de la résidence',
+    items: ATOUTS_ITEMS,
+    footnote:
+      'Projet à l’étude : ces éléments sont prévus au programme et peuvent évoluer.',
+  },
+  {
+    key: 'intentAfter',
+    kind: 'intent',
+    title: 'Si un appartement dans cette résidence vous était proposé, seriez-vous intéressé(e) ?',
+    hint: 'Notez à nouveau votre intention, de 1 (pas du tout) à 5 (très intéressé(e)).',
+  },
+  {
+    key: 'topAtouts',
+    kind: 'topAtouts',
+    title: 'Quels 3 atouts comptent le plus pour vous ?',
+    hint: 'Sélectionnez jusqu’à 3 éléments.',
+    options: TOP_ATOUTS_OPTIONS,
+  },
+  {
+    key: 'remainingBlockers',
+    kind: 'remainingBlockers',
+    title: 'Qu’est-ce qui vous retiendrait encore ?',
+    hint: 'Facultatif. Ce qui pourrait encore vous freiner.',
+    placeholder: 'Financement, délais, confiance, informations manquantes…',
+    maxLength: 2000,
+  },
+  {
     key: 'contact',
     kind: 'contact',
     title: 'Comment vous prévenir du lancement ?',
@@ -245,6 +344,10 @@ export function initialAnswers(): SurveyAnswers {
     blockers: [],
     reassurances: [],
     experienceText: '',
+    intentBefore: null,
+    intentAfter: null,
+    topAtouts: [],
+    remainingBlockers: '',
     contactEmail: '',
     contactWhatsapp: '',
     consent: false,

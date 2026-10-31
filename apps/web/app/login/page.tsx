@@ -61,7 +61,7 @@ function LoginForm() {
       <h1 className="font-serif text-2xl font-semibold text-paper mb-2">Connexion</h1>
       <p className="text-xs text-paper/70 font-mono mb-6">
         {isAdminRedirect
-          ? 'Accédez à l’administration du projet Les Terrasses de Baguida.'
+          ? 'Accédez à l’administration du projet Les Terrasses.'
           : 'Accédez à votre suivi de logement et à votre échéancier de paiement.'}
       </p>
 

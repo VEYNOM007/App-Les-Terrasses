@@ -18,9 +18,9 @@ export default function Footer() {
           <div className="sm:col-span-2">
             <Brand variant="onDark" />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-paper/70">
-              Des appartements pensés pour Lomé et pour la diaspora, à Baguida.
-              Le projet est à l&apos;étude : votre avis oriente les typologies,
-              les prix et les plans.
+              Des appartements pensés pour Lomé et pour la diaspora. Le projet
+              est à l&apos;étude : votre avis oriente les typologies, les prix et
+              les plans.
             </p>
             {MARKET_STUDY_MODE && (
               <p className="mt-4 inline-flex rounded-lg border border-laterite-light/30 bg-laterite/15 px-3 py-2 text-xs font-medium text-laterite-light">
@@ -68,7 +68,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col gap-3 border-t border-paper/15 pt-6 text-xs text-paper/45 sm:flex-row sm:items-center sm:justify-between">
-          <p>© 2026 Les Terrasses de Baguida · Baguida, Lomé (Togo)</p>
+          <p>© 2026 Les Terrasses · Gbodjomé, Lomé (Togo)</p>
           <p>Prospectus non contractuel</p>
         </div>
       </div>

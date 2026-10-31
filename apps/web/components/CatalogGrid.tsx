@@ -114,7 +114,7 @@ export default function CatalogGrid() {
           <div className="max-w-2xl">
             <p className="eyebrow text-laterite">Les typologies</p>
             <h2 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">
-              Du studio au T4, un même standard de finition
+              Du studio au T5, un même standard de finition
             </h2>
             <p className="mt-4 text-base leading-relaxed text-muted">
               Les surfaces et les prix ci-dessous sont ceux du projet tel

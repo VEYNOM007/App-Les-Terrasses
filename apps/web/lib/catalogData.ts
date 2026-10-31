@@ -87,8 +87,8 @@ export interface ComplexInfo {
 
 /** Identité minimale du projet — aucune vue, aucun prix, aucune unité inventée. */
 export const DEFAULT_COMPLEX_DATA: ComplexInfo = {
-  name: 'Les Terrasses de Baguida',
-  location: 'Baguida, Lomé, Togo',
+  name: 'Les Terrasses',
+  location: 'Gbodjomé, Lomé, Togo',
   titleDeed: '',
   totalLandArea: '',
   deliveryDate: '',

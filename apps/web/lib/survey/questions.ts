@@ -162,6 +162,7 @@ export const SURVEY_STEPS: SurveyStep[] = [
       { value: 'T2', label: 'T2' },
       { value: 'T3', label: 'T3' },
       { value: 'T4', label: 'T4' },
+      { value: 'T5', label: 'T5' },
     ],
   },
   {

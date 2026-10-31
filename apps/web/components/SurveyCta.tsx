@@ -18,7 +18,7 @@ export default function SurveyCta() {
             <div className="p-8 sm:p-12 lg:col-span-3">
               <p className="eyebrow text-laterite">Votre avis</p>
               <h2 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">
-                Les Terrasses de Baguida : donnez votre avis
+                Les Terrasses : donnez votre avis
               </h2>
               <p className="mt-4 text-base leading-relaxed text-muted">
                 Projet à l&apos;étude, sans engagement ni paiement.

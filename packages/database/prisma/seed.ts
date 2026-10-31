@@ -141,21 +141,21 @@ async function main() {
     },
   });
 
-  // 2. Projet "Les Terrasses de Baguida"
+  // 2. Projet "Les Terrasses"
   const project = await prisma.project.create({
     data: {
-      name: 'Les Terrasses de Baguida',
+      name: 'Les Terrasses',
       description:
-        'Studios, T2, T3 et T5 en résidence fermée sécurisée avec façade commerciale et auvents solaires à Baguida, Lomé.',
-      location: 'Baguida, Lomé (Titre Foncier RM 100/71)',
+        'Studios, T2, T3 et T5 en résidence fermée sécurisée avec façade commerciale et auvents solaires à Gbodjomé, Lomé.',
+      location: 'Gbodjomé, Lomé',
       amenities: ['gardiennage', 'aire_de_jeux', 'auvents_solaires', 'parking_pilotis'],
       status: ProjectStatus.PUBLIE,
       siteMapImageUrl: '/masterplan-les-terrasses.jpg',
       // Infos marketing stockées en base (fini catalogData.ts côté front).
       marketingInfo: {
-        name: 'Résidence Les Terrasses · Baguida',
-        location: 'Baguida, Lomé - Togo (à 5 min du Littoral)',
-        titleDeed: 'RM 100/71 (Titre Foncier Définitif et Libéré)',
+        name: 'Résidence Les Terrasses',
+        location: 'Gbodjomé, Lomé',
+        titleDeed: '',
         totalLandArea: '6 593 m²',
         deliveryDate: 'Trimestre 4 - 2026',
         notaryName: '',
@@ -222,7 +222,7 @@ async function main() {
         {
           id: 'view-masterplan',
           title: 'Plan de Masse Officiel',
-          subtitle: 'Plan Cadastral & Découpe des Blocs (Titre Foncier RM 100/71)',
+          subtitle: 'Plan Cadastral & Découpe des Blocs',
           category: 'masterplan',
           imageUrl: '/masterplan-les-terrasses.jpg',
           description:
@@ -237,7 +237,7 @@ async function main() {
         {
           id: 'view-aerial',
           title: 'Vue Aérienne HD du Complexe',
-          subtitle: 'Vue Rendu Photoréaliste Haute Définition · Baguida',
+          subtitle: 'Vue Rendu Photoréaliste Haute Définition',
           category: 'aerial',
           imageUrl: '/masterplan-les-terrasses.jpg',
           description:

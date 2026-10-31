@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogUnit, TypologyGroup, TypologyUnit, UnitMedia } from '../api';
-import { mapTypologyToCard, thumbnailMedia } from './catalogue-grid';
+import { buildTypeFilters, mapTypologyToCard, thumbnailMedia } from './catalogue-grid';
 
 function media(type: UnitMedia['type'], sortOrder: number): UnitMedia {
   return { id: `m-${type}-${sortOrder}`, type, url: `/${type}.jpg`, altText: type, sortOrder };
@@ -47,6 +47,41 @@ function group(type: TypologyGroup['type'], units: TypologyUnit[]): TypologyGrou
     units,
   };
 }
+
+describe('buildTypeFilters', () => {
+  it('n’expose jamais un filtre Commerce quand aucun lot commerce n’existe', () => {
+    const filters = buildTypeFilters([
+      { type: 'STUDIO' },
+      { type: 'T2' },
+      { type: 'T3' },
+      { type: 'T4' },
+      { type: 'T5' },
+    ]);
+
+    expect(filters.map((filter) => filter.key)).toEqual(['ALL', 'STUDIO', 'T2', 'T3', 'T4', 'T5']);
+    expect(filters.some((filter) => filter.key === 'COMMERCE')).toBe(false);
+  });
+
+  it('dédoublonne les typologies et ajoute « Tous » en tête', () => {
+    const filters = buildTypeFilters([{ type: 'T2' }, { type: 'T2' }, { type: 'T3' }]);
+
+    expect(filters).toEqual([
+      { key: 'ALL', label: 'Tous' },
+      { key: 'T2', label: 'Appartement T2' },
+      { key: 'T3', label: 'Appartement T3' },
+    ]);
+  });
+
+  it('affiche le filtre Commerce dès qu’un lot commerce est chargé', () => {
+    const filters = buildTypeFilters([{ type: 'T2' }, { type: 'COMMERCE' }]);
+
+    expect(filters).toContainEqual({ key: 'COMMERCE', label: 'Local Commercial' });
+  });
+
+  it('ne retourne que « Tous » sur une grille vide', () => {
+    expect(buildTypeFilters([])).toEqual([{ key: 'ALL', label: 'Tous' }]);
+  });
+});
 
 describe('thumbnailMedia', () => {
   it('préfère le RENDU_3D même en dernière position de sortOrder', () => {

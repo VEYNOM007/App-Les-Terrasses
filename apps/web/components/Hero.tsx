@@ -15,7 +15,7 @@ export default function Hero() {
       {/* Rendu aérien réel du projet — aucune image inventée. */}
       <img
         src="/masterplan-les-terrasses.jpg"
-        alt="Rendu aérien de la résidence Les Terrasses à Baguida : quatre bâtiments, jardins et parking"
+        alt="Rendu aérien de la résidence Les Terrasses : quatre bâtiments, jardins et parking"
         className="absolute inset-0 h-full w-full object-cover object-[58%_center] sm:object-center"
         loading="eager"
       />
@@ -25,7 +25,7 @@ export default function Hero() {
         <div className="max-w-2xl">
           <p className="eyebrow flex items-center gap-2 text-sand">
             <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-            Baguida · Lomé · Togo
+            Gbodjomé · Lomé · Togo
           </p>
 
           <h1 className="mt-4 font-serif text-4xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
@@ -34,7 +34,7 @@ export default function Hero() {
           </h1>
 
           <p className="mt-5 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
-            Studios, T2, T3 et T4 dans une résidence fermée à Baguida.
+            Studios, T2, T3, T4 et T5 dans une résidence fermée à Gbodjomé.
             Le projet est à l&apos;étude : vos réponses orientent les
             typologies, les prix et les plans.
           </p>

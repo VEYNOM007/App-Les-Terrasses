@@ -28,7 +28,7 @@ export default function LeadForm() {
       interest === 't3' ? 'T3' :
       interest === 't5' ? 'T5' : 'Local commercial';
 
-    const message = `Bonjour, je souhaite être informé(e) du lancement des Terrasses de Baguida.%0A%0ANom: ${encodeURIComponent(
+    const message = `Bonjour, je souhaite être informé(e) du lancement des Terrasses.%0A%0ANom: ${encodeURIComponent(
       fullName
     )}%0AWhatsApp: ${encodeURIComponent(whatsapp)}%0AEmail: ${encodeURIComponent(
       email || 'non renseigné'

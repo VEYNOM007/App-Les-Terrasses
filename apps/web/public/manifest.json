@@ -1,8 +1,8 @@
 {
   "id": "/?source=pwa",
-  "name": "Les Terrasses de Baguida — Projet à l'étude",
+  "name": "Les Terrasses — Projet à l'étude",
   "short_name": "Les Terrasses",
-  "description": "Projet d'appartements à Baguida, Lomé (Togo). Donnez votre avis en 2 minutes : prix et plans indicatifs.",
+  "description": "Projet d'appartements à Gbodjomé, Lomé (Togo). Donnez votre avis en 2 minutes : prix et plans indicatifs.",
   "lang": "fr",
   "dir": "ltr",
   "start_url": "/?source=pwa",

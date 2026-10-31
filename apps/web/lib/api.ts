@@ -1006,6 +1006,10 @@ export interface AdminSurveyEntry {
   blockers: string[];
   reassurances: string[];
   experienceText: string | null;
+  intentBefore: number | null;
+  intentAfter: number | null;
+  topAtouts: string[];
+  remainingBlockers: string | null;
   createdAt: string;
   contact: { email: string | null; whatsapp: string | null; consent: boolean } | null;
 }

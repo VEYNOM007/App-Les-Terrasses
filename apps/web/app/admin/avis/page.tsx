@@ -17,6 +17,8 @@ import {
   fetchAdminSurveys,
 } from '../../../lib/api';
 import { answerLabel, budgetLabel } from '../../../lib/survey/labels';
+import { computeIntentStats, rankAtouts } from '../../../lib/survey/intent-stats';
+import { ATOUTS_LABELS } from '../../../lib/survey/atouts-labels';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('fr-FR', {
@@ -37,6 +39,17 @@ function topCount(values: string[]): { value: string; count: number } | null {
     if (!best || count > best.count) best = { value, count };
   }
   return best;
+}
+
+function formatAverage(value: number | null): string {
+  if (value === null) return '—';
+  return value.toFixed(2).replace('.', ',');
+}
+
+function formatDelta(value: number | null): string {
+  if (value === null) return '—';
+  const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+  return `${sign}${Math.abs(value).toFixed(2).replace('.', ',')}`;
 }
 
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -109,6 +122,8 @@ export default function AdminAvisPage() {
       sources: sources.length,
       topResidence,
       topBudget,
+      intent: computeIntentStats(entries),
+      atoutRanks: rankAtouts(entries),
     };
   }, [entries, sources]);
 
@@ -154,6 +169,29 @@ export default function AdminAvisPage() {
         </div>
 
         <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard
+            label="Intention avant (moy.)"
+            value={formatAverage(stats.intent.averageBefore)}
+            hint={`${stats.intent.countBefore} note(s)`}
+          />
+          <StatCard
+            label="Intention après (moy.)"
+            value={formatAverage(stats.intent.averageAfter)}
+            hint={`${stats.intent.countAfter} note(s)`}
+          />
+          <StatCard
+            label="Écart moyen"
+            value={formatDelta(stats.intent.delta)}
+            hint="Après − avant"
+          />
+          <StatCard
+            label="Évolution"
+            value={`${stats.intent.up} ↑ · ${stats.intent.stable} = · ${stats.intent.down} ↓`}
+            hint="Hausse · stable · baisse"
+          />
+        </div>
+
+        <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="Réponses" value={String(stats.total)} />
           <StatCard
             label="Avec contact"
@@ -186,6 +224,25 @@ export default function AdminAvisPage() {
             }
           />
         </div>
+
+        {stats.atoutRanks.length > 0 && (
+          <div className="mt-6 rounded-xl border border-paper/15 bg-ink-card p-4">
+            <p className="text-[10px] uppercase tracking-wide text-paper/50">
+              Atouts les plus choisis
+            </p>
+            <ol className="mt-3 space-y-2">
+              {stats.atoutRanks.map((rank) => (
+                <li
+                  key={rank.key}
+                  className="flex items-center justify-between gap-3 text-xs text-paper/80"
+                >
+                  <span>{ATOUTS_LABELS[rank.key] ?? rank.key}</span>
+                  <span className="font-mono text-paper/50">{rank.count}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
@@ -308,6 +365,20 @@ export default function AdminAvisPage() {
                               .join(', '),
                           ],
                           ['Budget', budgetLabel(entry.budget, entry.budgetCurrency)],
+                          [
+                            'Intention avant / après',
+                            entry.intentBefore === null && entry.intentAfter === null
+                              ? '—'
+                              : `${entry.intentBefore ?? '—'} → ${entry.intentAfter ?? '—'}`,
+                          ],
+                          [
+                            'Atouts choisis',
+                            entry.topAtouts.length > 0
+                              ? entry.topAtouts
+                                  .map((key) => ATOUTS_LABELS[key] ?? key)
+                                  .join(', ')
+                              : '—',
+                          ],
                         ].map(([label, value]) => (
                           <div key={label}>
                             <dt className="text-paper/40">{label}</dt>
@@ -328,6 +399,15 @@ export default function AdminAvisPage() {
                           <p className="text-paper/40">Expérience d&apos;achat au Togo</p>
                           <p className="mt-1 whitespace-pre-wrap text-paper/85">
                             {entry.experienceText}
+                          </p>
+                        </div>
+                      )}
+
+                      {entry.remainingBlockers && (
+                        <div>
+                          <p className="text-paper/40">Ce qui retiendrait encore</p>
+                          <p className="mt-1 whitespace-pre-wrap text-paper/85">
+                            {entry.remainingBlockers}
                           </p>
                         </div>
                       )}

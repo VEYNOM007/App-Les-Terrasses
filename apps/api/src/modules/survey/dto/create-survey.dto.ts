@@ -23,6 +23,7 @@ import {
   RESIDENCE_VALUES,
   SIZE_VALUES,
   TOGO_LINK_VALUES,
+  TOP_ATOUTS_VALUES,
 } from '../survey.constants';
 
 export class SurveyContactDto {
@@ -111,4 +112,24 @@ export class CreateSurveyDto {
   @ValidateNested()
   @Type(() => SurveyContactDto)
   contact?: SurveyContactDto | null;
+
+  @IsOptional()
+  @IsIn([1, 2, 3, 4, 5])
+  intentBefore?: number;
+
+  @IsOptional()
+  @IsIn([1, 2, 3, 4, 5])
+  intentAfter?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3)
+  @IsString({ each: true })
+  @IsIn([...TOP_ATOUTS_VALUES], { each: true })
+  topAtouts?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  remainingBlockers?: string | null;
 }

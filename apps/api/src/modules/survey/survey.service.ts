@@ -36,6 +36,10 @@ export class SurveyService {
           blockers: dto.blockers,
           reassurances: dto.reassurances,
           experienceText: dto.experienceText?.trim() || null,
+          intentBefore: typeof dto.intentBefore === 'number' ? dto.intentBefore : null,
+          intentAfter: typeof dto.intentAfter === 'number' ? dto.intentAfter : null,
+          topAtouts: Array.isArray(dto.topAtouts) ? dto.topAtouts : [],
+          remainingBlockers: dto.remainingBlockers?.trim() || null,
         },
       });
 

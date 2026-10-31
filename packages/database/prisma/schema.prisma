@@ -761,9 +761,13 @@ model SurveyResponse {
   size           String
   decisionMakers String[]
   blockers       String[]
-  reassurances   String[]
-  experienceText String?
-  createdAt      DateTime @default(now())
+  reassurances      String[]
+  experienceText    String?
+  intentBefore      Int?
+  intentAfter       Int?
+  topAtouts         String[]
+  remainingBlockers String?
+  createdAt         DateTime @default(now())
 
   contact SurveyContact?
 

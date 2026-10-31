@@ -36,8 +36,11 @@ export default function AvisPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
 
-  const step = SURVEY_STEPS[stepIndex];
+  const steps = SURVEY_STEPS;
+  const step = steps[stepIndex];
   const progress = phase === 'done' ? 100 : ((stepIndex + 1) / TOTAL_QUESTIONS) * 100;
+  /** L'écran des atouts ne permet pas de revenir à la note « avant ». */
+  const canGoBack = stepIndex > 0 && step?.kind !== 'atouts';
 
   useEffect(() => {
     if (phase === 'form') window.scrollTo({ top: 0, behavior: 'auto' });
@@ -59,6 +62,26 @@ export default function AvisPage() {
         ? current.filter((item) => item !== value)
         : [...current, value],
     );
+  }
+
+  function setIntent(key: 'intentBefore' | 'intentAfter', value: number) {
+    update(key, value);
+    setError(null);
+  }
+
+  function toggleTopAtouts(value: string) {
+    const current = answers.topAtouts;
+    if (current.includes(value)) {
+      update('topAtouts', current.filter((item) => item !== value));
+      setError(null);
+      return;
+    }
+    if (current.length >= 3) {
+      setError('Sélectionnez au maximum 3 atouts.');
+      return;
+    }
+    update('topAtouts', [...current, value]);
+    setError(null);
   }
 
   async function submit() {
@@ -85,7 +108,7 @@ export default function AvisPage() {
       );
       return;
     }
-    if (stepIndex === TOTAL_QUESTIONS - 1) {
+    if (stepIndex === SURVEY_STEPS.length - 1) {
       void submit();
       return;
     }
@@ -95,6 +118,7 @@ export default function AvisPage() {
 
   function goBack() {
     setError(null);
+    if (step?.kind === 'atouts') return;
     if (stepIndex === 0) {
       setPhase('intro');
       return;
@@ -118,12 +142,12 @@ export default function AvisPage() {
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-12">
         {phase === 'intro' && (
           <section className="card p-5 sm:p-10">
-            <p className="eyebrow text-laterite-dark">Étude de marché · 2 minutes</p>
+            <p className="eyebrow text-laterite-dark">Étude de marché · ≈ 3 min</p>
             <h1 className="mt-3 font-serif text-3xl font-semibold leading-tight text-ink sm:text-4xl">
               Les Terrasses : donnez votre avis
             </h1>
             <p className="mt-5 text-base leading-relaxed text-muted">
-              Projet à l&apos;étude, sans engagement ni paiement. 2 minutes,
+              Projet à l&apos;étude, sans engagement ni paiement. ≈ 3 min,
               anonyme.
             </p>
             <p className="mt-4 text-sm leading-relaxed text-muted">
@@ -134,7 +158,7 @@ export default function AvisPage() {
 
             <ul className="mt-7 space-y-3 text-sm text-ink/80">
               <li className="flex items-center gap-2.5">
-                <Check className="h-4 w-4 text-lagoon" /> 12 questions, une par écran
+                <Check className="h-4 w-4 text-lagoon" /> {TOTAL_QUESTIONS} étapes, une par écran
               </li>
               <li className="flex items-center gap-2.5">
                 <Check className="h-4 w-4 text-lagoon" /> Aucune vente, aucun paiement
@@ -171,9 +195,9 @@ export default function AvisPage() {
             <div className="mb-4 sm:mb-6">
               <div className="flex items-center justify-between text-xs text-muted">
                 <span className="font-medium">
-                  Question {stepIndex + 1} sur {TOTAL_QUESTIONS}
+                  Étape {stepIndex + 1} sur {TOTAL_QUESTIONS}
                 </span>
-                <span>≈ 2 min</span>
+                <span>≈ 3 min</span>
               </div>
               <div
                 className="mt-2 h-2 w-full overflow-hidden rounded-full bg-cream-deep"
@@ -197,7 +221,9 @@ export default function AvisPage() {
               <h1 className="mt-2 font-serif text-xl font-semibold leading-tight text-ink sm:text-3xl">
                 {step.title}
               </h1>
-              {step.hint && <p className="mt-2 text-sm text-muted">{step.hint}</p>}
+              {step.kind !== 'atouts' && 'hint' in step && step.hint && (
+                <p className="mt-2 text-sm text-muted">{step.hint}</p>
+              )}
 
               <div className="mt-6">
                 {(step.kind === 'single' || step.kind === 'multi') && (
@@ -208,7 +234,7 @@ export default function AvisPage() {
                         const checked =
                           step.kind === 'single'
                             ? answers[step.key] === option.value
-                            : (answers[step.key] as string[]).includes(option.value);
+                            : answers[step.key].includes(option.value);
 
                         return (
                           <label
@@ -269,7 +295,7 @@ export default function AvisPage() {
                     </label>
                     <textarea
                       id={`question-${String(step.key)}`}
-                      value={answers[step.key] as string}
+                      value={answers[step.key]}
                       onChange={(event) => update(step.key, event.target.value)}
                       maxLength={step.maxLength}
                       rows={step.rows ?? 4}
@@ -277,7 +303,126 @@ export default function AvisPage() {
                       className="w-full rounded-xl border border-line bg-white p-4 text-sm text-ink placeholder:text-muted/60 focus:border-laterite focus:outline-none focus:ring-2 focus:ring-laterite/20"
                     />
                     <div className="mt-1 text-right text-[11px] text-muted">
-                      {(answers[step.key] as string).length} / {step.maxLength}
+                      {answers[step.key].length} / {step.maxLength}
+                    </div>
+                  </div>
+                )}
+
+                {step.kind === 'intent' && (
+                  <div>
+                    <fieldset>
+                      <legend className="sr-only">{step.title}</legend>
+                      <div className="grid grid-cols-5 gap-2">
+                        {[1, 2, 3, 4, 5].map((note) => {
+                          const checked = answers[step.key] === note;
+                          return (
+                            <label
+                              key={note}
+                              className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border py-3 transition-all focus-within:ring-2 focus-within:ring-laterite/30 ${
+                                checked
+                                  ? 'border-laterite bg-laterite/5'
+                                  : 'border-line bg-white hover:border-ink/20'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={String(step.key)}
+                                value={note}
+                                checked={checked}
+                                onChange={() => setIntent(step.key, note)}
+                                className="sr-only"
+                              />
+                              <span className="text-base font-semibold text-ink">{note}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-2 flex justify-between text-[11px] text-muted">
+                        <span>1 = pas du tout</span>
+                        <span>5 = très intéressé(e)</span>
+                      </div>
+                    </fieldset>
+                  </div>
+                )}
+
+                {step.kind === 'atouts' && (
+                  <div>
+                    <ul className="space-y-3">
+                      {step.items.map((item) => (
+                        <li key={item} className="flex items-start gap-2.5 text-sm text-ink/80">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-lagoon" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-5 text-xs leading-relaxed text-muted">{step.footnote}</p>
+                  </div>
+                )}
+
+                {step.kind === 'topAtouts' && (
+                  <div>
+                    <fieldset>
+                      <legend className="sr-only">{step.title}</legend>
+                      <div className="space-y-2.5 pb-2">
+                        {step.options.map((option) => {
+                          const checked = answers.topAtouts.includes(option.value);
+                          return (
+                            <label
+                              key={option.value}
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all focus-within:ring-2 focus-within:ring-laterite/30 ${
+                                checked
+                                  ? 'border-laterite bg-laterite/5'
+                                  : 'border-line bg-white hover:border-ink/20'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                name="topAtouts"
+                                value={option.value}
+                                checked={checked}
+                                onChange={() => toggleTopAtouts(option.value)}
+                                className="sr-only"
+                              />
+                              <span
+                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                                  checked
+                                    ? 'border-laterite bg-laterite text-white'
+                                    : 'border-line bg-white'
+                                }`}
+                                aria-hidden="true"
+                              >
+                                {checked && <Check className="h-3 w-3" />}
+                              </span>
+                              <span className="block text-sm font-medium text-ink">
+                                {option.label}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] text-muted">
+                        {answers.topAtouts.length} / 3 sélectionnés
+                      </p>
+                    </fieldset>
+                  </div>
+                )}
+
+                {step.kind === 'remainingBlockers' && (
+                  <div>
+                    <label htmlFor="remaining-blockers" className="sr-only">
+                      {step.title}
+                    </label>
+                    <textarea
+                      id="remaining-blockers"
+                      value={answers.remainingBlockers}
+                      onChange={(event) => update('remainingBlockers', event.target.value)}
+                      maxLength={step.maxLength}
+                      rows={5}
+                      placeholder={step.placeholder}
+                      className="w-full rounded-xl border border-line bg-white p-4 text-sm text-ink placeholder:text-muted/60 focus:border-laterite focus:outline-none focus:ring-2 focus:ring-laterite/20"
+                    />
+                    <div className="mt-1 text-right text-[11px] text-muted">
+                      {answers.remainingBlockers.length} / {step.maxLength}
                     </div>
                   </div>
                 )}
@@ -423,7 +568,7 @@ export default function AvisPage() {
                   className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-white to-transparent sm:hidden"
                   aria-hidden="true"
                 />
-                {stepIndex > 0 && (
+                {canGoBack && (
                   <button
                     onClick={goBack}
                     className="btn-outline flex-1 !px-3 !py-2.5 !text-xs sm:flex-none sm:!px-5 sm:!py-3"

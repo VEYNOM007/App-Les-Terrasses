@@ -155,3 +155,100 @@ describe('buildSubmission', () => {
     expect(answers.decisionMakers).toEqual(['MOI', 'CONJOINT']);
   });
 });
+
+describe('intention avant / après', () => {
+  const intentBefore = SURVEY_STEPS.find((step) => step.key === 'intentBefore');
+  const intentAfter = SURVEY_STEPS.find((step) => step.key === 'intentAfter');
+
+  it('trouve les deux écrans d’intention dans le parcours', () => {
+    expect(intentBefore?.kind).toBe('intent');
+    expect(intentAfter?.kind).toBe('intent');
+  });
+
+  it('refuse une note absente ou hors de 1 à 5', () => {
+    expect(isStepComplete(intentBefore!, initialAnswers())).toBe(false);
+    expect(isStepComplete(intentBefore!, completeAnswers({ intentBefore: 0 }))).toBe(false);
+    expect(isStepComplete(intentBefore!, completeAnswers({ intentBefore: 6 }))).toBe(false);
+  });
+
+  it('accepte chaque note de 1 à 5', () => {
+    for (const note of [1, 2, 3, 4, 5]) {
+      expect(isStepComplete(intentBefore!, completeAnswers({ intentBefore: note }))).toBe(true);
+      expect(isStepComplete(intentAfter!, completeAnswers({ intentAfter: note }))).toBe(true);
+    }
+  });
+
+  it('conserve les deux notes séparément dans la soumission', () => {
+    const payload = buildSubmission(
+      completeAnswers({ intentBefore: 2, intentAfter: 5 }),
+      null,
+    );
+    expect(payload.intentBefore).toBe(2);
+    expect(payload.intentAfter).toBe(5);
+  });
+
+  it('envoie null quand la note est absente', () => {
+    const payload = buildSubmission(completeAnswers(), null);
+    expect(payload.intentBefore).toBeNull();
+    expect(payload.intentAfter).toBeNull();
+  });
+});
+
+describe('atouts les plus choisis', () => {
+  const topAtouts = SURVEY_STEPS.find((step) => step.key === 'topAtouts');
+
+  it('laisse la sélection vide possible', () => {
+    expect(isStepComplete(topAtouts!, completeAnswers({ topAtouts: [] }))).toBe(true);
+  });
+
+  it('refuse plus de 3 atouts', () => {
+    expect(
+      isStepComplete(
+        topAtouts!,
+        completeAnswers({ topAtouts: ['securite', 'parc', 'mer', 'commerces'] }),
+      ),
+    ).toBe(false);
+  });
+
+  it('accepte 1 à 3 atouts', () => {
+    expect(isStepComplete(topAtouts!, completeAnswers({ topAtouts: ['securite'] }))).toBe(true);
+    expect(
+      isStepComplete(topAtouts!, completeAnswers({ topAtouts: ['securite', 'parc', 'mer'] })),
+    ).toBe(true);
+  });
+
+  it('tronque à 3 atouts dans la soumission', () => {
+    const payload = buildSubmission(
+      completeAnswers({ topAtouts: ['securite', 'parc', 'mer', 'commerces'] }),
+      null,
+    );
+    expect(payload.topAtouts).toEqual(['securite', 'parc', 'mer']);
+  });
+});
+
+describe('frein restant', () => {
+  const remainingBlockers = SURVEY_STEPS.find(
+    (step) => step.key === 'remainingBlockers',
+  );
+
+  it('reste facultatif', () => {
+    expect(isStepComplete(remainingBlockers!, initialAnswers())).toBe(true);
+  });
+
+  it('refuse un texte au-delà de la limite', () => {
+    expect(
+      isStepComplete(
+        remainingBlockers!,
+        completeAnswers({ remainingBlockers: 'a'.repeat(2001) }),
+      ),
+    ).toBe(false);
+  });
+
+  it('nettoie le texte dans la soumission', () => {
+    const payload = buildSubmission(
+      completeAnswers({ remainingBlockers: '   Le financement.  ' }),
+      null,
+    );
+    expect(payload.remainingBlockers).toBe('Le financement.');
+  });
+});

@@ -92,28 +92,28 @@ describe('CreateSurveyDto — otherAnswers', () => {
   });
 
   it('refuse une clé non autorisée', async () => {
-    const errors = await errorsFor({ otherAnswers: { residence: 'test' } as any });
+    const errors = await errorsFor({ otherAnswers: { residence: 'test' } });
     expect(errors.some((e) => e.property === 'otherAnswers')).toBe(true);
   });
 
   it('refuse plus de 3 clés', async () => {
     const errors = await errorsFor({
-      otherAnswers: { freins: 'a', decision: 'b', reassurances: 'c', residence: 'd' } as any,
+      otherAnswers: { freins: 'a', decision: 'b', reassurances: 'c', residence: 'd' },
     });
     expect(errors.some((e) => e.property === 'otherAnswers')).toBe(true);
   });
 
   it('refuse une valeur > 200 caractères', async () => {
-    const errors = await errorsFor({ otherAnswers: { freins: 'a'.repeat(201) } as any });
+    const errors = await errorsFor({ otherAnswers: { freins: 'a'.repeat(201) } });
     expect(errors.some((e) => e.property === 'otherAnswers')).toBe(true);
   });
 
   it('accepte une valeur de 200 caractères', async () => {
-    await expect(errorsFor({ otherAnswers: { freins: 'a'.repeat(200) } as any })).resolves.toHaveLength(0);
+    await expect(errorsFor({ otherAnswers: { freins: 'a'.repeat(200) } })).resolves.toHaveLength(0);
   });
 
   it('refuse si otherAnswers n\'est pas un objet', async () => {
-    const errors = await errorsFor({ otherAnswers: ['test'] as any });
+    const errors = await errorsFor({ otherAnswers: ['test'] });
     expect(errors.some((e) => e.property === 'otherAnswers')).toBe(true);
   });
 });

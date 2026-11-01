@@ -29,26 +29,28 @@ export interface SurveyCsvRow {
   contact: SurveyCsvContact | null;
 }
 
+/**
+ * Neutralise l'injection de formule dans une cellule texte saisie par un
+ * visiteur. Excel/LibreOffice interprètent une cellule qui commence par
+ * `=`, `+`, `-`, `@`, une tabulation ou un retour chariot comme une formule :
+ * on préfixe alors d'une apostrophe. Les espaces/tabulations/retours en tête
+ * ne doivent pas non plus masquer une formule.
+ */
+const FORMULA_PREFIXES = new Set(['=', '+', '-', '@', '\t', '\r', '\n']);
+
 function neutralizeFormula(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   const text = String(value);
   if (text.length === 0) return value;
-  // Neutraliser aussi tabulation/retour chariot au début qui peuvent aider à contourner
-  let first = text[0];
-  // Si le premier caractère est un caractère de contrôle/tab/CR/LF, on regarde le suivant
-  if (first === '\t' || first === '\r' || first === '\n') {
-    // Chercher le premier caractère non-blanc/contrôle
-    for (let i = 0; i < text.length; i += 1) {
-      const c = text[i];
-      if (c !== ' ' && c !== '\t' && c !== '\r' && c !== '\n') {
-        first = c;
-        break;
-      }
-    }
-  }
-  if (first === '=' || first === '+' || first === '-' || first === '@') {
+
+  const first = text[0];
+  if (FORMULA_PREFIXES.has(first)) return "'" + text;
+
+  const meaningful = text.trimStart()[0];
+  if (meaningful !== undefined && FORMULA_PREFIXES.has(meaningful)) {
     return "'" + text;
   }
+
   return value;
 }
 

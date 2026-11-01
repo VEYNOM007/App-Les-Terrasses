@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { buildSubmission } from './validation';
 import { initialAnswers } from './questions';
 
@@ -29,10 +30,10 @@ describe('buildSubmission - otherAnswers', () => {
   it('ignore les clés non autorisées', () => {
     const answers = initialAnswers();
     answers.blockers = ['AUTRE'];
-    answers.otherAnswers = { freins: 'ok', residence: 'hack' as any };
+    answers.otherAnswers = { freins: 'ok', residence: 'hack' };
     const sub = buildSubmission(answers, null);
     expect(sub.otherAnswers?.freins).toBe('ok');
-    expect((sub.otherAnswers as any)?.residence).toBeUndefined();
+    expect(sub.otherAnswers?.['residence']).toBeUndefined();
   });
 
   it('ignore si valeur vide après nettoyage', () => {
@@ -43,13 +44,21 @@ describe('buildSubmission - otherAnswers', () => {
     expect(sub.otherAnswers).toBeUndefined();
   });
 
-  it('ne dépasse pas 3 clés si présentes', () => {
+  it('accepte les 3 clés autorisées quand "Autre" est coché', () => {
     const answers = initialAnswers();
     answers.blockers = ['AUTRE'];
     answers.decisionMakers = ['AUTRE'];
     answers.reassurances = ['AUTRE'];
     answers.otherAnswers = { freins: 'a', decision: 'b', reassurances: 'c' };
     const sub = buildSubmission(answers, null);
-    expect(Object.keys(sub.otherAnswers || {}).length).toBe(3);
+    expect(Object.keys(sub.otherAnswers ?? {}).length).toBe(3);
+  });
+
+  it('retire les caractères de contrôle', () => {
+    const answers = initialAnswers();
+    answers.blockers = ['AUTRE'];
+    answers.otherAnswers = { freins: 'a\u0000b\u001fc' };
+    const sub = buildSubmission(answers, null);
+    expect(sub.otherAnswers?.freins).toBe('abc');
   });
 });

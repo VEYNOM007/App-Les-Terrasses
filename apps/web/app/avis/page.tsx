@@ -16,6 +16,7 @@ import {
   SURVEY_STEPS,
   TOTAL_QUESTIONS,
   type SurveyAnswers,
+  type SurveyStep,
 } from '../../lib/survey/questions';
 import {
   buildSubmission,
@@ -27,6 +28,26 @@ import { readSourceCookie } from '../../lib/survey/source';
 import { submitSurvey } from '../../lib/api';
 
 type Phase = 'intro' | 'form' | 'done';
+
+/**
+ * La note « champs facultatifs » ne s'affiche que sur les écrans qui
+ * contiennent réellement un champ facultatif : les textes libres et les
+ * écrans à choix proposant une option « Autre… » (dont la précision est
+ * facultative). Les écrans purement obligatoires (atouts, budget, notes
+ * d'intention…) n'en ont pas besoin.
+ */
+function stepHasOptionalField(step: SurveyStep): boolean {
+  if (step.kind === 'contact') return false;
+  if (step.kind === 'text' || step.kind === 'remainingBlockers') return true;
+  if (step.kind === 'single' || step.kind === 'multi') {
+    return step.options.some(
+      (option) =>
+        option.value.toUpperCase() === 'AUTRE' ||
+        option.label.toLowerCase().includes('autre'),
+    );
+  }
+  return false;
+}
 
 export default function AvisPage() {
   const [phase, setPhase] = useState<Phase>('intro');
@@ -632,6 +653,12 @@ export default function AvisPage() {
                 </p>
               )}
 
+              {stepHasOptionalField(step) && (
+                <p className="mt-4 text-center text-[11px] text-muted">
+                  Les champs marqués comme facultatifs peuvent rester vides.
+                </p>
+              )}
+
               <div
                 className={`sticky bottom-0 z-10 -mx-5 -mb-5 mt-6 flex items-center gap-2.5 border-t border-line bg-white/95 px-4 py-2.5 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:gap-3 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 ${
                   stepIndex === 0 ? 'sm:justify-end' : 'sm:justify-between'
@@ -674,14 +701,6 @@ export default function AvisPage() {
                 </button>
               </div>
 
-              {step.kind !== 'contact' && step.kind !== 'atouts' && (
-                <p
-                  className="mt-3 pb-16 text-center text-[11px] text-muted sm:pb-0"
-                  style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}
-                >
-                  Les champs marqués comme facultatifs peuvent rester vides.
-                </p>
-              )}
             </div>
 
             <p className="mt-4 text-center text-[11px] text-muted">

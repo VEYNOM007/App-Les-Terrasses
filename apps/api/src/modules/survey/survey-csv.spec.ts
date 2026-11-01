@@ -101,7 +101,12 @@ describe('toCsv', () => {
 
   it('neutralise avec CR avant +', () => {
     const csv = toCsv([{ ...ROW, whyText: '\r+CMD' }]);
-    expect(csv).toContain("'+CMD");
+    expect(csv).toContain("'\r+CMD");
+  });
+
+  it('neutralise un texte commençant par un retour chariot', () => {
+    const csv = toCsv([{ ...ROW, whyText: '\rtexte' }]);
+    expect(csv).toContain("'\rtexte");
   });
 
   it('neutralise otherAnswers freins avec tabulation', () => {

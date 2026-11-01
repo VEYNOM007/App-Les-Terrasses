@@ -33,16 +33,11 @@ export class SurveyService {
       let otherAnswers: Record<string, string> | undefined;
       if (dto.otherAnswers && typeof dto.otherAnswers === 'object') {
         const cleaned: Record<string, string> = {};
-        const entries = Object.entries(dto.otherAnswers);
-        if (entries.length > 3) {
-          // Ne pas accepter plus de 3 clés
-        }
-        for (const [key, value] of entries) {
+        for (const [key, value] of Object.entries(dto.otherAnswers)) {
           if (Object.keys(cleaned).length >= 3) break;
           if (!allowedOtherKeys.has(key)) continue;
           const text = sanitizeText(value);
           if (!text) continue;
-          if (text.length > 200) continue;
           if (key === 'freins') {
             if (!Array.isArray(dto.blockers) || !dto.blockers.includes('AUTRE')) continue;
           }
@@ -79,7 +74,7 @@ export class SurveyService {
           topAtouts: Array.isArray(dto.topAtouts) ? dto.topAtouts : [],
           remainingBlockers: dto.remainingBlockers?.trim() || null,
           otherAnswers: otherAnswers ?? undefined,
-        } as any,
+        },
       });
 
       if (hasContact) {

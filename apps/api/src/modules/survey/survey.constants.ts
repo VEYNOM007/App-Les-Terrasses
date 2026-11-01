@@ -54,6 +54,7 @@ export const REASSURANCE_VALUES = [
   'GARANTIES',
   'CONCIERGERIE',
   'VISITE_SUR_PLACE',
+  'AUTRE',
 ] as const;
 
 export const TOP_ATOUTS_VALUES = ['securite', 'parc', 'services', 'conciergerie', 'mer', 'commerces'] as const;
@@ -143,6 +144,7 @@ export const SURVEY_FIELD_LABELS: Record<string, Record<string, string>> = {
     GARANTIES: 'Garanties écrites',
     CONCIERGERIE: 'Conciergerie',
     VISITE_SUR_PLACE: 'Visite sur place',
+    AUTRE: 'Autre',
   },
 };
 

@@ -268,6 +268,7 @@ export const SURVEY_STEPS: SurveyStep[] = [
       { value: 'GARANTIES', label: 'Des garanties écrites' },
       { value: 'CONCIERGERIE', label: 'Une conciergerie' },
       { value: 'VISITE_SUR_PLACE', label: 'Une visite sur place' },
+      { value: 'AUTRE', label: 'Autre chose' },
     ],
   },
   {

@@ -127,7 +127,7 @@ export class CreateSurveyDto {
 
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(6)
+  @ArrayMaxSize(7)
   @IsString({ each: true })
   @IsIn([...REASSURANCE_VALUES], { each: true })
   reassurances!: string[];

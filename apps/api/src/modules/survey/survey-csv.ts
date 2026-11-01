@@ -76,7 +76,7 @@ const HEADERS = [
   'Freins',
   'Précision freins (Autre)',
   'Rassurances',
-  'Précision assurances (Autre)',
+  'Précision rassurances (Autre)',
   'Pourquoi (texte)',
   'Expérience (texte)',
   'Intention avant (1-5)',

@@ -114,6 +114,12 @@ describe('toCsv', () => {
     expect(csv).toContain("'	=TEST");
   });
 
+  it('nomme la colonne de précision des rassurances « rassurances »', () => {
+    const csv = toCsv([ROW]);
+    expect(csv).toContain('Précision rassurances (Autre)');
+    expect(csv).not.toContain('Précision assurances');
+  });
+
   it('exporte l’intention avant/après, l’écart et les atouts', () => {
     const csv = toCsv([ROW]);
     expect(csv).toContain('Intention avant (1-5)');

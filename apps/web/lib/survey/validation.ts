@@ -24,6 +24,7 @@ export interface SurveySubmission {
   intentAfter?: number | null;
   topAtouts?: string[];
   remainingBlockers?: string | null;
+  otherAnswers?: Record<string, string>;
   contact: SurveyContactPayload | null;
 }
 
@@ -125,6 +126,8 @@ function trimmedOrNull(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+const ALLOWED_OTHER_KEYS = new Set(['freins', 'decision', 'residence', 'togoLink', 'projectGoal', 'preference', 'size', 'reassurances']);
+
 export function buildSubmission(
   answers: SurveyAnswers,
   source: string | null,
@@ -132,6 +135,29 @@ export function buildSubmission(
   const email = answers.contactEmail.trim().toLowerCase();
   const whatsapp = answers.contactWhatsapp.trim();
   const hasContact = email.length > 0 || whatsapp.length > 0;
+
+  const otherAnswers: Record<string, string> = {};
+  if (answers.otherAnswers && typeof answers.otherAnswers === 'object') {
+    for (const [key, value] of Object.entries(answers.otherAnswers)) {
+      if (!ALLOWED_OTHER_KEYS.has(key)) continue;
+      if (typeof value !== 'string') continue;
+      const cleaned = value
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+        .trim()
+        .slice(0, 200);
+      if (cleaned.length === 0) continue;
+      // Ignore if "Autre" not checked in the corresponding question
+      if (key === 'freins' && !answers.blockers.includes('AUTRE')) continue;
+      if (key === 'decision' && !answers.decisionMakers.includes('AUTRE')) continue;
+      if (key === 'residence' && answers.residence !== 'AUTRE') continue;
+      if (key === 'togoLink' && !answers.togoLink.toUpperCase().includes('AUTRE')) continue;
+      if (key === 'projectGoal' && !String(answers.projectGoal).toUpperCase().includes('AUTRE')) continue;
+      if (key === 'preference' && !String(answers.preference).toUpperCase().includes('AUTRE')) continue;
+      if (key === 'size' && !String(answers.size).toUpperCase().includes('AUTRE')) continue;
+      if (key === 'reassurances' && !answers.reassurances.includes('AUTRE')) continue;
+      otherAnswers[key] = cleaned;
+    }
+  }
 
   return {
     source: sanitizeSource(source),
@@ -151,6 +177,7 @@ export function buildSubmission(
     intentAfter: typeof answers.intentAfter === 'number' ? answers.intentAfter : null,
     topAtouts: Array.isArray(answers.topAtouts) ? [...answers.topAtouts].slice(0, 3) : [],
     remainingBlockers: trimmedOrNull(answers.remainingBlockers),
+    otherAnswers: Object.keys(otherAnswers).length > 0 ? otherAnswers : undefined,
     contact: hasContact
       ? {
           email: email.length > 0 ? email : null,

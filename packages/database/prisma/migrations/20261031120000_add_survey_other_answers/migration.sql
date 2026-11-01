@@ -1,0 +1,1 @@
+-- AlterTable\nALTER TABLE "survey_responses" ADD COLUMN     "otherAnswers" JSONB;

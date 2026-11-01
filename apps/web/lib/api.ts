@@ -1010,6 +1010,7 @@ export interface AdminSurveyEntry {
   intentAfter: number | null;
   topAtouts: string[];
   remainingBlockers: string | null;
+  otherAnswers?: Record<string, string> | null;
   createdAt: string;
   contact: { email: string | null; whatsapp: string | null; consent: boolean } | null;
 }

@@ -35,11 +35,16 @@ const SECTIONS = [
     body: (
       <>
         Les réponses au questionnaire (résidence, projet, budget, attentes) sont
-        enregistrées <strong>sans identifiant</strong>. Le contact (e-mail ou
-        WhatsApp) est <strong>facultatif</strong> et stocké dans une table
-        séparée des réponses. La source d&apos;arrivée (<code>?src=</code>, par
-        exemple un QR code de flyer) est conservée dans un cookie pendant
-        90 jours. Aucune adresse IP n&apos;est enregistrée avec les réponses.
+        enregistrées <strong>sans identifiant</strong>. Les textes libres
+        facultatifs et les précisions « Autre » sont enregistrés.{' '}
+        <strong>
+          Ne saisissez pas de données personnelles sensibles dans ces champs.
+        </strong>{' '}
+        Le contact (e-mail ou WhatsApp) est <strong>facultatif</strong> et stocké
+        dans une table séparée des réponses. La source d&apos;arrivée (
+        <code>?src=</code>, par exemple un QR code de flyer) est conservée dans
+        un cookie pendant 90 jours. Aucune adresse IP n&apos;est enregistrée
+        avec les réponses.
       </>
     ),
   },

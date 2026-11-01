@@ -56,12 +56,42 @@ export default function AvisPage() {
     value: string,
   ) {
     const current = answers[key];
-    update(
-      key,
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value],
-    );
+    const isAdding = !current.includes(value);
+    const next = isAdding
+      ? [...current, value]
+      : current.filter((item) => item !== value);
+    update(key, next);
+    if (!isAdding && value.toUpperCase() === 'AUTRE') {
+      const otherKey = getOtherKeyForMulti(key);
+      if (otherKey && answers.otherAnswers[otherKey]) {
+        const updated = { ...answers.otherAnswers };
+        delete updated[otherKey];
+        update('otherAnswers', updated);
+      }
+    }
+  }
+
+  function updateOtherAnswer(key: string, value: string) {
+    const cleaned = value.slice(0, 200);
+    update('otherAnswers', { ...answers.otherAnswers, [key]: cleaned });
+  }
+
+  function getOtherKeyForMulti(key: 'decisionMakers' | 'blockers' | 'reassurances'): string | null {
+    if (key === 'blockers') return 'freins';
+    if (key === 'decisionMakers') return 'decision';
+    return null;
+  }
+
+  function getOtherKeyForStep(stepKey: string): string | null {
+    if (stepKey === 'blockers') return 'freins';
+    if (stepKey === 'decisionMakers') return 'decision';
+    if (stepKey === 'residence') return 'residence';
+    if (stepKey === 'togoLink') return 'togoLink';
+    if (stepKey === 'projectGoal') return 'projectGoal';
+    if (stepKey === 'preference') return 'preference';
+    if (stepKey === 'size') return 'size';
+    if (stepKey === 'reassurances') return 'reassurances';
+    return null;
   }
 
   function setIntent(key: 'intentBefore' | 'intentAfter', value: number) {
@@ -235,53 +265,96 @@ export default function AvisPage() {
                           step.kind === 'single'
                             ? answers[step.key] === option.value
                             : answers[step.key].includes(option.value);
+                        const isOtherOption =
+                          option.value.toUpperCase() === 'AUTRE' ||
+                          option.label.toLowerCase().includes('autre');
+                        const otherKey = getOtherKeyForStep(step.key);
+                        const showOther =
+                          isOtherOption &&
+                          checked &&
+                          otherKey &&
+                          (step.kind === 'single' || step.kind === 'multi');
 
                         return (
-                          <label
-                            key={option.value}
-                            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all focus-within:ring-2 focus-within:ring-laterite/30 ${
-                              checked
-                                ? 'border-laterite bg-laterite/5'
-                                : 'border-line bg-white hover:border-ink/20'
-                            }`}
-                          >
-                            <input
-                              type={step.kind === 'single' ? 'radio' : 'checkbox'}
-                              name={String(step.key)}
-                              value={option.value}
-                              checked={checked}
-                              onChange={() => {
-                                if (step.kind === 'single') {
-                                  update(step.key, option.value);
-                                } else {
-                                  toggleMulti(step.key, option.value);
-                                }
-                              }}
-                              className="sr-only"
-                            />
-                            <span
-                              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border ${
-                                step.kind === 'single' ? 'rounded-full' : 'rounded'
-                              } ${
+                          <React.Fragment key={option.value}>
+                            <label
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-all focus-within:ring-2 focus-within:ring-laterite/30 ${
                                 checked
-                                  ? 'border-laterite bg-laterite text-white'
-                                  : 'border-line bg-white'
+                                  ? 'border-laterite bg-laterite/5'
+                                  : 'border-line bg-white hover:border-ink/20'
                               }`}
-                              aria-hidden="true"
                             >
-                              {checked && <Check className="h-3 w-3" />}
-                            </span>
-                            <span>
-                              <span className="block text-sm font-medium text-ink">
-                                {option.label}
+                              <input
+                                type={step.kind === 'single' ? 'radio' : 'checkbox'}
+                                name={String(step.key)}
+                                value={option.value}
+                                checked={checked}
+                                onChange={() => {
+                                  if (step.kind === 'single') {
+                                    update(step.key, option.value);
+                                    if (
+                                      (option.value.toUpperCase() === 'AUTRE' ||
+                                        option.label.toLowerCase().includes('autre')) &&
+                                      otherKey
+                                    ) {
+                                      // keep other answer if switching to autre? or allow; will show field
+                                    } else if (otherKey && answers.otherAnswers[otherKey]) {
+                                      const updated = { ...answers.otherAnswers };
+                                      delete updated[otherKey];
+                                      update('otherAnswers', updated);
+                                    }
+                                  } else {
+                                    toggleMulti(step.key, option.value);
+                                  }
+                                }}
+                                className="sr-only"
+                              />
+                              <span
+                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border ${
+                                  step.kind === 'single' ? 'rounded-full' : 'rounded'
+                                } ${
+                                  checked
+                                    ? 'border-laterite bg-laterite text-white'
+                                    : 'border-line bg-white'
+                                }`}
+                                aria-hidden="true"
+                              >
+                                {checked && <Check className="h-3 w-3" />}
                               </span>
-                              {option.description && (
-                                <span className="mt-1 block text-xs leading-relaxed text-muted">
-                                  {option.description}
+                              <span>
+                                <span className="block text-sm font-medium text-ink">
+                                  {option.label}
                                 </span>
-                              )}
-                            </span>
-                          </label>
+                                {option.description && (
+                                  <span className="mt-1 block text-xs leading-relaxed text-muted">
+                                    {option.description}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                            {showOther && otherKey && (
+                              <div className="ml-8 mt-2">
+                                <label
+                                  htmlFor={`other-${otherKey}`}
+                                  className="mb-1.5 block text-xs font-medium text-ink"
+                                >
+                                  Précisez
+                                </label>
+                                <input
+                                  id={`other-${otherKey}`}
+                                  type="text"
+                                  maxLength={200}
+                                  value={answers.otherAnswers[otherKey] || ''}
+                                  onChange={(event) => updateOtherAnswer(otherKey, event.target.value)}
+                                  placeholder="Précisez votre réponse"
+                                  className="w-full rounded-xl border border-line bg-white p-3 text-sm text-ink placeholder:text-muted/60 focus:border-laterite focus:outline-none focus:ring-2 focus:ring-laterite/20"
+                                />
+                                <div className="mt-1 text-right text-[11px] text-muted">
+                                  {(answers.otherAnswers[otherKey] || '').length} / 200
+                                </div>
+                              </div>
+                            )}
+                          </React.Fragment>
                         );
                       })}
                     </div>
@@ -563,6 +636,7 @@ export default function AvisPage() {
                 className={`sticky bottom-0 z-10 -mx-5 -mb-5 mt-6 flex items-center gap-2.5 border-t border-line bg-white/95 px-4 py-2.5 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:gap-3 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 ${
                   stepIndex === 0 ? 'sm:justify-end' : 'sm:justify-between'
                 }`}
+                style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.625rem)' }}
               >
                 <div
                   className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-white to-transparent sm:hidden"
@@ -600,8 +674,11 @@ export default function AvisPage() {
                 </button>
               </div>
 
-              {step.kind !== 'contact' && (
-                <p className="mt-3 text-center text-[11px] text-muted">
+              {step.kind !== 'contact' && step.kind !== 'atouts' && (
+                <p
+                  className="mt-3 pb-16 text-center text-[11px] text-muted sm:pb-0"
+                  style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}
+                >
                   Les champs marqués comme facultatifs peuvent rester vides.
                 </p>
               )}

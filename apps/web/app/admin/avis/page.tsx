@@ -412,6 +412,20 @@ export default function AdminAvisPage() {
                         </div>
                       )}
 
+                      {entry.otherAnswers && Object.keys(entry.otherAnswers).length > 0 && (
+                        <div>
+                          <p className="text-paper/40">Précisions « Autre »</p>
+                          <dl className="mt-1 space-y-1">
+                            {Object.entries(entry.otherAnswers).map(([key, value]) => (
+                              <div key={key} className="flex gap-2">
+                                <dt className="text-paper/50">{key}</dt>
+                                <dd className="whitespace-pre-wrap text-paper/85">{value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </div>
+                      )}
+
                       {entry.contact && (
                         <div className="rounded-lg border border-lagoon/25 bg-lagoon/10 p-3">
                           <p className="font-medium text-lagoon-light">Contact (consentement recueilli)</p>

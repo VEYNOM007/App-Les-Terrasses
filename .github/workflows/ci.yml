@@ -76,6 +76,12 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @residence-catalog/database exec prisma generate
 
+      # Garde-fou : une migration avec des "\n" litteraux (donc entierement
+      # commentee) ou sans aucune instruction SQL passe inapercue en CI et
+      # n'est jamais appliquee. On echoue avant tout deploiement.
+      - name: Check migrations integrity (no literal \n, SQL present)
+        run: node scripts/check-prisma-migrations.mjs
+
       - name: Apply migrations to test DB
         run: pnpm --filter @residence-catalog/database exec prisma migrate deploy
 

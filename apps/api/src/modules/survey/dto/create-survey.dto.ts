@@ -132,4 +132,7 @@ export class CreateSurveyDto {
   @IsString()
   @MaxLength(2000)
   remainingBlockers?: string | null;
+
+  @IsOptional()
+  otherAnswers?: Record<string, string>;
 }

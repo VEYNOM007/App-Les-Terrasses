@@ -21,6 +21,49 @@ export class SurveyService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const sanitizeText = (value: unknown): string | null => {
+        if (typeof value !== 'string') return null;
+        const cleaned = value.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+        if (cleaned.length === 0) return null;
+        return cleaned.slice(0, 200);
+      };
+
+      const allowedOtherKeys = new Set([
+        'freins',
+        'decision',
+        'residence',
+        'togoLink',
+        'projectGoal',
+        'preference',
+        'size',
+        'reassurances',
+      ]);
+
+      let otherAnswers: Record<string, string> | undefined;
+      if (dto.otherAnswers && typeof dto.otherAnswers === 'object') {
+        const cleaned: Record<string, string> = {};
+        for (const [key, value] of Object.entries(dto.otherAnswers)) {
+          if (!allowedOtherKeys.has(key)) continue;
+          const text = sanitizeText(value);
+          if (!text) continue;
+          if (key === 'freins' && !Array.isArray(dto.blockers)) continue;
+          if (key === 'freins' && !dto.blockers.includes('AUTRE')) continue;
+          if (key === 'decision' && !Array.isArray(dto.decisionMakers)) continue;
+          if (key === 'decision' && !dto.decisionMakers.includes('AUTRE')) continue;
+          if (key === 'residence' && dto.residence !== 'AUTRE') continue;
+          if (key === 'togoLink' && !String(dto.togoLink).toUpperCase().includes('AUTRE')) continue;
+          if (key === 'projectGoal' && !String(dto.projectGoal).toUpperCase().includes('AUTRE')) continue;
+          if (key === 'preference' && !String(dto.preference).toUpperCase().includes('AUTRE')) continue;
+          if (key === 'size' && !String(dto.size).toUpperCase().includes('AUTRE')) continue;
+          if (key === 'reassurances' && !Array.isArray(dto.reassurances)) continue;
+          if (key === 'reassurances' && !dto.reassurances.includes('AUTRE')) continue;
+          cleaned[key] = text;
+        }
+        if (Object.keys(cleaned).length > 0) {
+          otherAnswers = cleaned;
+        }
+      }
+
       const response = await tx.surveyResponse.create({
         data: {
           source: sanitizeSource(dto.source),
@@ -40,7 +83,8 @@ export class SurveyService {
           intentAfter: typeof dto.intentAfter === 'number' ? dto.intentAfter : null,
           topAtouts: Array.isArray(dto.topAtouts) ? dto.topAtouts : [],
           remainingBlockers: dto.remainingBlockers?.trim() || null,
-        },
+          otherAnswers: otherAnswers ?? undefined,
+        } as any,
       });
 
       if (hasContact) {

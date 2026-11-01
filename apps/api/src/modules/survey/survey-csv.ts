@@ -25,7 +25,40 @@ export interface SurveyCsvRow {
   intentAfter: number | null;
   topAtouts: string[];
   remainingBlockers: string | null;
+  otherAnswers?: unknown;
   contact: SurveyCsvContact | null;
+}
+
+/**
+ * Neutralise l'injection de formule dans une cellule texte saisie par un
+ * visiteur. Excel/LibreOffice interprètent une cellule qui commence par
+ * `=`, `+`, `-`, `@`, une tabulation ou un retour chariot comme une formule :
+ * on préfixe alors d'une apostrophe. Les espaces/tabulations/retours en tête
+ * ne doivent pas non plus masquer une formule.
+ */
+const FORMULA_PREFIXES = new Set(['=', '+', '-', '@', '\t', '\r', '\n']);
+
+function neutralizeFormula(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  const text = String(value);
+  if (text.length === 0) return value;
+
+  const first = text[0];
+  if (FORMULA_PREFIXES.has(first)) return "'" + text;
+
+  const meaningful = text.trimStart()[0];
+  if (meaningful !== undefined && FORMULA_PREFIXES.has(meaningful)) {
+    return "'" + text;
+  }
+
+  return value;
+}
+
+function getOtherText(row: SurveyCsvRow, key: string): string {
+  if (!row.otherAnswers || typeof row.otherAnswers !== 'object') return '';
+  const value = (row.otherAnswers as Record<string, unknown>)[key];
+  if (typeof value !== 'string') return '';
+  return neutralizeFormula(value) as string;
 }
 
 const HEADERS = [
@@ -39,8 +72,11 @@ const HEADERS = [
   'Devise',
   'Taille',
   'Décision',
+  'Précision décision (Autre)',
   'Freins',
+  'Précision freins (Autre)',
   'Rassurances',
+  'Précision rassurances (Autre)',
   'Pourquoi (texte)',
   'Expérience (texte)',
   'Intention avant (1-5)',
@@ -77,7 +113,7 @@ export function toCsv(rows: SurveyCsvRow[]): string {
     lines.push(
       [
         row.createdAt.toISOString(),
-        row.source ?? '',
+        neutralizeFormula(row.source ?? '') ?? '',
         labelFor('residence', row.residence),
         labelFor('togoLink', row.togoLink),
         labelFor('projectGoal', row.projectGoal),
@@ -86,19 +122,22 @@ export function toCsv(rows: SurveyCsvRow[]): string {
         labelFor('budgetCurrency', row.budgetCurrency),
         labelFor('size', row.size),
         labels('decisionMakers', row.decisionMakers),
+        neutralizeFormula(getOtherText(row, 'decision')) ?? '',
         labels('blockers', row.blockers),
+        neutralizeFormula(getOtherText(row, 'freins')) ?? '',
         labels('reassurances', row.reassurances),
-        row.whyText ?? '',
-        row.experienceText ?? '',
+        neutralizeFormula(getOtherText(row, 'reassurances')) ?? '',
+        neutralizeFormula(row.whyText ?? '') ?? '',
+        neutralizeFormula(row.experienceText ?? '') ?? '',
         row.intentBefore ?? '',
         row.intentAfter ?? '',
         row.intentBefore !== null && row.intentAfter !== null
           ? row.intentAfter - row.intentBefore
           : '',
         labels('topAtouts', row.topAtouts),
-        row.remainingBlockers ?? '',
-        row.contact?.email ?? '',
-        row.contact?.whatsapp ?? '',
+        neutralizeFormula(row.remainingBlockers ?? '') ?? '',
+        neutralizeFormula(row.contact?.email ?? '') ?? '',
+        neutralizeFormula(row.contact?.whatsapp ?? '') ?? '',
         row.contact?.consent ? 'Oui' : 'Non',
       ]
         .map(csvCell)

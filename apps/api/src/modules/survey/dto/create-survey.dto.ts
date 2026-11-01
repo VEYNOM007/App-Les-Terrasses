@@ -6,12 +6,41 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
+  Validate,
   ValidateNested,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
+
+const ALLOWED_OTHER_ANSWERS_KEYS = new Set(['decision', 'freins', 'reassurances']);
+
+@ValidatorConstraint({ name: 'OtherAnswersConstraint', async: false })
+export class OtherAnswersConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    if (value === null || value === undefined) return true;
+    if (typeof value !== 'object' || Array.isArray(value)) return false;
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    if (keys.length > 3) return false;
+    for (const key of keys) {
+      if (!ALLOWED_OTHER_ANSWERS_KEYS.has(key)) return false;
+      const v = obj[key];
+      if (typeof v !== 'string') return false;
+      if (v.length > 200) return false;
+    }
+    return true;
+  }
+
+  defaultMessage(): string {
+    return 'otherAnswers doit contenir au maximum 3 clés parmi decision, freins, reassurances et des valeurs textuelles de 200 caractères maximum.';
+  }
+}
 import {
   BLOCKER_VALUES,
   BUDGET_CURRENCY_VALUES,
@@ -98,7 +127,7 @@ export class CreateSurveyDto {
 
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(6)
+  @ArrayMaxSize(7)
   @IsString({ each: true })
   @IsIn([...REASSURANCE_VALUES], { each: true })
   reassurances!: string[];
@@ -132,4 +161,9 @@ export class CreateSurveyDto {
   @IsString()
   @MaxLength(2000)
   remainingBlockers?: string | null;
+
+  @IsOptional()
+  @IsObject()
+  @Validate(OtherAnswersConstraint)
+  otherAnswers?: Record<string, string>;
 }

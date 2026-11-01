@@ -24,6 +24,7 @@ export interface SurveyAnswers {
   intentAfter: number | null;
   topAtouts: string[];
   remainingBlockers: string;
+  otherAnswers: Record<string, string>;
   contactEmail: string;
   contactWhatsapp: string;
   consent: boolean;
@@ -267,6 +268,7 @@ export const SURVEY_STEPS: SurveyStep[] = [
       { value: 'GARANTIES', label: 'Des garanties écrites' },
       { value: 'CONCIERGERIE', label: 'Une conciergerie' },
       { value: 'VISITE_SUR_PLACE', label: 'Une visite sur place' },
+      { value: 'AUTRE', label: 'Autre chose' },
     ],
   },
   {
@@ -348,6 +350,7 @@ export function initialAnswers(): SurveyAnswers {
     intentAfter: null,
     topAtouts: [],
     remainingBlockers: '',
+    otherAnswers: {},
     contactEmail: '',
     contactWhatsapp: '',
     consent: false,

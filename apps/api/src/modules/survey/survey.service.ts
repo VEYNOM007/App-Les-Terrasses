@@ -21,6 +21,39 @@ export class SurveyService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const sanitizeText = (value: unknown): string | null => {
+        if (typeof value !== 'string') return null;
+        const cleaned = value.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+        if (cleaned.length === 0) return null;
+        return cleaned.slice(0, 200);
+      };
+
+      const allowedOtherKeys = new Set(['freins', 'decision', 'reassurances']);
+
+      let otherAnswers: Record<string, string> | undefined;
+      if (dto.otherAnswers && typeof dto.otherAnswers === 'object') {
+        const cleaned: Record<string, string> = {};
+        for (const [key, value] of Object.entries(dto.otherAnswers)) {
+          if (Object.keys(cleaned).length >= 3) break;
+          if (!allowedOtherKeys.has(key)) continue;
+          const text = sanitizeText(value);
+          if (!text) continue;
+          if (key === 'freins') {
+            if (!Array.isArray(dto.blockers) || !dto.blockers.includes('AUTRE')) continue;
+          }
+          if (key === 'decision') {
+            if (!Array.isArray(dto.decisionMakers) || !dto.decisionMakers.includes('AUTRE')) continue;
+          }
+          if (key === 'reassurances') {
+            if (!Array.isArray(dto.reassurances) || !dto.reassurances.includes('AUTRE')) continue;
+          }
+          cleaned[key] = text.slice(0, 200);
+        }
+        if (Object.keys(cleaned).length > 0) {
+          otherAnswers = cleaned;
+        }
+      }
+
       const response = await tx.surveyResponse.create({
         data: {
           source: sanitizeSource(dto.source),
@@ -40,6 +73,7 @@ export class SurveyService {
           intentAfter: typeof dto.intentAfter === 'number' ? dto.intentAfter : null,
           topAtouts: Array.isArray(dto.topAtouts) ? dto.topAtouts : [],
           remainingBlockers: dto.remainingBlockers?.trim() || null,
+          otherAnswers: otherAnswers ?? undefined,
         },
       });
 

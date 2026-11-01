@@ -13,3 +13,6 @@ uploads/
 
 # TypeScript incremental build cache (regénéré par tsc, ne pas committer)
 *.tsbuildinfo
+
+# Captures d'écran locales (preuves de recette, jamais versionnées)
+captures-*/

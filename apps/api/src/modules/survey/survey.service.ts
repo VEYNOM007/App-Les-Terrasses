@@ -28,36 +28,31 @@ export class SurveyService {
         return cleaned.slice(0, 200);
       };
 
-      const allowedOtherKeys = new Set([
-        'freins',
-        'decision',
-        'residence',
-        'togoLink',
-        'projectGoal',
-        'preference',
-        'size',
-        'reassurances',
-      ]);
+      const allowedOtherKeys = new Set(['freins', 'decision', 'reassurances']);
 
       let otherAnswers: Record<string, string> | undefined;
       if (dto.otherAnswers && typeof dto.otherAnswers === 'object') {
         const cleaned: Record<string, string> = {};
-        for (const [key, value] of Object.entries(dto.otherAnswers)) {
+        const entries = Object.entries(dto.otherAnswers);
+        if (entries.length > 3) {
+          // Ne pas accepter plus de 3 clés
+        }
+        for (const [key, value] of entries) {
+          if (Object.keys(cleaned).length >= 3) break;
           if (!allowedOtherKeys.has(key)) continue;
           const text = sanitizeText(value);
           if (!text) continue;
-          if (key === 'freins' && !Array.isArray(dto.blockers)) continue;
-          if (key === 'freins' && !dto.blockers.includes('AUTRE')) continue;
-          if (key === 'decision' && !Array.isArray(dto.decisionMakers)) continue;
-          if (key === 'decision' && !dto.decisionMakers.includes('AUTRE')) continue;
-          if (key === 'residence' && dto.residence !== 'AUTRE') continue;
-          if (key === 'togoLink' && !String(dto.togoLink).toUpperCase().includes('AUTRE')) continue;
-          if (key === 'projectGoal' && !String(dto.projectGoal).toUpperCase().includes('AUTRE')) continue;
-          if (key === 'preference' && !String(dto.preference).toUpperCase().includes('AUTRE')) continue;
-          if (key === 'size' && !String(dto.size).toUpperCase().includes('AUTRE')) continue;
-          if (key === 'reassurances' && !Array.isArray(dto.reassurances)) continue;
-          if (key === 'reassurances' && !dto.reassurances.includes('AUTRE')) continue;
-          cleaned[key] = text;
+          if (text.length > 200) continue;
+          if (key === 'freins') {
+            if (!Array.isArray(dto.blockers) || !dto.blockers.includes('AUTRE')) continue;
+          }
+          if (key === 'decision') {
+            if (!Array.isArray(dto.decisionMakers) || !dto.decisionMakers.includes('AUTRE')) continue;
+          }
+          if (key === 'reassurances') {
+            if (!Array.isArray(dto.reassurances) || !dto.reassurances.includes('AUTRE')) continue;
+          }
+          cleaned[key] = text.slice(0, 200);
         }
         if (Object.keys(cleaned).length > 0) {
           otherAnswers = cleaned;

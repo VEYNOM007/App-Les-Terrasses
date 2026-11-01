@@ -126,7 +126,7 @@ function trimmedOrNull(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-const ALLOWED_OTHER_KEYS = new Set(['freins', 'decision', 'residence', 'togoLink', 'projectGoal', 'preference', 'size', 'reassurances']);
+const ALLOWED_OTHER_KEYS = new Set(['freins', 'decision', 'reassurances']);
 
 export function buildSubmission(
   answers: SurveyAnswers,
@@ -149,11 +149,6 @@ export function buildSubmission(
       // Ignore if "Autre" not checked in the corresponding question
       if (key === 'freins' && !answers.blockers.includes('AUTRE')) continue;
       if (key === 'decision' && !answers.decisionMakers.includes('AUTRE')) continue;
-      if (key === 'residence' && answers.residence !== 'AUTRE') continue;
-      if (key === 'togoLink' && !answers.togoLink.toUpperCase().includes('AUTRE')) continue;
-      if (key === 'projectGoal' && !String(answers.projectGoal).toUpperCase().includes('AUTRE')) continue;
-      if (key === 'preference' && !String(answers.preference).toUpperCase().includes('AUTRE')) continue;
-      if (key === 'size' && !String(answers.size).toUpperCase().includes('AUTRE')) continue;
       if (key === 'reassurances' && !answers.reassurances.includes('AUTRE')) continue;
       otherAnswers[key] = cleaned;
     }

@@ -33,7 +33,19 @@ function neutralizeFormula(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   const text = String(value);
   if (text.length === 0) return value;
-  const first = text[0];
+  // Neutraliser aussi tabulation/retour chariot au début qui peuvent aider à contourner
+  let first = text[0];
+  // Si le premier caractère est un caractère de contrôle/tab/CR/LF, on regarde le suivant
+  if (first === '\t' || first === '\r' || first === '\n') {
+    // Chercher le premier caractère non-blanc/contrôle
+    for (let i = 0; i < text.length; i += 1) {
+      const c = text[i];
+      if (c !== ' ' && c !== '\t' && c !== '\r' && c !== '\n') {
+        first = c;
+        break;
+      }
+    }
+  }
   if (first === '=' || first === '+' || first === '-' || first === '@') {
     return "'" + text;
   }
@@ -99,7 +111,7 @@ export function toCsv(rows: SurveyCsvRow[]): string {
     lines.push(
       [
         row.createdAt.toISOString(),
-        row.source ?? '',
+        neutralizeFormula(row.source ?? '') ?? '',
         labelFor('residence', row.residence),
         labelFor('togoLink', row.togoLink),
         labelFor('projectGoal', row.projectGoal),
@@ -113,17 +125,17 @@ export function toCsv(rows: SurveyCsvRow[]): string {
         neutralizeFormula(getOtherText(row, 'freins')) ?? '',
         labels('reassurances', row.reassurances),
         neutralizeFormula(getOtherText(row, 'reassurances')) ?? '',
-        row.whyText ?? '',
-        row.experienceText ?? '',
+        neutralizeFormula(row.whyText ?? '') ?? '',
+        neutralizeFormula(row.experienceText ?? '') ?? '',
         row.intentBefore ?? '',
         row.intentAfter ?? '',
         row.intentBefore !== null && row.intentAfter !== null
           ? row.intentAfter - row.intentBefore
           : '',
         labels('topAtouts', row.topAtouts),
-        row.remainingBlockers ?? '',
-        row.contact?.email ?? '',
-        row.contact?.whatsapp ?? '',
+        neutralizeFormula(row.remainingBlockers ?? '') ?? '',
+        neutralizeFormula(row.contact?.email ?? '') ?? '',
+        neutralizeFormula(row.contact?.whatsapp ?? '') ?? '',
         row.contact?.consent ? 'Oui' : 'Non',
       ]
         .map(csvCell)

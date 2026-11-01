@@ -64,6 +64,51 @@ describe('toCsv', () => {
     expect(csv).toContain('Non\r\n');
   });
 
+  it('neutralise whyText commençant par =', () => {
+    const csv = toCsv([{ ...ROW, whyText: '=HYPERLINK("http://evil.test/","x")' }]);
+    expect(csv).toContain("'=HYPERLINK");
+  });
+
+  it('neutralise experienceText commençant par +', () => {
+    const csv = toCsv([{ ...ROW, experienceText: '+cmd|"/c calc"!A0' }]);
+    expect(csv).toContain("'+cmd");
+  });
+
+  it('neutralise remainingBlockers commençant par -', () => {
+    const csv = toCsv([{ ...ROW, remainingBlockers: '-2+3*cmd|"/c calc"!A0' }]);
+    expect(csv).toContain("'-2");
+  });
+
+  it('neutralise email commençant par =', () => {
+    const csv = toCsv([{ ...ROW, contact: { email: '=test@test.com', whatsapp: null, consent: true } }]);
+    expect(csv).toContain("'=test@test.com");
+  });
+
+  it('neutralise whatsapp commençant par +', () => {
+    const csv = toCsv([{ ...ROW, contact: { email: null, whatsapp: '+22812345678', consent: true } }]);
+    expect(csv).toContain("'+22812345678");
+  });
+
+  it('neutralise source commençant par @', () => {
+    const csv = toCsv([{ ...ROW, source: '@flyer' }]);
+    expect(csv).toContain("'@flyer");
+  });
+
+  it('neutralise avec tabulation avant =', () => {
+    const csv = toCsv([{ ...ROW, whyText: '\t=CMD' }]);
+    expect(csv).toContain("'	=CMD");
+  });
+
+  it('neutralise avec CR avant +', () => {
+    const csv = toCsv([{ ...ROW, whyText: '\r+CMD' }]);
+    expect(csv).toContain("'+CMD");
+  });
+
+  it('neutralise otherAnswers freins avec tabulation', () => {
+    const csv = toCsv([{ ...ROW, blockers: ['AUTRE'], otherAnswers: { freins: '\t=TEST' } }]);
+    expect(csv).toContain("'	=TEST");
+  });
+
   it('exporte l’intention avant/après, l’écart et les atouts', () => {
     const csv = toCsv([ROW]);
     expect(csv).toContain('Intention avant (1-5)');

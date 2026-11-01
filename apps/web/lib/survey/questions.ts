@@ -24,6 +24,7 @@ export interface SurveyAnswers {
   intentAfter: number | null;
   topAtouts: string[];
   remainingBlockers: string;
+  otherAnswers: Record<string, string>;
   contactEmail: string;
   contactWhatsapp: string;
   consent: boolean;
@@ -348,6 +349,7 @@ export function initialAnswers(): SurveyAnswers {
     intentAfter: null,
     topAtouts: [],
     remainingBlockers: '',
+    otherAnswers: {},
     contactEmail: '',
     contactWhatsapp: '',
     consent: false,

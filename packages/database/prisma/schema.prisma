@@ -767,6 +767,7 @@ model SurveyResponse {
   intentAfter       Int?
   topAtouts         String[]
   remainingBlockers String?
+  otherAnswers      Json?
   createdAt         DateTime @default(now())
 
   contact SurveyContact?
